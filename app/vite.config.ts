@@ -1,11 +1,15 @@
 import { defineConfig } from "vitest/config";
 import { svelte } from "@sveltejs/vite-plugin-svelte";
+import { fileURLToPath, URL } from "node:url";
 
 // Tauri sets TAURI_DEV_HOST when developing against a remote device (mobile).
 const host = process.env.TAURI_DEV_HOST;
 
 export default defineConfig({
   plugins: [svelte()],
+  resolve: {
+    alias: { $lib: fileURLToPath(new URL("./src/lib", import.meta.url)) },
+  },
 
   // Tauri expects a fixed port and fails if it is taken.
   clearScreen: false,
