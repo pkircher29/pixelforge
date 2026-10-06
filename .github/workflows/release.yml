@@ -60,7 +60,9 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           projectPath: app
-          tauriScript: npm run tauri --
+          # No trailing `--`: tauri-action inserts it for npm itself; a second one
+          # hands `--target universal-apple-darwin` to cargo, which rejects it.
+          tauriScript: npm run tauri
           tagName: ${{ github.ref_name }}
           releaseName: "Pixelforge ${{ github.ref_name }}"
           releaseBody: "See CHANGELOG.md for details."
