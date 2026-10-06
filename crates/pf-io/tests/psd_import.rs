@@ -84,7 +84,7 @@ mod psd_writer {
                     -1 => 3,
                     c => c as usize,
                 };
-                channel_data.extend(l.rgba.chunks_exact(4).map(|px| px[offset]));
+                channel_data.extend(l.rgba.as_chunks::<4>().0.iter().map(|px| px[offset]));
             }
             info.extend_from_slice(b"8BIM");
             info.extend_from_slice(l.blend);
@@ -118,7 +118,7 @@ mod psd_writer {
         // Composite image data: raw, planar R G B.
         out.extend_from_slice(&0u16.to_be_bytes());
         for c in 0..3 {
-            out.extend(composite_rgb.chunks_exact(3).map(|px| px[c]));
+            out.extend(composite_rgb.as_chunks::<3>().0.iter().map(|px| px[c]));
         }
         out
     }

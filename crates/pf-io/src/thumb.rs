@@ -34,7 +34,7 @@ pub fn downscale_rgba(
             let (mut r, mut g, mut b, mut a) = (0u64, 0u64, 0u64, 0u64);
             for y in y0..y1 {
                 let row = &rgba[y * sw * 4..(y + 1) * sw * 4];
-                for px in row[x0 * 4..x1 * 4].chunks_exact(4) {
+                for px in row[x0 * 4..x1 * 4].as_chunks::<4>().0 {
                     let pa = u64::from(px[3]);
                     r += u64::from(px[0]) * pa;
                     g += u64::from(px[1]) * pa;

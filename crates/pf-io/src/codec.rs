@@ -236,7 +236,7 @@ fn encode_png(
 /// Flatten straight-alpha RGBA onto an opaque background colour, producing RGB8.
 pub fn flatten_onto(rgba: &[u8], background: [u8; 3]) -> Vec<u8> {
     let mut rgb = Vec::with_capacity(rgba.len() / 4 * 3);
-    for px in rgba.chunks_exact(4) {
+    for px in rgba.as_chunks::<4>().0 {
         let a = u32::from(px[3]);
         if a == 255 {
             rgb.extend_from_slice(&px[..3]);
