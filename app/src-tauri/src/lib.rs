@@ -32,6 +32,12 @@ pub fn run() {
         .manage(AppState::default())
         .invoke_handler(tauri::generate_handler![
             commands::ai::ai_list_providers,
+            commands::ai::ai_submit_generate,
+            commands::ai::ai_submit_edit,
+            commands::ai::ai_job_status,
+            commands::ai::ai_cancel,
+            commands::ai::ai_take_result,
+            commands::ai::ai_test_key,
             commands::io::io_ping,
             commands::io::io_open,
             commands::io::io_decode,
@@ -44,6 +50,10 @@ pub fn run() {
             commands::io::io_recent_add,
             commands::io::io_recent_remove,
             commands::settings::settings_get,
+            commands::settings::settings_set,
+            commands::settings::settings_get_key_status,
+            commands::settings::settings_set_key,
+            commands::settings::settings_delete_key,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Pixelforge");

@@ -110,14 +110,39 @@ pub struct Capabilities {
     pub instruct_edit: bool,
     /// Accepts more than one reference image per request.
     pub multi_ref: bool,
-    /// Output sizes the provider accepts. Empty means "any size up to `max_px`".
+    /// Maximum number of input images per request (composite + references).
+    #[serde(default)]
+    pub max_refs: u8,
+    /// Preset output sizes the provider accepts (shown in the UI). Empty means the
+    /// provider is driven by `aspect_ratios` + `resolutions` instead.
     pub sizes: Vec<ImageSize>,
+    /// `true` when any [`ImageSize`] is accepted (subject to provider rules such as
+    /// "multiple of 16"); `false` when only `sizes` are valid. Providers that take an
+    /// aspect ratio + resolution map an arbitrary size to the nearest pair.
+    #[serde(default)]
+    pub custom_sizes: bool,
+    /// Aspect ratios the provider accepts (`"16:9"` form). Empty when sizes are explicit.
+    #[serde(default)]
+    pub aspect_ratios: Vec<String>,
+    /// Resolution tiers the provider accepts (`"1k"`, `"2K"`, ...). Empty when sizes are explicit.
+    #[serde(default)]
+    pub resolutions: Vec<String>,
     /// Longest edge (in pixels) the provider accepts or produces.
     pub max_px: u32,
     /// Maximum number of variants (`n`) per request.
     pub max_variants: u8,
+    /// Can produce a transparent background (alpha) on request.
+    #[serde(default)]
+    pub transparent_bg: bool,
     /// Model identifiers the UI may offer; the first one is the default.
     pub models: Vec<String>,
+}
+
+impl Capabilities {
+    /// Default model (first entry of `models`), if any.
+    pub fn default_model(&self) -> Option<&str> {
+        self.models.first().map(String::as_str)
+    }
 }
 
 impl Default for Capabilities {
@@ -128,9 +153,14 @@ impl Default for Capabilities {
             mask_edit: false,
             instruct_edit: false,
             multi_ref: false,
+            max_refs: 1,
             sizes: Vec::new(),
+            custom_sizes: false,
+            aspect_ratios: Vec::new(),
+            resolutions: Vec::new(),
             max_px: 0,
             max_variants: 1,
+            transparent_bg: false,
             models: Vec::new(),
         }
     }
@@ -238,6 +268,11 @@ pub struct GenerateRequest {
     pub seed: Option<u64>,
     /// Optional style / subject reference images (requires `multi_ref` for more than one).
     pub reference_images: Vec<ImageBytes>,
+    /// Provider-specific quality tier (`low|medium|high|xhigh|max|auto` for OpenAI,
+    /// `low|medium|auto` for xAI). `None` lets the provider choose.
+    pub quality: Option<String>,
+    /// Ask for a transparent background (only honoured where `transparent_bg` is set).
+    pub transparent: bool,
 }
 
 impl Default for GenerateRequest {
@@ -250,6 +285,8 @@ impl Default for GenerateRequest {
             model: None,
             seed: None,
             reference_images: Vec::new(),
+            quality: None,
+            transparent: false,
         }
     }
 }
@@ -277,6 +314,10 @@ pub struct EditRequest {
     pub model: Option<String>,
     /// Seed where supported.
     pub seed: Option<u64>,
+    /// Provider-specific quality tier (see [`GenerateRequest::quality`]).
+    pub quality: Option<String>,
+    /// Ask for a transparent background where supported.
+    pub transparent: bool,
 }
 
 impl EditRequest {
@@ -293,6 +334,8 @@ impl EditRequest {
             n: 1,
             model: None,
             seed: None,
+            quality: None,
+            transparent: false,
         }
     }
 
@@ -307,7 +350,7 @@ impl EditRequest {
 }
 
 /// One generated / edited image.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ImageResult {
     /// Encoded result (PNG).
     pub image: ImageBytes,
@@ -323,6 +366,46 @@ pub struct ImageResult {
     pub revised_prompt: Option<String>,
     /// Estimated cost in USD, when known.
     pub cost_usd: Option<f64>,
+}
+
+/// Metadata of an [`ImageResult`] without the pixel bytes (what crosses IPC as JSON).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ImageResultMeta {
+    /// Width in pixels.
+    pub width: u32,
+    /// Height in pixels.
+    pub height: u32,
+    /// Provider that produced it.
+    pub provider: ProviderId,
+    /// Model that produced it.
+    pub model: String,
+    /// Provider-side rewritten prompt, when returned.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub revised_prompt: Option<String>,
+    /// Estimated cost in USD, when known.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cost_usd: Option<f64>,
+    /// MIME type of the bytes (always `image/png` from this crate).
+    pub mime: String,
+    /// Byte length of the encoded image.
+    pub bytes: usize,
+}
+
+impl ImageResult {
+    /// Strip the bytes.
+    pub fn meta(&self) -> ImageResultMeta {
+        ImageResultMeta {
+            width: self.width,
+            height: self.height,
+            provider: self.provider,
+            model: self.model.clone(),
+            revised_prompt: self.revised_prompt.clone(),
+            cost_usd: self.cost_usd,
+            mime: self.image.mime.clone(),
+            bytes: self.image.len(),
+        }
+    }
 }
 
 #[cfg(test)]

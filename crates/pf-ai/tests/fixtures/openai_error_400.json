@@ -1,0 +1,8 @@
+{
+  "error": {
+    "message": "Invalid value: '999x999'. Supported values are: '1024x1024', '1536x1024', '1024x1536', and 'auto'.",
+    "type": "invalid_request_error",
+    "param": "size",
+    "code": "invalid_value"
+  }
+}

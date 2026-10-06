@@ -4,35 +4,50 @@
 //!
 //! Three hosted providers sit behind one [`ImageProvider`] trait so the editor can
 //! chain them on a single document: OpenAI (ChatGPT image models), xAI (Grok) and
-//! Google (Gemini). The trait is object safe (`Box<dyn ImageProvider>`) via
-//! `async_trait`, so the Tauri layer can hold a registry of providers keyed by
-//! [`ProviderId`] and dispatch without knowing the concrete type.
+//! Google (Gemini). The trait is object safe (`Box<dyn ImageProvider>` /
+//! `Arc<dyn ImageProvider>`) via `async_trait`, so the Tauri layer holds a registry of
+//! providers keyed by [`ProviderId`] and dispatches without knowing the concrete type.
 //!
 //! This crate owns:
 //!
 //! * the request / response shapes ([`GenerateRequest`], [`EditRequest`], [`ImageResult`]),
-//! * the per-provider [`Capabilities`] matrix used by the UI to grey out features and by
-//!   the webview to decide when to emulate a mask,
+//! * the per-provider [`Capabilities`] matrix ([`all_capabilities`]) used by the UI to
+//!   grey out features and by the webview to decide when to emulate a mask,
+//! * the three providers in [`providers`] (`reqwest`, rustls, base64 everywhere),
+//! * [`mask`] helpers (crop to mask bbox / composite back / OpenAI mask normalisation),
+//! * [`keystore`]: OS keychain with an obfuscated-file fallback,
+//! * [`jobs`]: the Tokio job queue with cancellation, timeouts and broadcast events,
+//! * [`ipc`]: the raw-bytes wire format used by the Tauri commands,
 //! * [`AuthMethod`] (BYOK API keys now, OAuth later) and the redacting [`SecretString`],
 //! * the [`Error`] type that the Tauri commands translate into `{ code, message }`.
 //!
-//! Provider implementations, the Tokio job queue and the keyring-backed key store are
-//! added by the `ai-rust` wave (see `PLAN.md` section 4). Nothing in this crate performs
-//! network I/O yet.
+//! Provider facts come from `docs/ai-research.md` (verified 2026-10-06).
 
 #![forbid(unsafe_code)]
 
+pub mod capabilities;
 pub mod error;
+mod http;
+pub mod ipc;
+pub mod jobs;
+pub mod keystore;
+pub mod mask;
 pub mod provider;
+pub mod providers;
 pub mod secret;
 pub mod types;
 
+pub use capabilities::{all_capabilities, capabilities_for};
 pub use error::{AiError, Error};
+pub use jobs::{JobConfig, JobEvent, JobEventKind, JobId, JobKind, JobManager, JobSpec, JobStatus};
+pub use keystore::{AutoKeyStore, FileStore, KeyStore, KeyringStore};
+pub use mask::{composite_back, crop_to_mask_bbox, to_openai_mask, Rect};
 pub use provider::{validate_edit, validate_generate, BoxedProvider, ImageProvider};
+pub use providers::{build_provider, build_provider_with_base_url, SharedProvider};
 pub use secret::SecretString;
 pub use types::{
     AuthMethod, Capabilities, EditMode, EditRequest, GenerateRequest, ImageBytes, ImageResult,
-    ImageSize, ProviderId,
+    ImageResultMeta, ImageSize, ProviderId,
 };
 
 /// Crate version, re-exported for diagnostics / the About dialog.

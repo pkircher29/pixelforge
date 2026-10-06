@@ -1,0 +1,15 @@
+{
+  "error": {
+    "code": 400,
+    "message": "Invalid value at 'generation_config.image_config.image_size' (TYPE_STRING), \"3K\"",
+    "status": "INVALID_ARGUMENT",
+    "details": [
+      {
+        "@type": "type.googleapis.com/google.rpc.BadRequest",
+        "fieldViolations": [
+          { "field": "generation_config.image_config.image_size", "description": "Invalid value" }
+        ]
+      }
+    ]
+  }
+}

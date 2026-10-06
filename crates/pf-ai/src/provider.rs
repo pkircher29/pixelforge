@@ -3,7 +3,9 @@
 use async_trait::async_trait;
 
 use crate::error::Error;
-use crate::types::{Capabilities, EditMode, EditRequest, GenerateRequest, ImageResult, ProviderId};
+use crate::types::{
+    Capabilities, EditMode, EditRequest, GenerateRequest, ImageResult, ImageSize, ProviderId,
+};
 
 /// One AI image backend (OpenAI, xAI or Gemini).
 ///
@@ -27,6 +29,12 @@ pub trait ImageProvider: Send + Sync {
     /// implementation must return [`Error::Unsupported`]; the webview is responsible
     /// for mask emulation (PLAN.md section 2.2) and will never send such a request.
     async fn edit(&self, req: EditRequest) -> Result<Vec<ImageResult>, Error>;
+
+    /// Cheapest possible authenticated call (list models) to verify the configured key.
+    ///
+    /// Returns `Ok(())` when the provider accepted the credentials; [`Error::Auth`] when
+    /// it rejected them. Never generates an image, never costs money.
+    async fn test_key(&self) -> Result<(), Error>;
 }
 
 /// Object-safe handle used by the provider registry.
@@ -61,19 +69,37 @@ pub fn validate_generate(
             capability: "multiple reference images",
         });
     }
+    check_ref_count(provider, caps, req.reference_images.len())?;
     if let Some(size) = req.size {
-        if caps.max_px > 0 && (size.width > caps.max_px || size.height > caps.max_px) {
-            return Err(Error::InvalidRequest(format!(
-                "{size} exceeds the provider maximum of {} px",
-                caps.max_px
-            )));
-        }
-        if !caps.sizes.is_empty() && !caps.sizes.contains(&size) {
-            return Err(Error::InvalidRequest(format!(
-                "{size} is not one of the sizes {} accepts",
-                provider
-            )));
-        }
+        check_size(provider, caps, size)?;
+    }
+    Ok(())
+}
+
+fn check_size(provider: ProviderId, caps: &Capabilities, size: ImageSize) -> Result<(), Error> {
+    if size.width == 0 || size.height == 0 {
+        return Err(Error::InvalidRequest(format!("{size} has a zero edge")));
+    }
+    if caps.max_px > 0 && (size.width > caps.max_px || size.height > caps.max_px) {
+        return Err(Error::InvalidRequest(format!(
+            "{size} exceeds the provider maximum of {} px",
+            caps.max_px
+        )));
+    }
+    if !caps.custom_sizes && !caps.sizes.is_empty() && !caps.sizes.contains(&size) {
+        return Err(Error::InvalidRequest(format!(
+            "{size} is not one of the sizes {provider} accepts"
+        )));
+    }
+    Ok(())
+}
+
+fn check_ref_count(provider: ProviderId, caps: &Capabilities, images: usize) -> Result<(), Error> {
+    if caps.max_refs > 0 && images > usize::from(caps.max_refs) {
+        return Err(Error::InvalidRequest(format!(
+            "{images} input images exceed the {} {provider} accepts",
+            caps.max_refs
+        )));
     }
     Ok(())
 }
@@ -113,6 +139,16 @@ pub fn validate_edit(
     if req.image.is_empty() {
         return Err(Error::InvalidRequest("input image is empty".to_owned()));
     }
+    if !req.reference_images.is_empty() && !caps.multi_ref {
+        return Err(Error::Unsupported {
+            provider,
+            capability: "multiple reference images",
+        });
+    }
+    check_ref_count(provider, caps, 1 + req.reference_images.len())?;
+    if let Some(size) = req.size {
+        check_size(provider, caps, size)?;
+    }
     if req.n == 0 || req.n > caps.max_variants {
         return Err(Error::InvalidRequest(format!(
             "n must be between 1 and {}",
@@ -125,7 +161,7 @@ pub fn validate_edit(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::{ImageBytes, ImageSize};
+    use crate::types::ImageBytes;
 
     /// Proves the trait is object safe and usable through `Box<dyn ImageProvider>`.
     struct Dummy;
@@ -162,6 +198,10 @@ mod tests {
         async fn edit(&self, req: EditRequest) -> Result<Vec<ImageResult>, Error> {
             validate_edit(self.id(), &self.capabilities(), &req)?;
             Ok(Vec::new())
+        }
+
+        async fn test_key(&self) -> Result<(), Error> {
+            Ok(())
         }
     }
 

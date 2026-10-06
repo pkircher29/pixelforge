@@ -1,0 +1,4 @@
+{
+  "code": "invalid_argument",
+  "error": "Content moderation: the prompt was flagged by our safety filters and cannot be generated"
+}

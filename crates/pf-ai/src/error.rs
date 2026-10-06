@@ -36,9 +36,43 @@ pub enum Error {
         retry_after_secs: Option<u64>,
     },
 
-    /// The provider refused the content (safety / policy filters).
+    /// The provider refused the content (safety / policy filters) without telling us why.
     #[error("request rejected by provider: {0}")]
     Rejected(String),
+
+    /// The provider's moderation layer blocked the prompt or an input image.
+    #[error(
+        "blocked by {provider} moderation{}: {message}",
+        fmt_categories(categories)
+    )]
+    Moderation {
+        /// Provider that blocked the request.
+        provider: ProviderId,
+        /// Category labels the provider reported (may be empty).
+        categories: Vec<String>,
+        /// Provider's own message.
+        message: String,
+    },
+
+    /// The provider rejected the request as malformed (HTTP 400 / 422).
+    #[error("{provider} rejected the request: {message}")]
+    BadRequest {
+        /// Provider that answered.
+        provider: ProviderId,
+        /// Provider's own message (secrets scrubbed).
+        message: String,
+    },
+
+    /// The job exceeded its deadline.
+    #[error("job timed out after {secs} s")]
+    Timeout {
+        /// Deadline that was exceeded.
+        secs: u64,
+    },
+
+    /// Local image decoding / encoding failure (mask helpers, result normalisation).
+    #[error("image error: {0}")]
+    Image(String),
 
     /// Any other non-success HTTP status.
     #[error("provider returned HTTP {status}: {body}")]
@@ -87,6 +121,10 @@ impl Error {
             Error::Auth(_) => "ai_auth",
             Error::RateLimited { .. } => "ai_rate_limited",
             Error::Rejected(_) => "ai_rejected",
+            Error::Moderation { .. } => "ai_moderation_blocked",
+            Error::BadRequest { .. } => "ai_bad_request",
+            Error::Timeout { .. } => "ai_timeout",
+            Error::Image(_) => "ai_image",
             Error::Http { .. } => "ai_http",
             Error::Transport(_) => "ai_transport",
             Error::InvalidResponse(_) => "ai_invalid_response",
@@ -103,11 +141,26 @@ impl Error {
             self,
             Error::RateLimited { .. }
                 | Error::Transport(_)
+                | Error::Timeout { .. }
                 | Error::Http {
                     status: 500..=599,
                     ..
                 }
         )
+    }
+}
+
+impl From<image::ImageError> for Error {
+    fn from(err: image::ImageError) -> Self {
+        Error::Image(err.to_string())
+    }
+}
+
+fn fmt_categories(categories: &[String]) -> String {
+    if categories.is_empty() {
+        String::new()
+    } else {
+        format!(" ({})", categories.join(", "))
     }
 }
 
@@ -134,8 +187,26 @@ mod tests {
         for code in [
             Error::Cancelled.code(),
             Error::NotConfigured(ProviderId::XAi).code(),
+            Error::Timeout { secs: 1 }.code(),
         ] {
             assert!(code.chars().all(|c| c.is_ascii_lowercase() || c == '_'));
         }
+
+        let m = Error::Moderation {
+            provider: ProviderId::OpenAi,
+            categories: vec!["violence".into(), "sexual".into()],
+            message: "blocked".into(),
+        };
+        assert_eq!(m.code(), "ai_moderation_blocked");
+        assert_eq!(
+            m.to_string(),
+            "blocked by ChatGPT moderation (violence, sexual): blocked"
+        );
+        let m = Error::Moderation {
+            provider: ProviderId::Gemini,
+            categories: vec![],
+            message: "blocked".into(),
+        };
+        assert_eq!(m.to_string(), "blocked by Gemini moderation: blocked");
     }
 }

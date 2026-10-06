@@ -1,0 +1,22 @@
+{
+  "created": 1759766400,
+  "background": "opaque",
+  "data": [
+    {
+      "b64_json": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==",
+      "revised_prompt": "A tiny glossy red cube on a white table"
+    },
+    {
+      "b64_json": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
+    }
+  ],
+  "output_format": "png",
+  "quality": "high",
+  "size": "1024x1024",
+  "usage": {
+    "input_tokens": 12,
+    "input_tokens_details": { "image_tokens": 0, "text_tokens": 12 },
+    "output_tokens": 2000,
+    "total_tokens": 2012
+  }
+}

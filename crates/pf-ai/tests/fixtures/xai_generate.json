@@ -1,0 +1,16 @@
+{
+  "data": [
+    {
+      "b64_json": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==",
+      "mime_type": "image/png"
+    }
+  ],
+  "model": "grok-imagine-image-2.0",
+  "respect_moderation": true,
+  "usage": {
+    "cost_in_usd_ticks": 400000000,
+    "input_tokens": 10,
+    "output_tokens": 1,
+    "total_tokens": 11
+  }
+}

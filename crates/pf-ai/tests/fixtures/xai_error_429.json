@@ -1,0 +1,4 @@
+{
+  "code": "rate_limit_exceeded",
+  "error": "Rate limit exceeded for this team, retry later"
+}
