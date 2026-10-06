@@ -8,15 +8,35 @@
 //! turns bytes on disk into layer PNGs for the webview and back. Images cross IPC as raw
 //! bytes, so every public function here speaks `Vec<u8>` / `&[u8]`, never base64.
 //!
-//! Decoders, the PSD importer and the `.pfproj` reader/writer are added by the `io-rust`
-//! wave (PLAN.md section 4). This scaffold only fixes the public [`Error`] type and the
-//! [`ImageFormat`] enum so the Tauri commands can be written against a stable surface.
+//! Modules:
+//!
+//! - [`codec`]: decode PNG / JPEG / WebP / GIF / BMP / TIFF to straight-alpha RGBA8 and
+//!   encode PNG / JPEG / WebP.
+//! - [`psd`]: read-only PSD import into a flat list of layers (groups one level deep).
+//! - [`pfproj`]: the `.pfproj` ZIP container (see `docs/pfproj-format.md`).
+//! - [`thumb`]: box-filter thumbnails.
+//! - [`frame`]: the little binary framing used for raw-bytes IPC (see `docs/ipc.md`).
+//! - [`recent`]: the recent-files list.
+//! - [`open`]: "open anything" dispatch over the codecs and the PSD importer.
 
 #![forbid(unsafe_code)]
+
+pub mod codec;
+pub mod frame;
+pub mod open;
+pub mod pfproj;
+pub mod psd;
+pub mod recent;
+pub mod thumb;
 
 use std::path::Path;
 
 use serde::{Deserialize, Serialize};
+
+pub use codec::{decode, encode, DecodedImage, EncodeOptions, PngCompression};
+pub use open::{open_bytes, ImportedDocument, ImportedLayer};
+pub use pfproj::{read_pfproj, write_pfproj, Manifest, ProjectDoc};
+pub use thumb::make_thumbnail;
 
 /// Errors produced by `pf-io`.
 #[derive(Debug, thiserror::Error)]
@@ -52,6 +72,14 @@ pub enum Error {
         max: u32,
     },
 
+    /// A raw-bytes IPC frame (`frame` module) is malformed.
+    #[error("IPC frame error: {0}")]
+    Frame(String),
+
+    /// A pixel buffer does not match its declared dimensions / channel count.
+    #[error("invalid pixel buffer: {0}")]
+    InvalidBuffer(String),
+
     /// Underlying `image` crate failure.
     #[error("image error: {0}")]
     Image(#[from] image::ImageError),
@@ -75,6 +103,8 @@ impl Error {
             Error::Psd(_) => "io_psd",
             Error::Project(_) => "io_project",
             Error::TooLarge { .. } => "io_too_large",
+            Error::Frame(_) => "io_frame",
+            Error::InvalidBuffer(_) => "io_invalid_buffer",
             Error::Image(_) => "io_image",
             Error::Io(_) => "io",
             Error::Json(_) => "json",
@@ -199,6 +229,19 @@ impl ImageFormat {
             ImageFormat::Psd | ImageFormat::Gif | ImageFormat::Bmp | ImageFormat::Tiff
         )
     }
+}
+
+/// Check that `data` is exactly `width * height * channels` bytes.
+pub fn check_buffer(data: &[u8], width: u32, height: u32, channels: u8) -> Result<()> {
+    check_dimensions(width, height)?;
+    let expected = (width as usize) * (height as usize) * (channels as usize);
+    if data.len() != expected {
+        return Err(Error::InvalidBuffer(format!(
+            "expected {expected} bytes for {width}x{height}x{channels}, got {}",
+            data.len()
+        )));
+    }
+    Ok(())
 }
 
 /// Reject canvases above the v1 limit.

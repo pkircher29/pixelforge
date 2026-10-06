@@ -13,3 +13,9 @@ serde_json.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 uuid.workspace = true
+# Read-only PSD import (PLAN.md section 0).
+psd = "0.3"
+# .pfproj container: ZIP + deflate only, no encryption / bzip2 / zstd.
+zip = { version = "8", default-features = false, features = ["deflate"] }
+# Lossy WebP export (the pure-Rust `image-webp` encoder is lossless-only).
+webp = "0.3"

@@ -33,6 +33,16 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::ai::ai_list_providers,
             commands::io::io_ping,
+            commands::io::io_open,
+            commands::io::io_decode,
+            commands::io::io_open_pfproj,
+            commands::io::io_save_pfproj,
+            commands::io::io_export,
+            commands::io::io_encode,
+            commands::io::io_thumbnail,
+            commands::io::io_recent_list,
+            commands::io::io_recent_add,
+            commands::io::io_recent_remove,
             commands::settings::settings_get,
         ])
         .run(tauri::generate_context!())
