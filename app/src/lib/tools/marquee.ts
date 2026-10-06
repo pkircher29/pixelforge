@@ -24,6 +24,7 @@ export class MarqueeTool implements Tool {
   readonly icon;
   readonly shortcut = "m";
   readonly group = "marquee";
+  readonly groupOrder: number;
   readonly cursor = "crosshair";
   readonly hint = "Drag to select. Shift: square / add, Alt: from centre / subtract, Shift+Alt: intersect.";
   readonly options: readonly ToolOption[];
@@ -38,6 +39,7 @@ export class MarqueeTool implements Tool {
   constructor(shape: "rect" | "ellipse") {
     this.shape = shape;
     this.id = shape === "rect" ? "marquee-rect" : "marquee-ellipse";
+    this.groupOrder = shape === "rect" ? 0 : 1;
     this.name = shape === "rect" ? "Rectangular Marquee" : "Elliptical Marquee";
     this.icon = shape === "rect" ? SquareDashed : CircleDashed;
     this.options = [

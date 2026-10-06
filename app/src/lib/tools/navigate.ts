@@ -9,6 +9,8 @@ export class ZoomTool implements Tool {
   readonly name = "Zoom";
   readonly icon = ZoomIn;
   readonly shortcut = "z";
+  readonly group = "zoom";
+  readonly groupOrder = 0;
   readonly cursor = "zoom-in";
   readonly hint = "Click to zoom in, Alt-click to zoom out, drag a rectangle to zoom to it.";
   readonly options: readonly ToolOption[] = [
@@ -82,6 +84,8 @@ export class HandTool implements Tool {
   readonly name = "Hand";
   readonly icon = Hand;
   readonly shortcut = "h";
+  readonly group = "hand";
+  readonly groupOrder = 0;
   readonly cursor = "grab";
   readonly hint = "Drag to pan. Hold Space with any tool to pan temporarily.";
   readonly options: readonly ToolOption[] = [

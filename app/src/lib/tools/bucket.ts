@@ -10,7 +10,8 @@ export class BucketTool implements Tool {
   readonly name = "Paint Bucket";
   readonly icon = PaintBucket;
   readonly shortcut = "g";
-  readonly group = "fill";
+  readonly group = "gradient";
+  readonly groupOrder = 1;
   readonly cursor = "crosshair";
   readonly hint = "Click to fill similar colours with the foreground colour. With a selection, the selection is filled.";
   readonly options: readonly ToolOption[] = [

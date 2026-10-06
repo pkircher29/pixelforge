@@ -9,6 +9,8 @@ export class WandTool implements Tool {
   readonly name = "Magic Wand";
   readonly icon = WandSparkles;
   readonly shortcut = "w";
+  readonly group = "quickselect";
+  readonly groupOrder = 1;
   readonly cursor = "crosshair";
   readonly hint = "Click a colour to select it. Shift adds, Alt subtracts.";
   readonly options: readonly ToolOption[] = [

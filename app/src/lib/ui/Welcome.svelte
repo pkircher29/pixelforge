@@ -1,6 +1,6 @@
 <script lang="ts">
-  /** Shown over the canvas area when nothing is open. */
-  import { FilePlus, FolderOpen, Clock } from "@lucide/svelte";
+  /** Shown on the pasteboard when nothing is open: a quiet PS-coloured start panel. */
+  import Icon from "./icons/Icon.svelte";
   import { ui } from "$lib/stores/ui.svelte";
   import { runCommand } from "./registry.svelte";
   import { openPaths } from "./commands/file";
@@ -9,37 +9,45 @@
   function shortName(p: string): string {
     return p.split(/[\\/]/).pop() ?? p;
   }
+  function dir(p: string): string {
+    return p.replace(/[\\/][^\\/]*$/, "");
+  }
 </script>
 
 <div class="welcome">
   <div class="card">
-    <span class="logo" aria-hidden="true"></span>
-    <h1>Pixelforge</h1>
-    <p class="tag">A raster editor with AI you can chain. Nothing is open yet.</p>
+    <div class="head">
+      <span class="mark" aria-hidden="true"><Icon name="app-mark" size={16} /></span>
+      <span class="name">Pixelforge</span>
+    </div>
     <div class="actions">
       <button type="button" class="action" onclick={() => void runCommand("file.new")}>
-        <FilePlus size={18} strokeWidth={1.75} />
-        <span>New document</span>
+        <Icon name="document-new" size={16} />
+        <span>New…</span>
         <kbd>{formatShortcut("CmdOrCtrl+N", IS_MAC)}</kbd>
       </button>
       <button type="button" class="action" onclick={() => void runCommand("file.open")}>
-        <FolderOpen size={18} strokeWidth={1.75} />
-        <span>Open image or project</span>
+        <Icon name="folder-open" size={16} />
+        <span>Open…</span>
         <kbd>{formatShortcut("CmdOrCtrl+O", IS_MAC)}</kbd>
       </button>
     </div>
-    {#if ui.recentFiles.length}
-      <div class="recent">
-        <div class="rh"><Clock size={12} /> Recent</div>
-        {#each ui.recentFiles.slice(0, 6) as p (p)}
-          <button type="button" class="r" title={p} onclick={() => void openPaths([p])}>
-            <span class="rn">{shortName(p)}</span>
-            <span class="rp">{p}</span>
-          </button>
-        {/each}
-      </div>
-    {/if}
-    <p class="hint">Drop image files anywhere to open them. {formatShortcut("CmdOrCtrl+K", IS_MAC)} lists every command.</p>
+    <div class="recent">
+      <div class="rh">Recent</div>
+      {#if ui.recentFiles.length}
+        <div class="rlist">
+          {#each ui.recentFiles.slice(0, 8) as p (p)}
+            <button type="button" class="r" title={p} onclick={() => void openPaths([p])}>
+              <Icon name="image" size={14} />
+              <span class="rn">{shortName(p)}</span>
+              <span class="rp">{dir(p)}</span>
+            </button>
+          {/each}
+        </div>
+      {:else}
+        <div class="rempty">Files you open will be listed here. Drop an image anywhere to open it.</div>
+      {/if}
+    </div>
   </div>
 </div>
 
@@ -49,104 +57,110 @@
     inset: 0;
     display: grid;
     place-items: center;
-    background:
-      radial-gradient(60% 50% at 50% 40%, rgba(139, 108, 255, 0.1), transparent 70%),
-      var(--bg-0);
+    background: var(--ps-canvas-bg);
   }
   .card {
-    width: 440px;
+    width: 460px;
     max-width: calc(100% - 48px);
+    background: var(--ps-app);
+    border: 1px solid var(--ps-border-dark);
+    box-shadow:
+      inset 0 0 0 1px var(--ps-border-light),
+      0 6px 20px rgba(0, 0, 0, 0.45);
+  }
+  .head {
     display: flex;
-    flex-direction: column;
     align-items: center;
-    text-align: center;
+    gap: 8px;
+    height: 32px;
+    padding: 0 12px;
+    background: var(--ps-panel-head);
+    border-bottom: 1px solid var(--ps-border-dark);
   }
-  .logo {
-    width: 56px;
-    height: 56px;
-    border-radius: 16px;
-    background: linear-gradient(135deg, var(--accent) 0%, var(--accent-2) 100%);
-    box-shadow: 0 0 36px rgba(139, 108, 255, 0.45);
-    margin-bottom: 18px;
+  .mark {
+    display: grid;
+    place-items: center;
+    width: 20px;
+    height: 20px;
+    background: var(--ps-accent);
+    border-radius: 2px;
+    color: #fff;
   }
-  h1 {
-    margin: 0;
-    font-size: 26px;
-    font-weight: 600;
-    letter-spacing: -0.02em;
-  }
-  .tag {
-    margin: 6px 0 22px;
-    color: var(--fg-1);
+  .name {
+    font-size: var(--fs-lg);
+    color: var(--ps-text);
   }
   .actions {
     display: flex;
-    flex-direction: column;
     gap: 8px;
-    width: 100%;
+    padding: 14px 12px 10px;
   }
   .action {
+    flex: 1;
     display: grid;
-    grid-template-columns: 24px 1fr auto;
+    grid-template-columns: auto 1fr auto;
     align-items: center;
-    gap: 10px;
-    padding: 12px 14px;
+    gap: 8px;
+    height: 32px;
+    padding: 0 10px;
     text-align: left;
-    background: var(--bg-2);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-lg);
-    color: var(--fg-0);
-    font-size: var(--fs-md);
-    transition: border-color var(--t-fast) ease-out, background var(--t-fast) ease-out, box-shadow var(--t-fast) ease-out;
+    background: var(--ps-button);
+    border: 1px solid var(--ps-border-dark);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+    border-radius: 2px;
+    color: var(--ps-text);
   }
   .action:hover {
-    border-color: var(--accent);
-    background: var(--bg-3);
-    box-shadow: 0 0 0 1px rgba(139, 108, 255, 0.25), 0 0 20px rgba(139, 108, 255, 0.15);
+    background: var(--ps-button-hover);
   }
   kbd {
-    font-family: var(--font-mono);
+    color: var(--ps-text-dim);
     font-size: var(--fs-xs);
-    color: var(--fg-2);
   }
   .recent {
-    width: 100%;
-    margin-top: 18px;
-    text-align: left;
+    padding: 4px 12px 12px;
   }
   .rh {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    margin: 0 0 6px 4px;
-    color: var(--fg-2);
+    color: var(--ps-text-dim);
     font-size: var(--fs-xs);
+    padding: 4px 0;
+    border-bottom: 1px solid var(--ps-border-dark);
+    box-shadow: 0 1px 0 var(--ps-border-light);
+    margin-bottom: 4px;
   }
-  .r {
+  .rlist {
     display: flex;
     flex-direction: column;
-    width: 100%;
-    padding: 6px 10px;
-    border-radius: var(--radius-md);
+    max-height: 200px;
+    overflow: auto;
+  }
+  .r {
+    display: grid;
+    grid-template-columns: auto auto 1fr;
+    align-items: center;
+    gap: 8px;
+    height: var(--row-h);
+    padding: 0 6px;
     text-align: left;
+    color: var(--ps-text-dim);
   }
   .r:hover {
-    background: var(--bg-2);
+    background: var(--ps-row-selected);
+    color: var(--ps-text);
   }
   .rn {
-    color: var(--fg-0);
-    font-size: var(--fs-sm);
+    color: var(--ps-text);
   }
   .rp {
-    color: var(--fg-2);
+    color: var(--ps-text-disabled);
     font-size: var(--fs-xs);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  .hint {
-    margin: 22px 0 0;
-    color: var(--fg-2);
-    font-size: var(--fs-xs);
+  .rempty {
+    padding: 8px 0 2px;
+    color: var(--ps-text-disabled);
+    font-size: var(--fs-sm);
   }
 </style>

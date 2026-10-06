@@ -60,14 +60,14 @@ describe("ui store", () => {
     expect(ui.dockWidth).toBe(600);
     ui.resetLayout();
     expect(ui.isPanelVisible("layers")).toBe(true);
-    expect(ui.dockWidth).toBe(288);
+    expect(ui.dockWidth).toBe(280);
   });
 
   it("creates panel layouts lazily with defaults", () => {
-    const p = ui.panel("history", { weight: 2, collapsed: true });
+    const p = ui.panel("scratch-panel", { weight: 2, collapsed: true });
     expect(p).toEqual({ weight: 2, collapsed: true });
-    ui.setPanel("history", { collapsed: false });
-    expect(ui.panel("history").collapsed).toBe(false);
+    ui.setPanel("scratch-panel", { collapsed: false }, { weight: 2, collapsed: true });
+    expect(ui.panel("scratch-panel").collapsed).toBe(false);
   });
 });
 
@@ -200,8 +200,8 @@ describe("tool registry", () => {
     const slots = toolbarSlots();
     const marquee = slots.find((s) => s.id === "marquee")!;
     expect(marquee.tools.map((t) => t.id)).toEqual(["marquee-rect", "marquee-ellipse"]);
-    expect(slots.find((s) => s.id === "fill")!.tools.map((t) => t.id)).toEqual(["bucket", "gradient"]);
-    expect(slots.length).toBeLessThan(TOOLS.length);
+    expect(slots.find((s) => s.id === "gradient")!.tools.map((t) => t.id)).toEqual(["gradient", "bucket"]);
+    expect(slots.filter((s) => s.tools.length > 0).length).toBeLessThan(TOOLS.length);
   });
 
   it("resolves keys and cycles within a group", () => {

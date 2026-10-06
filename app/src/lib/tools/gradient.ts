@@ -11,7 +11,8 @@ export class GradientTool implements Tool {
   readonly name = "Gradient";
   readonly icon = Rainbow;
   readonly shortcut = "Shift+g";
-  readonly group = "fill";
+  readonly group = "gradient";
+  readonly groupOrder = 0;
   readonly cursor = "crosshair";
   readonly hint = "Drag from the foreground colour to the background colour. Shift constrains the angle.";
   readonly options: readonly ToolOption[] = [

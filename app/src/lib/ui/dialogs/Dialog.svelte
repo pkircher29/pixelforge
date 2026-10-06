@@ -1,10 +1,11 @@
 <script lang="ts">
   /**
-   * Modal dialog frame: glass backdrop, title, body, footer. Esc cancels, Enter submits
-   * (unless focus is in a textarea), Tab is trapped inside, first field is focused.
+   * PS modal dialog: #3c3c3c title bar, 1px border, OK/Cancel right-aligned in the footer.
+   * Esc cancels, Enter submits (unless focus is in a textarea), Tab is trapped inside,
+   * first field is focused. Draggable by the title bar.
    */
   import type { Snippet } from "svelte";
-  import { X } from "@lucide/svelte";
+  import Icon from "../icons/Icon.svelte";
 
   interface Props {
     title: string;
@@ -15,18 +16,22 @@
     onsubmit?: () => void;
     children: Snippet;
     footer?: Snippet;
+    /** Dim the app behind (default true; filters' live previews pass false). */
+    dim?: boolean;
   }
 
-  let { title, width = 440, oncancel, onsubmit, children, footer }: Props = $props();
+  let { title, width = 440, oncancel, onsubmit, children, footer, dim = true }: Props = $props();
 
   let panel = $state<HTMLDivElement | null>(null);
+  let dx = $state(0);
+  let dy = $state(0);
 
   const FOCUSABLE = 'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
   $effect(() => {
     const el = panel;
     if (!el) return;
-    const first = el.querySelector<HTMLElement>("[data-autofocus], input, select, textarea, button.primary");
+    const first = el.querySelector<HTMLElement>("[data-autofocus], input:not([type=checkbox]):not([type=radio]), select, textarea, button.primary");
     (first ?? el).focus();
     if (first instanceof HTMLInputElement && first.type === "text") first.select();
   });
@@ -59,14 +64,33 @@
     }
     e.stopPropagation();
   }
+
+  function startDrag(e: PointerEvent) {
+    if (e.button !== 0 || (e.target as HTMLElement).closest("button")) return;
+    const el = e.currentTarget as HTMLElement;
+    const sx = e.clientX - dx;
+    const sy = e.clientY - dy;
+    el.setPointerCapture(e.pointerId);
+    const move = (ev: PointerEvent) => {
+      dx = ev.clientX - sx;
+      dy = ev.clientY - sy;
+    };
+    const up = () => {
+      el.removeEventListener("pointermove", move);
+      el.removeEventListener("pointerup", up);
+    };
+    el.addEventListener("pointermove", move);
+    el.addEventListener("pointerup", up);
+  }
 </script>
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
-<div class="backdrop" onpointerdown={(e) => e.target === e.currentTarget && oncancel()} onkeydown={onkeydown}>
-  <div class="panel" role="dialog" aria-modal="true" aria-label={title} tabindex="-1" bind:this={panel} style:width="{width}px">
-    <header>
+<div class="backdrop" class:dim onpointerdown={(e) => e.target === e.currentTarget && oncancel()} onkeydown={onkeydown}>
+  <div class="panel" role="dialog" aria-modal="true" aria-label={title} tabindex="-1" bind:this={panel} style:width="{width}px" style:transform="translate({dx}px, {dy}px)">
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <header onpointerdown={startDrag}>
       <h2>{title}</h2>
-      <button type="button" class="icon-btn" aria-label="Close" onclick={oncancel}><X size={14} /></button>
+      <button type="button" class="x" aria-label="Close" onclick={oncancel}><Icon name="close-small" size={12} /></button>
     </header>
     <div class="body">{@render children()}</div>
     {#if footer}
@@ -83,62 +107,62 @@
     z-index: 950;
     display: grid;
     place-items: center;
-    background: rgba(4, 6, 10, 0.55);
-    backdrop-filter: blur(6px);
-    animation: fade var(--t-fast) ease-out;
+  }
+  .backdrop.dim {
+    background: rgba(0, 0, 0, 0.35);
   }
   .panel {
     max-width: calc(100vw - 32px);
     max-height: calc(100vh - 32px);
     display: flex;
     flex-direction: column;
-    background: var(--glass);
-    backdrop-filter: blur(18px) saturate(140%);
-    border: 1px solid var(--border-strong);
-    border-radius: var(--radius-lg);
-    box-shadow: var(--shadow-2), 0 0 0 1px rgba(0, 0, 0, 0.5);
+    background: var(--ps-app);
+    border: 1px solid var(--ps-border-dark);
+    box-shadow:
+      inset 0 0 0 1px var(--ps-border-light),
+      0 8px 24px rgba(0, 0, 0, 0.6);
     outline: none;
-    animation: rise var(--t-fast) ease-out;
   }
   header {
     display: flex;
     align-items: center;
-    padding: 12px 12px 8px 16px;
+    height: 26px;
+    padding: 0 4px 0 10px;
+    margin: 1px 1px 0;
+    background: var(--ps-panel-head);
+    border-bottom: 1px solid var(--ps-border-dark);
   }
   h2 {
     flex: 1;
     margin: 0;
-    font-size: var(--fs-lg);
-    font-weight: 600;
-    letter-spacing: -0.01em;
+    font-size: var(--fs-sm);
+    font-weight: 400;
+    color: var(--ps-text);
+  }
+  .x {
+    display: grid;
+    place-items: center;
+    width: 18px;
+    height: 18px;
+    color: var(--ps-text-dim);
+    border-radius: 2px;
+  }
+  .x:hover {
+    background: var(--ps-hover);
+    color: var(--ps-text);
   }
   .body {
-    padding: 4px 16px 12px;
+    padding: 12px 14px 10px;
     overflow: auto;
     font-size: var(--fs-sm);
   }
   footer {
     display: flex;
     justify-content: flex-end;
-    gap: 8px;
-    padding: 10px 16px 14px;
-    border-top: 1px solid var(--border);
+    gap: 6px;
+    padding: 8px 14px 12px;
   }
-  @keyframes fade {
-    from {
-      opacity: 0;
-    }
-  }
-  @keyframes rise {
-    from {
-      opacity: 0;
-      transform: translateY(6px);
-    }
-  }
-  @media (prefers-reduced-motion: reduce) {
-    .backdrop,
-    .panel {
-      animation: none;
-    }
+  footer :global(.btn) {
+    min-width: 72px;
   }
 </style>

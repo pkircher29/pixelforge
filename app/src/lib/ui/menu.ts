@@ -1,14 +1,14 @@
 /**
  * Build the menu-bar tree from the command registry (pure).
  *
- * Top-level menus are fixed and ordered; items are grouped by their `menu` path and
- * sorted by `order`; a separator is inserted whenever `floor(order / 100)` changes;
- * nested paths ("Image/Adjustments") become submenus placed at the position of the
- * smallest order inside them.
+ * Top-level menus are fixed and ordered (Photoshop's, plus AI); items are grouped by
+ * their `menu` path and sorted by `order`; a separator is inserted whenever
+ * `floor(order / 100)` changes; nested paths ("Image/Adjustments") become submenus placed
+ * at the position of the smallest order inside them.
  */
 import type { CommandDef } from "./registry.svelte";
 
-export const TOP_MENUS = ["File", "Edit", "Image", "Layer", "Select", "Filter", "AI", "View", "Window", "Help"] as const;
+export const TOP_MENUS = ["File", "Edit", "Image", "Layer", "Type", "Select", "Filter", "AI", "View", "Window", "Help"] as const;
 export type TopMenu = (typeof TOP_MENUS)[number];
 
 export type MenuNode =
@@ -89,4 +89,14 @@ export function buildMenus(commands: readonly CommandDef[]): MenuTree[] {
     f.items.push({ command: c, order: c.order ?? 1000 });
   }
   return [...roots.values()].map((r) => ({ label: r.label, children: flatten(r) }));
+}
+
+/** Does any item in the tree declare `checked` (so the column of check marks is reserved)? */
+export function hasCheckColumn(nodes: readonly MenuNode[]): boolean {
+  return nodes.some((n) => n.type === "item" && typeof n.command.checked === "function");
+}
+
+/** Item state for rendering: label, right-aligned shortcut, disabled, checked. */
+export function itemState(c: CommandDef): { disabled: boolean; checked: boolean } {
+  return { disabled: c.enabled ? !c.enabled() : false, checked: c.checked ? c.checked() : false };
 }

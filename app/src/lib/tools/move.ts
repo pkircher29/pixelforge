@@ -10,6 +10,8 @@ export class MoveTool implements Tool {
   readonly name = "Move";
   readonly icon = Move;
   readonly shortcut = "v";
+  readonly group = "move";
+  readonly groupOrder = 0;
   readonly cursor = "default";
   readonly hint = "Drag to move the active layer. Arrow keys nudge 1 px, Shift+arrows 10 px.";
   readonly options: readonly ToolOption[] = [

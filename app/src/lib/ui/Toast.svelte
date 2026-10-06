@@ -1,19 +1,19 @@
 <script lang="ts">
-  import { CheckCircle, AlertCircle, Info, X } from "@lucide/svelte";
+  import Icon from "./icons/Icon.svelte";
   import { toast } from "$lib/stores/toast.svelte";
 </script>
 
 <div class="toasts" aria-live="polite">
   {#each toast.items as t (t.id)}
-    <div class="toast glass {t.kind}" role="status">
+    <div class="toast ps-popup {t.kind}" role="status">
       <span class="ic">
-        {#if t.kind === "success"}<CheckCircle size={15} />{:else if t.kind === "error"}<AlertCircle size={15} />{:else}<Info size={15} />{/if}
+        <Icon name={t.kind === "success" ? "success" : t.kind === "error" ? "warning" : "info"} size={14} />
       </span>
       <span class="text">
         <span class="msg">{t.message}</span>
         {#if t.detail}<span class="detail">{t.detail}</span>{/if}
       </span>
-      <button type="button" class="icon-btn" aria-label="Dismiss" onclick={() => toast.dismiss(t.id)}><X size={12} /></button>
+      <button type="button" class="icon-btn" aria-label="Dismiss" onclick={() => toast.dismiss(t.id)}><Icon name="close-small" size={12} /></button>
     </div>
   {/each}
 </div>
@@ -21,13 +21,13 @@
 <style>
   .toasts {
     position: fixed;
-    right: 16px;
-    bottom: calc(var(--statusbar-h) + 12px);
+    right: 12px;
+    bottom: calc(var(--statusbar-h) + 10px);
     /* Toasts stay visible over every dialog host (API keys dialog is 1000). */
     z-index: 1100;
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 6px;
     pointer-events: none;
   }
   .toast {
@@ -35,26 +35,24 @@
     display: grid;
     grid-template-columns: auto 1fr auto;
     align-items: start;
-    gap: 10px;
-    min-width: 260px;
-    max-width: 420px;
-    padding: 10px 10px 10px 12px;
+    gap: 8px;
+    min-width: 240px;
+    max-width: 400px;
+    padding: 7px 6px 7px 8px;
     font-size: var(--fs-sm);
-    animation: slide var(--t-mid) ease-out;
+    background: var(--ps-panel-head);
   }
   .ic {
     display: grid;
     place-items: center;
     margin-top: 1px;
-  }
-  .success .ic {
-    color: var(--ok);
+    color: var(--ps-text-dim);
   }
   .error .ic {
-    color: var(--danger);
+    color: #ff8a8a;
   }
-  .info .ic {
-    color: var(--accent-2);
+  .success .ic {
+    color: #7fd3a8;
   }
   .text {
     display: flex;
@@ -63,22 +61,11 @@
     min-width: 0;
   }
   .msg {
-    color: var(--fg-0);
+    color: var(--ps-text);
   }
   .detail {
-    color: var(--fg-2);
+    color: var(--ps-text-dim);
     font-size: var(--fs-xs);
     word-break: break-word;
-  }
-  @keyframes slide {
-    from {
-      opacity: 0;
-      transform: translateX(10px);
-    }
-  }
-  @media (prefers-reduced-motion: reduce) {
-    .toast {
-      animation: none;
-    }
   }
 </style>

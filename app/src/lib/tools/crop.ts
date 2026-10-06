@@ -22,6 +22,8 @@ export class CropTool implements Tool {
   readonly name = "Crop";
   readonly icon = Crop;
   readonly shortcut = "c";
+  readonly group = "crop";
+  readonly groupOrder = 0;
   readonly cursor = "crosshair";
   readonly hint = "Drag the area to keep. Enter crops, Esc cancels.";
   readonly options: readonly ToolOption[] = [

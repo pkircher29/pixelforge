@@ -28,6 +28,7 @@ export class LassoTool implements Tool {
   readonly icon;
   readonly shortcut = "l";
   readonly group = "lasso";
+  readonly groupOrder: number;
   readonly cursor = "crosshair";
   readonly hint: string;
   readonly options = OPTIONS;
@@ -42,6 +43,7 @@ export class LassoTool implements Tool {
   constructor(polygon: boolean) {
     this.polygon = polygon;
     this.id = polygon ? "lasso-polygon" : "lasso";
+    this.groupOrder = polygon ? 1 : 0;
     this.name = polygon ? "Polygonal Lasso" : "Lasso";
     this.icon = polygon ? LassoSelect : Lasso;
     this.hint = polygon

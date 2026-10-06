@@ -4,24 +4,37 @@
  *
  * Feature modules call `registerPanel` / `registerCommand` at import time from their own
  * `register.ts`; the shell imports those files once in `App.svelte` and renders whatever
- * is registered. This keeps `ui-shell-tools`, `ai-panel`, and `adjust-filters` decoupled.
+ * is registered. This keeps the waves decoupled.
  *
- * Contract is frozen for Wave 3 — extend with optional fields only.
+ * Contract is frozen — extend with optional fields only. v0.2 additions: `PanelDef.group`
+ * (tab group), `PanelDef.menu` (≡ panel menu), string `icon` (glyph name from
+ * `lib/ui/icons`), `CommandDef.checked` (menu check marks).
  */
 import type { Component } from "svelte";
 
 export type DockArea = "right" | "bottom" | "left";
+
+/** Default tab groups of the "Essentials" workspace (PLAN-v2 §3). */
+export type PanelGroupId = "color" | "properties" | "layers" | "history" | (string & {});
 
 export interface PanelDef {
   /** Stable id, e.g. "layers", "ai", "ai-history", "history", "properties". */
   id: string;
   title: string;
   dock: DockArea;
-  /** Lower renders first (top of the dock). */
+  /** Lower renders first (order of tabs inside a group / of groups when unplaced). */
   order: number;
   component: Component;
-  /** Lucide icon component for the dock tab strip. */
-  icon?: Component;
+  /**
+   * Tab group this panel lives in by default: "color" (Color, Swatches), "properties",
+   * "layers" (Layers, Channels, Paths), "history" (History, AI, AI History). Unknown ids
+   * create a new group. Omitted → placed by the default workspace table, else its own group.
+   */
+  group?: PanelGroupId;
+  /** Glyph name (`lib/ui/icons`) or a Lucide component — shown when the group is collapsed to icons. */
+  icon?: Component | string;
+  /** Commands listed in the panel's ≡ menu (top-right of the tab strip). */
+  menu?: CommandDef[];
   /** Initially collapsed. */
   collapsed?: boolean;
   /** Preferred height in px when in a vertical dock. */
@@ -34,7 +47,7 @@ export interface CommandDef {
   label: string;
   /**
    * Menu path using "/" separators, e.g. "Image/Adjustments". Omit for palette-only.
-   * Top-level menus in order: File, Edit, Image, Layer, Select, Filter, AI, View, Window, Help.
+   * Top-level menus in order: File, Edit, Image, Layer, Type, Select, Filter, AI, View, Window, Help.
    */
   menu?: string;
   /** Position within its menu; lower first. Groups separated at every multiple of 100. */
@@ -46,6 +59,8 @@ export interface CommandDef {
   /** Shown in the palette as a hint; used for fuzzy search too. */
   keywords?: string[];
   enabled?: () => boolean;
+  /** Toggle commands: a ✓ is drawn in menus when this returns true. */
+  checked?: () => boolean;
   run: () => void | Promise<void>;
 }
 
@@ -71,6 +86,10 @@ export function registerCommands(defs: CommandDef[]): void {
 /** Reactive list of panels for a dock, sorted by `order`. */
 export function getPanels(dock?: DockArea): PanelDef[] {
   return panels.filter((p) => !dock || p.dock === dock).sort((a, b) => a.order - b.order);
+}
+
+export function getPanel(id: string): PanelDef | undefined {
+  return panels.find((p) => p.id === id);
 }
 
 /** Reactive list of all commands. */

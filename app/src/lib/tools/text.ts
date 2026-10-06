@@ -10,6 +10,9 @@ export class TextTool implements Tool {
   readonly name = "Text";
   readonly icon = Type;
   readonly shortcut = "t";
+  readonly group = "type";
+  readonly groupOrder = 0;
+  readonly glyph = "type-h";
   readonly cursor = "text";
   readonly hint = "Click where the text should start, type, then press Enter. Esc discards.";
   readonly options: readonly ToolOption[] = [

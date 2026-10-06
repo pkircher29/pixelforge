@@ -3,13 +3,18 @@
    * One per open document. Owns the GL/2D canvas (compositor) and a 2D overlay canvas
    * for tool graphics. Only the active view runs its render loop and talks to the
    * canvas host; inactive views are hidden but keep their compositor warm.
+   *
+   * Chrome owned by the shell: PS pasteboard, document frame (1 px dark border + soft
+   * shadow), rulers (View ▸ Rulers, Ctrl+R) with cursor markers, transparency grid prefs.
    */
   import { createCompositor, type ICompositor, type RenderStats, type ViewportState } from "$lib/engine";
   import { docStore, type OpenDoc } from "$lib/stores/doc.svelte";
   import { toolStore } from "$lib/stores/tool.svelte";
   import { ui } from "$lib/stores/ui.svelte";
+  import { settings, CHECKER_PX, CHECKER_RGB } from "$lib/stores/settings.svelte";
   import { TextTool, type ToolEvent } from "$lib/tools";
   import { canvasHost, type CanvasImpl } from "./canvas/host.svelte";
+  import { paintRuler } from "./rulers";
 
   interface Props {
     entry: OpenDoc;
@@ -17,9 +22,13 @@
   }
   let { entry, active }: Props = $props();
 
+  const RULER = 16;
+
   let host = $state<HTMLDivElement | null>(null);
   let canvas = $state<HTMLCanvasElement | null>(null);
   let overlay = $state<HTMLCanvasElement | null>(null);
+  let rulerH = $state<HTMLCanvasElement | null>(null);
+  let rulerV = $state<HTMLCanvasElement | null>(null);
   let textInput = $state<HTMLInputElement | null>(null);
   let cursor = $state("default");
   let cssW = $state(0);
@@ -35,10 +44,14 @@
   let lastW = 0;
   let lastH = 0;
   let lastDpr = 0;
+  let lastRulerKey = "";
+  let lastChecker = -1;
 
   // Pointer state.
   let panning: { x: number; y: number } | null = null;
   let toolDown = false;
+
+  const rulers = $derived(ui.showRulers);
 
   const impl: CanvasImpl = {
     get entry() {
@@ -54,19 +67,35 @@
     focus: () => host?.focus(),
   };
 
-  // Mount compositor + resize observer once the elements exist.
+  function cssRgb(name: string, fallback: [number, number, number]): [number, number, number] {
+    const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+    const m = /^#([0-9a-f]{6})$/i.exec(v);
+    if (!m) return fallback;
+    const n = parseInt(m[1]!, 16);
+    return [((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255];
+  }
+
+  // Mount compositor + resize observer once the elements exist. Re-created when the
+  // transparency-grid colours or theme change (compositor colours are fixed at creation).
   $effect(() => {
     const el = canvas;
     const container = host;
+    const gridColors = settings.value.checkerColors;
+    void settings.value.theme;
     if (!el || !container) return;
+    const [light, dark] = CHECKER_RGB[gridColors] ?? CHECKER_RGB.light;
     try {
-      compositor = createCompositor(el);
+      // glow = black: the present shader draws a 1 px `glow` line around the document and
+      // a soft halo in the pasteboard — black gives PS's hairline and no halo.
+      compositor = createCompositor(el, { colors: { light, dark, bg: cssRgb("--ps-canvas-bg", [0.157, 0.157, 0.157]), glow: [0, 0, 0] } });
     } catch (e) {
       console.error("[pixelforge] no compositor", e);
       return;
     }
     entry.compositor = compositor;
     if (active) canvasHost.compositorKind = compositor.kind;
+    lastVersion = -1;
+    lastVp = null;
     const ro = new ResizeObserver(() => {
       cssW = Math.max(1, container.clientWidth);
       cssH = Math.max(1, container.clientHeight);
@@ -108,6 +137,12 @@
     };
   });
 
+  function checkerSizePx(dpr: number): number {
+    const px = CHECKER_PX[settings.value.checkerSize] ?? 8;
+    // "None": one giant cell → the light colour only.
+    return px === 0 ? 1e6 : Math.round(px * dpr);
+  }
+
   function render(t: number): void {
     const c = compositor;
     const ov = overlay;
@@ -125,8 +160,11 @@
     const ants = hasSel ? Math.floor(t / 80) % 8 : 0;
     const sizeChanged = cssW !== lastW || cssH !== lastH || dpr !== lastDpr;
     const vpChanged = !lastVp || !vp.equals(lastVp);
-    const need = sizeChanged || vpChanged || entry.version !== lastVersion || ants !== lastAnts;
+    const checker = checkerSizePx(dpr);
+    const need = sizeChanged || vpChanged || entry.version !== lastVersion || ants !== lastAnts || checker !== lastChecker;
     if (need) {
+      lastChecker = checker;
+      const t0 = performance.now();
       stats = c.render(doc, vp, {
         width: Math.round(cssW * dpr),
         height: Math.round(cssH * dpr),
@@ -134,8 +172,10 @@
         antsPhase: ants,
         showSelection: ui.showSelectionEdges,
         showPixelGrid: ui.showPixelGrid,
+        checkerSize: checker,
         activeLayerId: doc.activeLayerId,
       });
+      if (sizeChanged || vpChanged || entry.version !== lastVersion) ui.lastRenderMs = performance.now() - t0;
       lastVersion = entry.version;
       lastVp = vp.toState();
       lastAnts = ants;
@@ -148,6 +188,7 @@
       overlayDirty = false;
       drawOverlay(ov, dpr);
     }
+    if (rulers) drawRulers(dpr);
   }
 
   function drawOverlay(ov: HTMLCanvasElement, dpr: number): void {
@@ -165,6 +206,54 @@
     const ctx = canvasHost.context(tool);
     if (ctx && tool.drawOverlay) tool.drawOverlay(g, ctx);
   }
+
+  function drawRulers(dpr: number): void {
+    const rh = rulerH;
+    const rv = rulerV;
+    if (!rh || !rv) return;
+    const vp = entry.viewport;
+    const cur = ui.cursorDoc;
+    const unit = settings.value.rulerUnit;
+    const key = `${cssW}:${cssH}:${dpr}:${vp.zoom}:${vp.panX}:${vp.panY}:${unit}:${cur?.x}:${cur?.y}:${settings.value.theme}`;
+    if (key === lastRulerKey) return;
+    lastRulerKey = key;
+    const cs = getComputedStyle(document.documentElement);
+    const colors = {
+      bg: cs.getPropertyValue("--ps-ruler").trim() || "#3c3c3c",
+      tick: cs.getPropertyValue("--ps-ruler-tick").trim() || "#a0a0a0",
+      text: cs.getPropertyValue("--ps-ruler-tick").trim() || "#a0a0a0",
+      border: cs.getPropertyValue("--ps-border-dark").trim() || "#1e1e1e",
+      cursor: cs.getPropertyValue("--ps-text").trim() || "#e6e6e6",
+    };
+    const sizeH = { w: Math.round(cssW * dpr), h: Math.round(RULER * dpr) };
+    if (rh.width !== sizeH.w || rh.height !== sizeH.h) {
+      rh.width = sizeH.w;
+      rh.height = sizeH.h;
+    }
+    const sizeV = { w: Math.round(RULER * dpr), h: Math.round(cssH * dpr) };
+    if (rv.width !== sizeV.w || rv.height !== sizeV.h) {
+      rv.width = sizeV.w;
+      rv.height = sizeV.h;
+    }
+    const gh = rh.getContext("2d");
+    const gv = rv.getContext("2d");
+    if (!gh || !gv) return;
+    const o = vp.docToScreen({ x: 0, y: 0 });
+    const cs2 = cur ? vp.docToScreen({ x: cur.x, y: cur.y }) : null;
+    const dpi = entry.doc.meta.dpi || 72;
+    paintRuler(gh, { axis: "h", length: cssW, origin: o.x, zoom: vp.zoom, unit, dpi, docAxisPx: entry.doc.width, cursor: cs2?.x ?? null, dpr, colors }, RULER);
+    paintRuler(gv, { axis: "v", length: cssH, origin: o.y, zoom: vp.zoom, unit, dpi, docAxisPx: entry.doc.height, cursor: cs2?.y ?? null, dpr, colors }, RULER);
+  }
+
+  // Document frame: PS draws a hairline + soft shadow around the canvas on the pasteboard.
+  const frame = $derived.by(() => {
+    void entry.version;
+    const vp = entry.viewport;
+    if (vp.rotation !== 0 || cssW < 2) return null;
+    const a = vp.docToScreen({ x: 0, y: 0 });
+    const b = vp.docToScreen({ x: entry.doc.width, y: entry.doc.height });
+    return { x: Math.round(a.x), y: Math.round(a.y), w: Math.max(1, Math.round(b.x - a.x)), h: Math.max(1, Math.round(b.y - a.y)) };
+  });
 
   // ------------------------------------------------------------------ pointer
 
@@ -258,6 +347,7 @@
     const r = host.getBoundingClientRect();
     const pt = { x: e.clientX - r.left, y: e.clientY - r.top };
     const vp = entry.viewport;
+    const wheelZooms = settings.value.zoomWithWheel !== false;
     if (e.shiftKey && !e.ctrlKey) {
       vp.panBy(-e.deltaY, 0);
     } else if (e.altKey && !e.ctrlKey) {
@@ -265,9 +355,11 @@
     } else if (e.ctrlKey || e.metaKey) {
       // Trackpad pinch arrives as ctrl+wheel with small deltas: smooth exponential zoom.
       vp.zoomAt(pt, Math.exp(-e.deltaY * 0.01));
-    } else {
+    } else if (wheelZooms) {
       const lines = e.deltaMode === 1 ? e.deltaY * 20 : e.deltaY;
       vp.zoomAt(pt, lines < 0 ? 1.2 : 1 / 1.2);
+    } else {
+      vp.panBy(0, -e.deltaY);
     }
     docStore.touch();
   }
@@ -314,63 +406,102 @@
   }
 </script>
 
-<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
-<div
-  class="host"
-  class:hidden={!active}
-  bind:this={host}
-  tabindex="0"
-  role="application"
-  aria-label="Document view"
-  style:cursor
-  onpointerdown={onPointerDown}
-  onpointermove={onPointerMove}
-  onpointerup={onPointerUp}
-  onpointercancel={onPointerUp}
-  onpointerleave={onPointerLeave}
-  onwheel={onWheel}
-  oncontextmenu={onContextMenu}
->
-  <!-- Only the active view's canvas carries the label other modules locate it by. -->
-  <canvas class="gl" bind:this={canvas} aria-label={active ? "Document canvas" : "Inactive document canvas"}></canvas>
-  <canvas class="overlay" bind:this={overlay} aria-hidden="true"></canvas>
-  {#if textPos && ui.textEdit}
-    <input
-      class="text-edit"
-      type="text"
-      bind:this={textInput}
-      bind:value={ui.textEdit.value}
-      onkeydown={onTextKey}
-      onblur={commitText}
-      style:left="{textPos.x}px"
-      style:top="{textPos.y}px"
-      style:font-size="{Math.max(8, textPos.size)}px"
-      style:font-family={toolStore.option("text", "family", "Segoe UI")}
-      style:font-weight={toolStore.option("text", "bold", false) ? 700 : 400}
-      style:font-style={toolStore.option("text", "italic", false) ? "italic" : "normal"}
-      placeholder="Type…"
-      spellcheck="false"
-    />
+<div class="view" class:hidden={!active} class:rulers>
+  {#if rulers}
+    <div class="corner" aria-hidden="true"></div>
+    <canvas class="ruler h" bind:this={rulerH} aria-hidden="true"></canvas>
+    <canvas class="ruler v" bind:this={rulerV} aria-hidden="true"></canvas>
   {/if}
-  {#if import.meta.env.DEV && stats && active}
-    <span class="stats" aria-hidden="true">{stats.passes}p {stats.uploads}u</span>
-  {/if}
+  <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+  <div
+    class="host"
+    bind:this={host}
+    tabindex="0"
+    role="application"
+    aria-label="Document view"
+    style:cursor
+    onpointerdown={onPointerDown}
+    onpointermove={onPointerMove}
+    onpointerup={onPointerUp}
+    onpointercancel={onPointerUp}
+    onpointerleave={onPointerLeave}
+    onwheel={onWheel}
+    oncontextmenu={onContextMenu}
+  >
+    <!-- Only the active view's canvas carries the label other modules locate it by. -->
+    <canvas class="gl" bind:this={canvas} aria-label={active ? "Document canvas" : "Inactive document canvas"}></canvas>
+    {#if frame}
+      <div class="frame" aria-hidden="true" style:left="{frame.x}px" style:top="{frame.y}px" style:width="{frame.w}px" style:height="{frame.h}px"></div>
+    {/if}
+    <canvas class="overlay" bind:this={overlay} aria-hidden="true"></canvas>
+    {#if textPos && ui.textEdit}
+      <input
+        class="text-edit"
+        type="text"
+        bind:this={textInput}
+        bind:value={ui.textEdit.value}
+        onkeydown={onTextKey}
+        onblur={commitText}
+        style:left="{textPos.x}px"
+        style:top="{textPos.y}px"
+        style:font-size="{Math.max(8, textPos.size)}px"
+        style:font-family={toolStore.option("text", "family", "Segoe UI")}
+        style:font-weight={toolStore.option("text", "bold", false) ? 700 : 400}
+        style:font-style={toolStore.option("text", "italic", false) ? "italic" : "normal"}
+        placeholder="Type…"
+        spellcheck="false"
+      />
+    {/if}
+    {#if import.meta.env.DEV && stats && active}
+      <span class="stats" aria-hidden="true">{stats.passes}p {stats.uploads}u</span>
+    {/if}
+  </div>
 </div>
 
 <style>
-  .host {
+  .view {
     position: absolute;
     inset: 0;
-    overflow: hidden;
-    background: var(--bg-0);
-    outline: none;
-    touch-action: none;
+    display: grid;
+    grid-template-columns: 1fr;
+    grid-template-rows: 1fr;
+    background: var(--ps-canvas-bg);
   }
-  .host.hidden {
+  .view.rulers {
+    grid-template-columns: var(--ruler-size) 1fr;
+    grid-template-rows: var(--ruler-size) 1fr;
+  }
+  .view.hidden {
     visibility: hidden;
     pointer-events: none;
   }
-  canvas {
+  .corner {
+    background: var(--ps-ruler);
+    border-right: 1px solid var(--ps-border-dark);
+    border-bottom: 1px solid var(--ps-border-dark);
+  }
+  .ruler {
+    display: block;
+  }
+  .ruler.h {
+    width: 100%;
+    height: var(--ruler-size);
+  }
+  .ruler.v {
+    width: var(--ruler-size);
+    height: 100%;
+  }
+  .host {
+    position: relative;
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+    background: var(--ps-canvas-bg);
+    outline: none;
+    touch-action: none;
+  }
+  canvas.gl,
+  canvas.overlay {
     position: absolute;
     inset: 0;
     width: 100%;
@@ -380,13 +511,20 @@
   .overlay {
     pointer-events: none;
   }
+  .frame {
+    position: absolute;
+    pointer-events: none;
+    box-shadow:
+      0 0 0 1px var(--ps-border-dark),
+      0 2px 10px rgba(0, 0, 0, 0.55);
+  }
   .text-edit {
     position: absolute;
     transform: translateY(-80%);
     min-width: 120px;
     padding: 0 4px;
-    background: rgba(10, 12, 17, 0.6);
-    border: 1px dashed var(--accent);
+    background: rgba(0, 0, 0, 0.45);
+    border: 1px dashed var(--ps-accent);
     border-radius: 2px;
     color: #fff;
     outline: none;
@@ -396,10 +534,9 @@
     position: absolute;
     right: 6px;
     top: 4px;
-    font-family: var(--font-mono);
     font-size: 10px;
-    color: var(--fg-2);
-    opacity: 0.6;
+    color: var(--ps-text-disabled);
+    opacity: 0.7;
     pointer-events: none;
   }
 </style>

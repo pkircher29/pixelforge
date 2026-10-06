@@ -19,6 +19,8 @@ export class BrushTool implements Tool {
   readonly name: string;
   readonly icon;
   readonly shortcut: string;
+  readonly group: string;
+  readonly groupOrder = 0;
   readonly cursor = "crosshair";
   readonly hint: string;
   readonly options: readonly ToolOption[];
@@ -40,6 +42,7 @@ export class BrushTool implements Tool {
       this.name = "Brush";
       this.icon = Brush;
       this.shortcut = "b";
+      this.group = "brush";
       this.hint = "Drag to paint. Shift-click paints a straight line from the last point; Alt-click samples a colour. [ ] change size.";
       this.options = [SIZE_OPTION, HARDNESS_OPTION, OPACITY_OPTION, FLOW_OPTION, SPACING_OPTION, PRESSURE_OPTION, { kind: "color", key: "fg", label: "Colour" }];
     } else if (mode === "erase") {
@@ -47,6 +50,7 @@ export class BrushTool implements Tool {
       this.name = "Eraser";
       this.icon = Eraser;
       this.shortcut = "e";
+      this.group = "eraser";
       this.hint = "Drag to erase to transparency. [ ] change size.";
       this.options = [SIZE_OPTION, HARDNESS_OPTION, OPACITY_OPTION, FLOW_OPTION, SPACING_OPTION, PRESSURE_OPTION];
     } else {
@@ -54,6 +58,7 @@ export class BrushTool implements Tool {
       this.name = "Clone Stamp";
       this.icon = Stamp;
       this.shortcut = "s";
+      this.group = "stamp";
       this.hint = "Alt-click to set the source, then paint. The source follows your stroke.";
       this.options = [
         SIZE_OPTION,

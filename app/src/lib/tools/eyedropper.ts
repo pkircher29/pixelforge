@@ -9,6 +9,8 @@ export class EyedropperTool implements Tool {
   readonly name = "Eyedropper";
   readonly icon = Pipette;
   readonly shortcut = "i";
+  readonly group = "eyedropper";
+  readonly groupOrder = 0;
   readonly cursor = "crosshair";
   readonly hint = "Click to set the foreground colour. Alt-click sets the background.";
   readonly options: readonly ToolOption[] = [

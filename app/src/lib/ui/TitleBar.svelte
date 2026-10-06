@@ -1,11 +1,12 @@
 <script lang="ts">
   /**
-   * Custom title bar: brand, registry-driven menus, centred document title, window
+   * PS-style single-row title bar: app mark, menus, centred document title, window
    * controls. Drag regions carry `data-tauri-drag-region` on the element itself.
    */
   import { isTauri } from "@tauri-apps/api/core";
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import MenuBar from "./MenuBar.svelte";
+  import Icon from "./icons/Icon.svelte";
 
   interface Props {
     title?: string;
@@ -58,9 +59,8 @@
 </script>
 
 <header class="titlebar" class:mac={isMac} data-tauri-drag-region>
-  <div class="brand" data-tauri-drag-region>
-    <span class="logo" data-tauri-drag-region aria-hidden="true"></span>
-    <span class="name" data-tauri-drag-region>Pixelforge</span>
+  <div class="brand" data-tauri-drag-region title="Pixelforge">
+    <span class="mark" data-tauri-drag-region aria-hidden="true"><Icon name="app-mark" size={14} /></span>
   </div>
 
   <MenuBar />
@@ -71,27 +71,13 @@
   {#if !isMac}
     <div class="controls">
       <button type="button" class="ctl" aria-label="Minimize" title="Minimize" onclick={() => run("minimize")}>
-        <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M0 5h10" stroke="currentColor" /></svg>
+        <Icon name="window-min" size={16} />
       </button>
-      <button
-        type="button"
-        class="ctl"
-        aria-label={maximized ? "Restore" : "Maximize"}
-        title={maximized ? "Restore" : "Maximize"}
-        onclick={() => run("toggleMaximize")}
-      >
-        {#if maximized}
-          <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
-            <path d="M2.5 2.5h7v7h-7z M0.5 7.5v-7h7" fill="none" stroke="currentColor" />
-          </svg>
-        {:else}
-          <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
-            <path d="M0.5 0.5h9v9h-9z" fill="none" stroke="currentColor" />
-          </svg>
-        {/if}
+      <button type="button" class="ctl" aria-label={maximized ? "Restore" : "Maximize"} title={maximized ? "Restore" : "Maximize"} onclick={() => run("toggleMaximize")}>
+        <Icon name={maximized ? "window-restore" : "window-max"} size={16} />
       </button>
       <button type="button" class="ctl close" aria-label="Close" title="Close" onclick={() => run("close")}>
-        <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M0 0l10 10M10 0L0 10" stroke="currentColor" /></svg>
+        <Icon name="window-close" size={16} />
       </button>
     </div>
   {/if}
@@ -103,43 +89,50 @@
     display: flex;
     align-items: center;
     height: var(--titlebar-h);
-    padding-left: 12px;
-    background: linear-gradient(180deg, var(--bg-2) 0%, var(--bg-1) 100%);
-    border-bottom: 1px solid var(--border);
+    padding-left: 6px;
+    background: var(--ps-app);
+    border-bottom: 1px solid var(--ps-border-dark);
+    box-shadow: inset 0 -1px 0 var(--ps-border-light);
     z-index: 50;
   }
   .titlebar.mac {
-    padding-left: 84px;
+    padding-left: 78px;
   }
   .brand {
     display: flex;
     align-items: center;
-    gap: 8px;
-    margin-right: 12px;
+    gap: 5px;
+    height: 100%;
+    padding: 0 6px 0 2px;
+    margin-right: 2px;
+    border-right: 1px solid var(--ps-border-dark);
+    box-shadow: 1px 0 0 var(--ps-border-light);
   }
-  .logo {
-    width: 16px;
-    height: 16px;
-    border-radius: 5px;
-    background: linear-gradient(135deg, var(--accent) 0%, var(--accent-2) 100%);
-    box-shadow: 0 0 10px rgba(139, 108, 255, 0.5);
+  .mark {
+    display: grid;
+    place-items: center;
+    width: 18px;
+    height: 18px;
+    background: var(--ps-accent);
+    border-radius: 2px;
+    color: #fff;
   }
   .name {
     font-weight: 600;
-    font-size: var(--fs-md);
-    letter-spacing: -0.01em;
-    color: var(--fg-0);
+    font-size: var(--fs-sm);
+    color: var(--ps-text);
+    letter-spacing: 0.02em;
   }
   .title {
     position: absolute;
     left: 50%;
     transform: translateX(-50%);
-    max-width: 34%;
+    max-width: 36%;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
     font-size: var(--fs-sm);
-    color: var(--fg-2);
+    color: var(--ps-text-dim);
     pointer-events: none;
   }
   .spacer {
@@ -151,19 +144,18 @@
     height: 100%;
   }
   .ctl {
-    width: 46px;
+    width: 44px;
     height: 100%;
     display: grid;
     place-items: center;
-    color: var(--fg-1);
-    transition: background var(--t-fast) ease-out, color var(--t-fast) ease-out;
+    color: var(--ps-text-dim);
   }
   .ctl:hover {
-    background: var(--bg-3);
-    color: var(--fg-0);
+    background: var(--ps-hover);
+    color: var(--ps-text);
   }
   .ctl.close:hover {
-    background: #e81123;
+    background: #c42b1c;
     color: #fff;
   }
 </style>

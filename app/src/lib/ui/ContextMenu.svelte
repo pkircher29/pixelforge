@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Check } from "@lucide/svelte";
+  import Icon from "./icons/Icon.svelte";
   import { contextMenu } from "./context-menu.svelte";
 
   let el = $state<HTMLDivElement | null>(null);
@@ -27,7 +27,7 @@
 <svelte:window onpointerdown={onWindowDown} onkeydown={onKey} onblur={() => contextMenu.close()} />
 
 {#if contextMenu.state}
-  <div class="menu glass" role="menu" bind:this={el} style:left="{pos.x}px" style:top="{pos.y}px">
+  <div class="menu ps-popup" role="menu" bind:this={el} style:left="{pos.x}px" style:top="{pos.y}px">
     {#each contextMenu.state.items as item, i (i)}
       {#if item.separator}
         <div class="sep" role="separator"></div>
@@ -43,7 +43,7 @@
             void item.run?.();
           }}
         >
-          <span class="check">{#if item.checked}<Check size={12} />{/if}</span>
+          <span class="check">{#if item.checked}<Icon name="check" size={12} />{/if}</span>
           <span class="label">{item.label}</span>
           {#if item.shortcut}<span class="sc">{item.shortcut}</span>{/if}
         </button>
@@ -56,57 +56,46 @@
   .menu {
     position: fixed;
     z-index: 980;
-    min-width: 200px;
-    padding: 4px;
-    animation: pop var(--t-fast) ease-out;
+    min-width: 190px;
+    padding: 3px 0;
   }
   .item {
     display: grid;
     grid-template-columns: 16px 1fr auto;
     align-items: center;
-    gap: 6px;
+    gap: 2px;
     width: 100%;
-    padding: 5px 8px 5px 4px;
-    border-radius: var(--radius-sm);
+    height: 24px;
+    padding: 0 12px 0 4px;
     text-align: left;
-    font-size: var(--fs-sm);
-    color: var(--fg-0);
+    font-size: var(--fs-menu);
+    color: var(--ps-text);
+    white-space: nowrap;
   }
   .item:not(:disabled):hover {
-    background: var(--accent-soft);
+    background: var(--ps-row-selected);
   }
   .item:disabled {
-    color: var(--fg-2);
+    color: var(--ps-text-disabled);
   }
   .item.danger:not(:disabled):hover {
-    background: rgba(255, 92, 122, 0.16);
-    color: var(--danger);
+    background: var(--ps-row-selected);
   }
   .check {
     display: grid;
     place-items: center;
-    color: var(--accent-2);
+  }
+  .label {
+    padding-right: 24px;
   }
   .sc {
-    color: var(--fg-2);
-    font-size: var(--fs-xs);
-    font-family: var(--font-mono);
-    margin-left: 18px;
+    color: var(--ps-text-dim);
+    font-size: var(--fs-sm);
   }
   .sep {
     height: 1px;
-    margin: 4px 6px;
-    background: var(--border);
-  }
-  @keyframes pop {
-    from {
-      opacity: 0;
-      transform: translateY(-2px);
-    }
-  }
-  @media (prefers-reduced-motion: reduce) {
-    .menu {
-      animation: none;
-    }
+    margin: 3px 1px;
+    background: var(--ps-border-dark);
+    box-shadow: 0 1px 0 var(--ps-border-light);
   }
 </style>

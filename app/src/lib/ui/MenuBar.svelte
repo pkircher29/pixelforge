@@ -18,9 +18,14 @@
     if (open && bar && !bar.contains(e.target as Node)) open = null;
   }
   function onKey(e: KeyboardEvent) {
-    if (open && e.key === "Escape") {
+    if (!open) return;
+    if (e.key === "Escape") {
       open = null;
       e.stopPropagation();
+    } else if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
+      const labels = menus.filter((m) => m.children.length).map((m) => m.label);
+      const i = labels.indexOf(open);
+      if (i >= 0) open = labels[(i + (e.key === "ArrowRight" ? 1 : -1) + labels.length) % labels.length] ?? open;
     }
   }
 </script>
@@ -57,47 +62,30 @@
 <style>
   .menus {
     display: flex;
-    gap: 1px;
     height: 100%;
-    align-items: center;
+    align-items: stretch;
   }
   .slot {
     position: relative;
-    height: 100%;
     display: flex;
-    align-items: center;
+    align-items: stretch;
   }
   .menu {
-    padding: 4px 9px;
-    border-radius: var(--radius-sm);
-    font-size: var(--fs-sm);
-    color: var(--fg-1);
-    transition: background var(--t-fast) ease-out, color var(--t-fast) ease-out;
+    padding: 0 7px;
+    font-size: var(--fs-menu);
+    color: var(--ps-text);
   }
   .menu:not(:disabled):hover,
   .menu.open {
-    background: var(--bg-3);
-    color: var(--fg-0);
+    background: var(--ps-row-selected);
   }
   .menu:disabled {
-    color: var(--fg-2);
+    color: var(--ps-text-disabled);
   }
   .drop {
     position: absolute;
     left: 0;
-    top: calc(100% - 2px);
+    top: 100%;
     z-index: 60;
-    animation: drop var(--t-fast) ease-out;
-  }
-  @keyframes drop {
-    from {
-      opacity: 0;
-      transform: translateY(-3px);
-    }
-  }
-  @media (prefers-reduced-motion: reduce) {
-    .drop {
-      animation: none;
-    }
   }
 </style>

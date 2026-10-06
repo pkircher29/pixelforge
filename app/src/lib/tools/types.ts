@@ -85,14 +85,34 @@ export interface ToolContext {
   beginTextEdit(docX: number, docY: number): void;
 }
 
+/** A tool preset shown in the options bar's preset picker (Wave 6 fills these). */
+export interface ToolPreset {
+  id: string;
+  name: string;
+  options: Record<string, OptionValue>;
+}
+
 export interface Tool {
   readonly id: string;
   readonly name: string;
   readonly icon: IconComponent;
   /** Single key ("v") or with Shift ("Shift+g"). */
   readonly shortcut: string;
-  /** Tools sharing a toolbar slot (fly-out). */
+  /**
+   * Toolbar fly-out group id (PLAN-v2 §2 slot: "move", "marquee", "lasso", "quickselect",
+   * "crop", "eyedropper", "healing", "brush", "stamp", "history", "eraser", "gradient",
+   * "blur", "dodge", "pen", "type", "pathselect", "shape", "hand", "zoom"). Tools without a
+   * group get a slot of their own after the known groups.
+   */
   readonly group?: string;
+  /** Position inside the fly-out (0 = top). Defaults to the §2 member order. */
+  readonly groupOrder?: number;
+  /** Name shown in the fly-out / tooltip ("Horizontal Type Tool"); defaults to `${name} Tool`. */
+  readonly flyoutLabel?: string;
+  /** Glyph name in `lib/ui/icons` when it differs from `id` (e.g. "text" → "type-h"). */
+  readonly glyph?: string;
+  /** Options-bar presets (Wave 6). */
+  readonly presets?: readonly ToolPreset[];
   /** Default CSS cursor while hovering the canvas. */
   readonly cursor: string;
   readonly options: readonly ToolOption[];
