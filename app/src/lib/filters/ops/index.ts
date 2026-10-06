@@ -1,49 +1,18 @@
 /**
  * Registry of every adjustment and filter op, in menu order.
+ *
+ * The implementations moved to `$lib/engine/ops` (Wave 5, PLAN-v2 §1) so the engine's
+ * adjustment layers can run them without depending on the filters UI. This module is a
+ * thin re-export kept for the filters UI, tests and the command registry.
  */
 
-import type { OpDef } from "../types";
-import { brightnessContrast } from "./brightnessContrast";
-import { levels } from "./levels";
-import { hueSaturation } from "./hueSaturation";
-import { colorBalance } from "./colorBalance";
-import { desaturate, exposure, invert, posterize, threshold } from "./simple";
-import { gaussianBlur, motionBlur } from "./blur";
-import { sharpen, unsharpMask } from "./sharpen";
-import { addNoise } from "./noise";
-import { pixelate } from "./pixelate";
-
-/** Adjustments (Image > Adjustments), in menu order. */
-export const ADJUSTMENT_OPS: readonly OpDef[] = [
-  brightnessContrast,
-  levels,
-  // Curves is v1.1 (the `curve` param type is reserved in types.ts).
-  exposure,
-  hueSaturation,
-  colorBalance,
-  invert,
-  desaturate,
-  threshold,
-  posterize,
-];
-
-/** Filters (Filter menu), in menu order. */
-export const FILTER_OPS: readonly OpDef[] = [gaussianBlur, motionBlur, sharpen, unsharpMask, addNoise, pixelate];
-
-export const ALL_OPS: readonly OpDef[] = [...ADJUSTMENT_OPS, ...FILTER_OPS];
-
-const byId = new Map(ALL_OPS.map((op) => [op.id, op]));
-
-export function opById(id: string): OpDef | undefined {
-  return byId.get(id);
-}
-
-/** Command id an op is registered under (`image.adjust.<id>` / `filter.<id>`). */
-export function commandIdFor(op: OpDef): string {
-  return op.menu === "Image/Adjustments" ? `image.adjust.${op.id}` : `filter.${op.id}`;
-}
-
 export {
+  ADJUSTMENT_OPS,
+  FILTER_OPS,
+  ALL_OPS,
+  opById,
+  registerOp,
+  commandIdFor,
   brightnessContrast,
   levels,
   exposure,
@@ -59,4 +28,4 @@ export {
   unsharpMask,
   addNoise,
   pixelate,
-};
+} from "$lib/engine/ops/registry";

@@ -19,51 +19,12 @@
  */
 
 import { Raster } from "$lib/engine";
+import { OP_VERT as VERT, buildOpFragmentSource } from "$lib/engine/ops/glsl";
 import type { GlslPass, UniformValue } from "./types";
 
-const VERT = `#version 300 es
-precision highp float;
-void main() {
-  vec2 v = vec2(float((gl_VertexID << 1) & 2), float(gl_VertexID & 2));
-  gl_Position = vec4(v * 2.0 - 1.0, 0.0, 1.0);
-}
-`;
-
-const PREAMBLE = `#version 300 es
-precision highp float;
-precision highp int;
-precision highp sampler2D;
-
-uniform sampler2D u_image;
-uniform sampler2D u_source;
-uniform ivec2 u_size;
-uniform ivec2 u_sourceSize;
-uniform ivec2 u_outSize;
-out vec4 outColor;
-
-vec4 pf_fetch(ivec2 p) {
-  return texelFetch(u_image, clamp(p, ivec2(0), u_size - 1), 0);
-}
-vec4 pf_fetchSource(ivec2 p) {
-  return texelFetch(u_source, clamp(p, ivec2(0), u_sourceSize - 1), 0);
-}
-vec4 pf_sample(vec2 uv) {
-  return texture(u_image, uv);
-}
-float pf_luma(vec3 c) { return dot(c, vec3(0.2126, 0.7152, 0.0722)); }
-vec4 pf_premul(vec4 c) { return vec4(c.rgb * c.a, c.a); }
-vec4 pf_unpremul(vec4 c) { return c.a >= 0.5 / 255.0 ? vec4(c.rgb / c.a, c.a) : vec4(0.0); }
-`;
-
-const MAIN = `
-void main() {
-  outColor = pf_op(ivec2(gl_FragCoord.xy));
-}
-`;
-
-/** Full fragment source for a pass (exported for tests / the demo). */
+/** Full fragment source for a pass (exported for tests / the demo). Preamble lives in `$lib/engine/ops/glsl`. */
 export function buildFragmentSource(passSource: string): string {
-  return PREAMBLE + passSource + MAIN;
+  return buildOpFragmentSource(passSource);
 }
 
 interface Program {

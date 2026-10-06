@@ -4,8 +4,9 @@
 //!
 //! ```text
 //! manifest.json          document, layer tree, selection ref, AI history (see Manifest)
-//! layers/<layerId>.png   RGBA8 straight alpha, one per raster layer (layer-sized)
-//! masks/<layerId>.png    optional 8-bit grayscale layer mask
+//! layers/<layerId>.png   RGBA8 straight alpha, one per raster / shape / text layer
+//! masks/<layerId>.png    optional 8-bit grayscale layer mask (any layer kind)
+//! channels/<id>.png      optional 8-bit grayscale alpha channels (canvas-sized)
 //! selection.png          optional 8-bit grayscale selection mask (canvas-sized)
 //! thumb.png              composite preview, longest edge <= 256 px
 //! ```
@@ -29,8 +30,10 @@ use zip::{CompressionMethod, ZipArchive, ZipWriter};
 use crate::codec::{png_dimensions, write_png, PngCompression};
 use crate::{check_buffer, check_dimensions, thumb, Error, Result, MAX_EDGE_PX};
 
-/// Current manifest format version. Readers refuse anything newer.
-pub const FORMAT_VERSION: u32 = 1;
+/// Current manifest format version. Readers refuse anything newer. Format 2 (v0.2)
+/// adds adjustment / fill / shape / text layer kinds, per-layer effects / locks / clipping
+/// fields, alpha channels and paths; format-1 files read unchanged.
+pub const FORMAT_VERSION: u32 = 2;
 /// Archive entry names.
 pub const MANIFEST_NAME: &str = "manifest.json";
 /// Composite preview entry.
@@ -49,6 +52,22 @@ pub enum LayerKind {
     Raster,
     /// Folder: no pixels; children point at it via `parent`.
     Group,
+    /// Non-destructive adjustment (format 2): no pixels, spec in `adjustment`.
+    Adjustment,
+    /// Solid / gradient / pattern fill (format 2): no pixels, spec in `fill`.
+    Fill,
+    /// Vector shape (format 2): spec in `shape` plus a cached `layers/<id>.png`.
+    Shape,
+    /// Type layer (format 2): spec in `text` plus a cached `layers/<id>.png`.
+    Text,
+}
+
+impl LayerKind {
+    /// True for kinds that carry a `layers/<id>.png` (raster, and the cached
+    /// rasterizations of shape / text layers).
+    pub fn has_pixels(self) -> bool {
+        matches!(self, LayerKind::Raster | LayerKind::Shape | LayerKind::Text)
+    }
 }
 
 fn one() -> f32 {
@@ -157,6 +176,25 @@ pub struct DocInfo {
     pub extra: Map<String, Value>,
 }
 
+/// One row of `manifest.channels` (format 2): a saved selection stored as
+/// `channels/<id>.png` (8-bit, canvas-sized). `name`, `color`, `opacity` ride in `extra`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ChannelEntry {
+    /// Unique id, used as the PNG file stem.
+    pub id: String,
+    /// Archive path; filled in by the writer, default `channels/<id>.png`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub file: Option<String>,
+    /// Everything else (name, color, opacity, ...), preserved verbatim.
+    #[serde(flatten)]
+    pub extra: Map<String, Value>,
+}
+
+/// Default archive path of an alpha channel's PNG.
+pub fn channel_file(id: &str) -> String {
+    format!("channels/{id}.png")
+}
+
 /// `manifest.selection`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SelectionEntry {
@@ -192,6 +230,9 @@ pub struct Manifest {
     /// Selection mask reference.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub selection: Option<SelectionEntry>,
+    /// Alpha channels (format 2). Empty for format-1 files.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub channels: Vec<ChannelEntry>,
     /// Opaque: owned by the AI panel. Passed through untouched.
     #[serde(default)]
     pub ai_history: Vec<Value>,
@@ -221,6 +262,7 @@ impl Manifest {
             layers: Vec::new(),
             active_layer: None,
             selection: None,
+            channels: Vec::new(),
             ai_history: Vec::new(),
             thumbnail: None,
             extra: Map::new(),
@@ -293,6 +335,8 @@ pub struct ProjectDoc {
     pub layers: BTreeMap<String, Image>,
     /// Optional 8-bit mask per layer id.
     pub masks: BTreeMap<String, Image>,
+    /// Optional 8-bit alpha channels per channel id (canvas-sized, format 2).
+    pub channels: BTreeMap<String, Image>,
     /// Optional 8-bit selection (canvas-sized).
     pub selection: Option<Image>,
     /// Composite preview. `Raw` is downscaled to [`THUMB_MAX_PX`] by the writer.
@@ -347,36 +391,42 @@ pub fn write_pfproj<W: Write + Seek>(doc: &ProjectDoc, out: W) -> Result<W> {
     // Validate before writing anything.
     for entry in &manifest.layers {
         check_id(&entry.id)?;
-        match entry.kind {
-            LayerKind::Group => {
-                entry_must_not_have(doc, &entry.id)?;
+        // Expected mask size: the layer's pixels, or the canvas for pixel-less kinds.
+        let mut mask_size = (manifest.doc.width, manifest.doc.height);
+        if entry.kind.has_pixels() {
+            let img = doc.layers.get(&entry.id).ok_or_else(|| {
+                Error::Project(format!(
+                    "{:?} layer {:?} has no pixel data",
+                    entry.kind, entry.id
+                ))
+            })?;
+            let (w, h) = img.dimensions()?;
+            if (w, h) != (entry.width, entry.height) {
+                return Err(Error::Project(format!(
+                    "layer {:?} is {}x{} in the manifest but its pixels are {w}x{h}",
+                    entry.id, entry.width, entry.height
+                )));
             }
-            LayerKind::Raster => {
-                let img = doc.layers.get(&entry.id).ok_or_else(|| {
-                    Error::Project(format!("raster layer {:?} has no pixel data", entry.id))
-                })?;
-                let (w, h) = img.dimensions()?;
-                if (w, h) != (entry.width, entry.height) {
-                    return Err(Error::Project(format!(
-                        "layer {:?} is {}x{} in the manifest but its pixels are {w}x{h}",
-                        entry.id, entry.width, entry.height
-                    )));
-                }
-                if let Image::Raw(p) = img {
-                    check_pixels(p, 4)?;
-                }
-                if let Some(mask) = doc.masks.get(&entry.id) {
-                    let (mw, mh) = mask.dimensions()?;
-                    if (mw, mh) != (w, h) {
-                        return Err(Error::Project(format!(
-                            "mask for layer {:?} is {mw}x{mh}, layer is {w}x{h}",
-                            entry.id
-                        )));
-                    }
-                    if let Image::Raw(p) = mask {
-                        check_pixels(p, 1)?;
-                    }
-                }
+            if let Image::Raw(p) = img {
+                check_pixels(p, 4)?;
+            }
+            mask_size = (w, h);
+        } else if doc.layers.contains_key(&entry.id) {
+            return Err(Error::Project(format!(
+                "{:?} layer {:?} must not have pixel data",
+                entry.kind, entry.id
+            )));
+        }
+        if let Some(mask) = doc.masks.get(&entry.id) {
+            let (mw, mh) = mask.dimensions()?;
+            if (mw, mh) != mask_size {
+                return Err(Error::Project(format!(
+                    "mask for layer {:?} is {mw}x{mh}, expected {}x{}",
+                    entry.id, mask_size.0, mask_size.1
+                )));
+            }
+            if let Image::Raw(p) = mask {
+                check_pixels(p, 1)?;
             }
         }
     }
@@ -385,6 +435,19 @@ pub fn write_pfproj<W: Write + Seek>(doc: &ProjectDoc, out: W) -> Result<W> {
             return Err(Error::Project(format!(
                 "pixel data for unknown layer id {id:?}"
             )));
+        }
+    }
+    for (id, img) in &doc.channels {
+        check_id(id)?;
+        let (w, h) = img.dimensions()?;
+        if (w, h) != (manifest.doc.width, manifest.doc.height) {
+            return Err(Error::Project(format!(
+                "alpha channel {id:?} is {w}x{h}, canvas is {}x{}",
+                manifest.doc.width, manifest.doc.height
+            )));
+        }
+        if let Image::Raw(p) = img {
+            check_pixels(p, 1)?;
         }
     }
     if let Some(sel) = &doc.selection {
@@ -402,17 +465,35 @@ pub fn write_pfproj<W: Write + Seek>(doc: &ProjectDoc, out: W) -> Result<W> {
 
     // Fill in archive paths.
     for entry in &mut manifest.layers {
-        if entry.kind == LayerKind::Raster {
-            entry.file = Some(layer_file(&entry.id));
-            entry.mask = doc
-                .masks
-                .contains_key(&entry.id)
-                .then(|| mask_file(&entry.id));
-        } else {
-            entry.file = None;
-            entry.mask = None;
-        }
+        entry.file = entry.kind.has_pixels().then(|| layer_file(&entry.id));
+        entry.mask = doc
+            .masks
+            .contains_key(&entry.id)
+            .then(|| mask_file(&entry.id));
     }
+    // Channel rows: keep the manifest's metadata, add rows for new ids, drop rows
+    // without pixels, keep the manifest's ordering where possible.
+    let order: Vec<String> = manifest.channels.iter().map(|c| c.id.clone()).collect();
+    let mut channels: Vec<ChannelEntry> = doc
+        .channels
+        .keys()
+        .map(|id| {
+            let mut row = manifest
+                .channels
+                .iter()
+                .find(|c| &c.id == id)
+                .cloned()
+                .unwrap_or_else(|| ChannelEntry {
+                    id: id.clone(),
+                    file: None,
+                    extra: Map::new(),
+                });
+            row.file = Some(channel_file(id));
+            row
+        })
+        .collect();
+    channels.sort_by_key(|c| order.iter().position(|o| o == &c.id).unwrap_or(usize::MAX));
+    manifest.channels = channels;
     manifest.selection = doc.selection.as_ref().map(|_| SelectionEntry {
         file: SELECTION_NAME.to_owned(),
         extra: doc
@@ -437,19 +518,22 @@ pub fn write_pfproj<W: Write + Seek>(doc: &ProjectDoc, out: W) -> Result<W> {
     zip.write_all(&serde_json::to_vec_pretty(&manifest)?)?;
 
     for entry in &manifest.layers {
-        if entry.kind != LayerKind::Raster {
-            continue;
-        }
-        if let Some(img) = doc.layers.get(&entry.id) {
-            zip.start_file(layer_file(&entry.id), stored)
-                .map_err(zip_err)?;
-            write_image(&mut zip, img, ExtendedColorType::Rgba8)?;
+        if entry.kind.has_pixels() {
+            if let Some(img) = doc.layers.get(&entry.id) {
+                zip.start_file(layer_file(&entry.id), stored)
+                    .map_err(zip_err)?;
+                write_image(&mut zip, img, ExtendedColorType::Rgba8)?;
+            }
         }
         if let Some(mask) = doc.masks.get(&entry.id) {
             zip.start_file(mask_file(&entry.id), stored)
                 .map_err(zip_err)?;
             write_image(&mut zip, mask, ExtendedColorType::L8)?;
         }
+    }
+    for (id, img) in &doc.channels {
+        zip.start_file(channel_file(id), stored).map_err(zip_err)?;
+        write_image(&mut zip, img, ExtendedColorType::L8)?;
     }
     if let Some(sel) = &doc.selection {
         zip.start_file(SELECTION_NAME, stored).map_err(zip_err)?;
@@ -467,15 +551,6 @@ pub fn write_pfproj<W: Write + Seek>(doc: &ProjectDoc, out: W) -> Result<W> {
         }
     }
     zip.finish().map_err(zip_err)
-}
-
-fn entry_must_not_have(doc: &ProjectDoc, id: &str) -> Result<()> {
-    if doc.layers.contains_key(id) || doc.masks.contains_key(id) {
-        return Err(Error::Project(format!(
-            "group {id:?} must not have pixel data"
-        )));
-    }
-    Ok(())
 }
 
 fn check_pixels(p: &Pixels, channels: u8) -> Result<()> {
@@ -539,28 +614,40 @@ pub fn read_pfproj<R: Read + Seek>(reader: R) -> Result<ProjectDoc> {
         ..Default::default()
     };
     for entry in &doc.manifest.layers {
-        if entry.kind != LayerKind::Raster {
-            continue;
+        let mut mask_size = (doc.manifest.doc.width, doc.manifest.doc.height);
+        if entry.kind.has_pixels() {
+            let file = entry.file.clone().unwrap_or_else(|| layer_file(&entry.id));
+            let px = read_png_entry(&mut zip, &file, 4)?;
+            if (px.width, px.height) != (entry.width, entry.height) {
+                return Err(Error::Project(format!(
+                    "{file} is {}x{} but the manifest says {}x{}",
+                    px.width, px.height, entry.width, entry.height
+                )));
+            }
+            mask_size = (px.width, px.height);
+            doc.layers.insert(entry.id.clone(), Image::Raw(px));
         }
-        let file = entry.file.clone().unwrap_or_else(|| layer_file(&entry.id));
-        let px = read_png_entry(&mut zip, &file, 4)?;
-        if (px.width, px.height) != (entry.width, entry.height) {
-            return Err(Error::Project(format!(
-                "{file} is {}x{} but the manifest says {}x{}",
-                px.width, px.height, entry.width, entry.height
-            )));
-        }
-        doc.layers.insert(entry.id.clone(), Image::Raw(px));
         if let Some(mask) = &entry.mask {
             let m = read_png_entry(&mut zip, mask, 1)?;
-            if (m.width, m.height) != (entry.width, entry.height) {
+            if (m.width, m.height) != mask_size {
                 return Err(Error::Project(format!(
-                    "{mask} is {}x{} but layer {:?} is {}x{}",
-                    m.width, m.height, entry.id, entry.width, entry.height
+                    "{mask} is {}x{} but layer {:?} expects {}x{}",
+                    m.width, m.height, entry.id, mask_size.0, mask_size.1
                 )));
             }
             doc.masks.insert(entry.id.clone(), Image::Raw(m));
         }
+    }
+    for ch in &doc.manifest.channels {
+        let file = ch.file.clone().unwrap_or_else(|| channel_file(&ch.id));
+        let m = read_png_entry(&mut zip, &file, 1)?;
+        if (m.width, m.height) != (doc.manifest.doc.width, doc.manifest.doc.height) {
+            return Err(Error::Project(format!(
+                "{file} is {}x{} but the canvas is {}x{}",
+                m.width, m.height, doc.manifest.doc.width, doc.manifest.doc.height
+            )));
+        }
+        doc.channels.insert(ch.id.clone(), Image::Raw(m));
     }
     if let Some(sel) = &doc.manifest.selection {
         let m = read_png_entry(&mut zip, &sel.file, 1)?;

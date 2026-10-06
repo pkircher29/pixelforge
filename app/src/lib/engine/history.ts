@@ -2,14 +2,21 @@
  * Undo/redo history: a linear list of executed commands with a cursor, capped by a
  * memory budget. Oldest *applied* entries are evicted first (they become permanent);
  * if still over budget, the farthest redo entries are dropped.
+ *
+ * v2 adds **snapshots** (History panel camera button): full, independent copies of the
+ * document that can be restored as an undoable step, and the History Brush source
+ * helpers `rasterAt` / `rasterFromSource`.
  */
 
-import type { Command, Document, HistoryEntry } from "./types";
+import { Raster } from "./raster";
+import { findLayer } from "./document";
+import { captureDocState, restoreDocState, stateLayerRaster, type DocState } from "./snapshot";
+import type { Command, Document, HistoryEntry, HistorySnapshot, HistorySource, LayerId } from "./types";
 
 export interface HistoryOptions {
   /** Max bytes of command snapshots kept. Default 1 GiB (PLAN.md). */
   budgetBytes?: number;
-  /** Called after any change (push/undo/redo/jump/eviction/clear). */
+  /** Called after any change (push/undo/redo/jump/eviction/clear/snapshots). */
   onChange?: (history: History) => void;
   /**
    * Called after each command application (`"do"` for push/redo/jump-forward, `"undo"`
@@ -31,6 +38,37 @@ export interface PushOptions {
 
 export const DEFAULT_HISTORY_BUDGET = 1024 * 1024 * 1024;
 
+interface SnapshotEntry extends HistorySnapshot {
+  state: DocState;
+}
+
+/** Undoable "restore snapshot" step (History panel click on a snapshot). */
+export class SnapshotCommand implements Command {
+  readonly label: string;
+  private readonly target: DocState;
+  private before: DocState | null = null;
+
+  constructor(target: DocState, label = "Restore Snapshot") {
+    this.target = target;
+    this.label = label;
+  }
+
+  do(doc: Document): void {
+    if (!this.before) this.before = captureDocState(doc);
+    restoreDocState(doc, this.target);
+  }
+
+  undo(doc: Document): void {
+    if (this.before) restoreDocState(doc, this.before);
+  }
+
+  byteSize(): number {
+    return (this.before?.bytes ?? 0) + this.target.bytes;
+  }
+}
+
+let snapCounter = 0;
+
 export class History {
   readonly doc: Document;
   private list: HistoryEntry[] = [];
@@ -43,6 +81,8 @@ export class History {
   private readonly onApply: ((c: Command, d: "do" | "undo") => void) | undefined;
   /** Count of entries evicted from the bottom (so the panel can show "... N older"). */
   private _evicted = 0;
+  private snaps: SnapshotEntry[] = [];
+  private silent = 0;
 
   constructor(doc: Document, opts: HistoryOptions = {}) {
     this.doc = doc;
@@ -69,7 +109,7 @@ export class History {
     return this.cursor < this.list.length;
   }
 
-  /** Bytes currently held by snapshots. */
+  /** Bytes currently held by command snapshots (history snapshots are counted separately: `snapshotBytes`). */
   get bytes(): number {
     return this.totalBytes;
   }
@@ -111,6 +151,7 @@ export class History {
     if (this.cursor < this.list.length) {
       for (let i = this.cursor; i < this.list.length; i++) this.totalBytes -= this.list[i]!.bytes;
       this.list.length = this.cursor;
+      for (const s of this.snaps) if (s.historyIndex > this.cursor) s.historyIndex = this.cursor;
     }
     const prev = this.list[this.cursor - 1];
     if (!opts.noMerge && prev && prev.command.mergeWith && prev.command.mergeWith(command)) {
@@ -132,7 +173,7 @@ export class History {
     this.cursor--;
     const cmd = this.list[this.cursor]!.command;
     cmd.undo(this.doc);
-    this.onApply?.(cmd, "undo");
+    this.notifyApply(cmd, "undo");
     this.doc.dirty = true;
     this.emit();
     return true;
@@ -143,7 +184,7 @@ export class History {
     const cmd = this.list[this.cursor]!.command;
     cmd.do(this.doc);
     this.cursor++;
-    this.onApply?.(cmd, "do");
+    this.notifyApply(cmd, "do");
     this.doc.dirty = true;
     this.emit();
     return true;
@@ -157,13 +198,13 @@ export class History {
       this.cursor--;
       const cmd = this.list[this.cursor]!.command;
       cmd.undo(this.doc);
-      this.onApply?.(cmd, "undo");
+      this.notifyApply(cmd, "undo");
     }
     while (this.cursor < target) {
       const cmd = this.list[this.cursor]!.command;
       cmd.do(this.doc);
       this.cursor++;
-      this.onApply?.(cmd, "do");
+      this.notifyApply(cmd, "do");
     }
     this.doc.dirty = true;
     this.emit();
@@ -175,7 +216,110 @@ export class History {
     this.cursor = 0;
     this.totalBytes = 0;
     this._evicted = 0;
+    this.snaps = [];
     this.emit();
+  }
+
+  // ------------------------------------------------------------------ snapshots
+
+  /** Snapshots in creation order. */
+  get snapshots(): readonly HistorySnapshot[] {
+    return this.snaps;
+  }
+
+  /** Bytes held by history snapshots (not counted against `budgetBytes`). */
+  get snapshotBytes(): number {
+    return this.snaps.reduce((n, s) => n + s.bytes, 0);
+  }
+
+  /** Capture the whole document as a named snapshot (History panel camera). */
+  takeSnapshot(name?: string): HistorySnapshot {
+    snapCounter++;
+    const state = captureDocState(this.doc);
+    const snap: SnapshotEntry = {
+      id: `snap_${Date.now().toString(36)}_${snapCounter}`,
+      name: name ?? `Snapshot ${this.snaps.length + 1}`,
+      historyIndex: this.cursor,
+      bytes: state.bytes,
+      createdAt: Date.now(),
+      state,
+    };
+    this.snaps.push(snap);
+    this.emit();
+    return snap;
+  }
+
+  /** Restore a snapshot as an undoable step. Returns false for unknown ids. */
+  restoreSnapshot(id: string): boolean {
+    const s = this.snaps.find((x) => x.id === id);
+    if (!s) return false;
+    this.push(new SnapshotCommand(s.state, `Restore "${s.name}"`), { noMerge: true });
+    return true;
+  }
+
+  deleteSnapshot(id: string): boolean {
+    const i = this.snaps.findIndex((x) => x.id === id);
+    if (i < 0) return false;
+    this.snaps.splice(i, 1);
+    this.emit();
+    return true;
+  }
+
+  renameSnapshot(id: string, name: string): boolean {
+    const s = this.snaps.find((x) => x.id === id);
+    if (!s) return false;
+    s.name = name;
+    this.emit();
+    return true;
+  }
+
+  /** A snapshot's copy of a layer's pixels (cloned), or null. */
+  snapshotRaster(id: string, layerId: LayerId): Raster | null {
+    const s = this.snaps.find((x) => x.id === id);
+    return s ? stateLayerRaster(s.state, layerId) : null;
+  }
+
+  /**
+   * History Brush source: the pixels of `layerId` as they were when exactly `index`
+   * entries were applied (`History.index` semantics; today's state for `index ===
+   * this.index`).
+   *
+   * Complexity: O(1) when a snapshot was taken at that index (its copy is returned);
+   * otherwise the live history is silently jumped to `index` (replaying the real
+   * commands — O(|index − cursor|) command applications, each undoing / redoing its own
+   * dirty rects), the raster is cloned and the history is jumped back. Observers
+   * (`onChange` / `onApply`) are not notified during the excursion, and the document
+   * is left exactly as before. Returns null when the layer does not exist at that
+   * state.
+   */
+  rasterAt(index: number, layerId: LayerId): Raster | null {
+    const target = Math.max(0, Math.min(this.list.length, index));
+    const snap = this.snaps.find((s) => s.historyIndex === target);
+    if (snap) return stateLayerRaster(snap.state, layerId);
+    if (target === this.cursor) return cloneLayerRaster(this.doc, layerId);
+    const back = this.cursor;
+    const wasDirty = this.doc.dirty;
+    this.silent++;
+    try {
+      this.jumpTo(target);
+      const r = cloneLayerRaster(this.doc, layerId);
+      this.jumpTo(back);
+      return r;
+    } finally {
+      this.silent--;
+      this.doc.dirty = wasDirty;
+    }
+  }
+
+  /** `rasterAt` / `snapshotRaster` by a `HistorySource`. */
+  rasterFromSource(source: HistorySource, layerId: LayerId): Raster | null {
+    return source.kind === "snapshot" ? this.snapshotRaster(source.id, layerId) : this.rasterAt(source.index, layerId);
+  }
+
+  // ------------------------------------------------------------------ internals
+
+  private notifyApply(cmd: Command, dir: "do" | "undo"): void {
+    if (this.silent === 0) this.onApply?.(cmd, dir);
   }
 
   private evict(): void {
@@ -185,6 +329,7 @@ export class History {
       this.totalBytes -= e.bytes;
       this.cursor--;
       this._evicted++;
+      for (const s of this.snaps) s.historyIndex = Math.max(0, s.historyIndex - 1);
     }
     // Then the farthest redo entries.
     while (this.totalBytes > this._budget && this.list.length > this.cursor) {
@@ -194,8 +339,14 @@ export class History {
   }
 
   private emit(): void {
-    this.onChange?.(this);
+    if (this.silent === 0) this.onChange?.(this);
   }
+}
+
+function cloneLayerRaster(doc: Document, layerId: LayerId): Raster | null {
+  const l = findLayer(doc, layerId);
+  if (!l || !(l.kind === "raster" || l.kind === "shape" || l.kind === "text")) return null;
+  return l.raster.clone();
 }
 
 function sizeOf(c: Command): number {

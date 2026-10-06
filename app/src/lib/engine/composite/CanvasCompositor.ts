@@ -1,14 +1,19 @@
 /**
  * Canvas-2D fallback compositor: runs the CPU compositor into an offscreen canvas and
  * draws it through the viewport transform. Correct but not fast; used only when WebGL2
- * is unavailable.
+ * is unavailable. Supports every v2 feature through `compositeToRaster` (masks,
+ * clipping, adjustment / fill / shape / text layers, effects, pass-through groups) plus
+ * channel views and the quick-mask tint (CPU post-process).
  */
 
 import { Rect } from "../rect";
 import { Raster } from "../raster";
 import type { Selection } from "../selection";
 import { compositeToRaster } from "../document";
-import type { BlendMode, Document, ICompositor, LayerId, RenderOptions, RenderStats } from "../types";
+import { StyleCache, layerVisualRect } from "../layer-source";
+import { effectExtent } from "../ops/effects";
+import { channelViewRaster, overlayQuickMask } from "../channels";
+import type { Document, ICompositor, Layer, LayerId, RenderOptions, RenderStats } from "../types";
 import type { Viewport } from "../viewport";
 import { computeSelectionEdge } from "./ants";
 import { DirtyTracker } from "./dirty";
@@ -17,17 +22,22 @@ import { DEFAULT_COMPOSITOR_COLORS, type CompositorColors } from "./GlCompositor
 interface LayerCache {
   raster: Raster | null;
   mask: Raster | null;
-  offX: number;
-  offY: number;
-  opacity: number;
-  blendMode: BlendMode;
-  visible: boolean;
+  props: string;
   parentId: LayerId | null;
   docRect: Rect;
 }
 
 function css(c: [number, number, number]): string {
   return `rgb(${Math.round(c[0] * 255)}, ${Math.round(c[1] * 255)}, ${Math.round(c[2] * 255)})`;
+}
+
+function propsOf(l: Layer): string {
+  let s = `${l.opacity}|${l.fillOpacity}|${l.blendMode}|${l.visible ? 1 : 0}|${l.clipToBelow ? 1 : 0}|${l.maskEnabled ? 1 : 0}|${l.offset.x},${l.offset.y}`;
+  if (l.effects) s += `|fx:${JSON.stringify(l.effects)}`;
+  if (l.kind === "adjustment") s += `|adj:${l.op}:${JSON.stringify(l.params)}`;
+  if (l.kind === "fill") s += `|fill`;
+  if (l.kind === "group") s += `|pt:${l.passThrough ? 1 : 0}`;
+  return s;
 }
 
 export class CanvasCompositor implements ICompositor {
@@ -44,9 +54,14 @@ export class CanvasCompositor implements ICompositor {
   private docH = 0;
 
   private readonly cache = new Map<LayerId, LayerCache>();
+  private readonly fills = new WeakMap<Layer, unknown>();
+  private readonly styles = new StyleCache();
   private prevOrder: LayerId[] = [];
   private readonly dirty = new DirtyTracker();
   private forceFullNext = true;
+  private lastView = "rgb";
+  private lastQm = false;
+  private displayDirty = true;
 
   private lastSelection: Selection | null = null;
   private edge: Int32Array = new Int32Array(0);
@@ -69,12 +84,19 @@ export class CanvasCompositor implements ICompositor {
   }
 
   markDirty(layerId: LayerId, rect?: Rect): void {
+    if (layerId.startsWith("@")) {
+      this.displayDirty = true;
+      return;
+    }
     this.dirty.mark(layerId, rect);
+    this.styles.invalidate(layerId);
   }
 
   invalidateAll(): void {
     this.forceFullNext = true;
     this.lastSelection = null;
+    this.styles.clear();
+    this.displayDirty = true;
   }
 
   dispose(): void {
@@ -83,6 +105,7 @@ export class CanvasCompositor implements ICompositor {
     this.composite = null;
     this.imageData = null;
     this.cache.clear();
+    this.styles.clear();
   }
 
   private ensureBuffers(w: number, h: number): boolean {
@@ -121,47 +144,31 @@ export class CanvasCompositor implements ICompositor {
     for (let i = 0; i < layers.length; i++) {
       const l = layers[i]!;
       if (!full && l.id !== this.prevOrder[i]) full = true;
-      const docRect = l.kind === "raster" ? Rect.make(l.offset.x, l.offset.y, l.raster.width, l.raster.height) : Rect.ofSize(doc.width, doc.height);
+      const docRect = layerVisualRect(doc, l);
+      const props = propsOf(l);
       const c = this.cache.get(l.id);
+      const fillSpec = l.kind === "fill" ? l.fill : null;
       if (!c) {
-        this.cache.set(l.id, {
-          raster: l.raster,
-          mask: l.mask,
-          offX: l.offset.x,
-          offY: l.offset.y,
-          opacity: l.opacity,
-          blendMode: l.blendMode,
-          visible: l.visible,
-          parentId: l.parentId,
-          docRect,
-        });
+        this.cache.set(l.id, { raster: l.raster, mask: l.mask, props, parentId: l.parentId, docRect });
+        if (fillSpec) this.fills.set(l, fillSpec);
         full = true;
         continue;
       }
-      if (
-        c.raster !== l.raster ||
-        c.mask !== l.mask ||
-        c.offX !== l.offset.x ||
-        c.offY !== l.offset.y ||
-        c.opacity !== l.opacity ||
-        c.blendMode !== l.blendMode ||
-        c.visible !== l.visible ||
-        c.parentId !== l.parentId
-      ) {
+      if (c.raster !== l.raster || c.mask !== l.mask || c.props !== props || c.parentId !== l.parentId || (fillSpec && this.fills.get(l) !== fillSpec)) {
+        // Adjustment layers and clip bases influence other layers: be safe and go full.
+        if (l.kind === "adjustment" || l.kind === "group" || c.props !== props) full = true;
         dirtyDoc = Rect.union(dirtyDoc, Rect.union(c.docRect, docRect));
         c.raster = l.raster;
         c.mask = l.mask;
-        c.offX = l.offset.x;
-        c.offY = l.offset.y;
-        c.opacity = l.opacity;
-        c.blendMode = l.blendMode;
-        c.visible = l.visible;
+        c.props = props;
         c.parentId = l.parentId;
         c.docRect = docRect;
+        if (fillSpec) this.fills.set(l, fillSpec);
       }
       const d = this.dirty.take(l.id);
       if (d === "full") dirtyDoc = Rect.union(dirtyDoc, docRect);
-      else if (d) dirtyDoc = Rect.union(dirtyDoc, Rect.translate(d, l.offset.x, l.offset.y));
+      else if (d) dirtyDoc = Rect.union(dirtyDoc, Rect.inflate(Rect.translate(d, l.offset.x, l.offset.y), effectExtent(l.effects)));
+      if (d !== undefined && l.kind === "adjustment") full = true;
     }
     for (const id of this.cache.keys()) {
       if (!layers.some((l) => l.id === id)) {
@@ -171,6 +178,7 @@ export class CanvasCompositor implements ICompositor {
     }
     this.prevOrder = layers.map((l) => l.id);
     this.dirty.clear();
+    this.styles.retain(new Set(this.prevOrder));
     if (full) dirtyDoc = Rect.ofSize(doc.width, doc.height);
 
     const composite = this.composite;
@@ -178,15 +186,33 @@ export class CanvasCompositor implements ICompositor {
     const imageData = this.imageData;
     if (!composite || !offCtx || !imageData || !this.off) return st;
 
+    const view = opts.viewChannel ?? "rgb";
+    const qmOn = (opts.showQuickMask ?? true) && doc.quickMask.active && !!doc.quickMask.raster;
+    const postProcess = view !== "rgb" || qmOn;
+    if (view !== this.lastView || qmOn !== this.lastQm) this.displayDirty = true;
+    this.lastView = view;
+    this.lastQm = qmOn;
+
     if (dirtyDoc) {
       const rect = Rect.intersect(dirtyDoc, Rect.ofSize(doc.width, doc.height));
       if (!Rect.isEmpty(rect)) {
-        compositeToRaster(doc, { rect, into: composite });
-        offCtx.putImageData(imageData, 0, 0, rect.x, rect.y, rect.w, rect.h);
+        compositeToRaster(doc, { rect, into: composite, cache: this.styles });
+        if (!postProcess) offCtx.putImageData(imageData, 0, 0, rect.x, rect.y, rect.w, rect.h);
+        else this.displayDirty = true;
         st.recomposited = true;
         st.compositedArea = rect.w * rect.h;
         st.passes = 1;
       }
+    }
+    if (postProcess && this.displayDirty) {
+      let display = channelViewRaster(doc, composite, view, opts.activeLayerId ?? doc.activeLayerId) ?? composite.clone();
+      if (qmOn) overlayQuickMask(display, doc.quickMask);
+      if (display === composite) display = composite.clone();
+      offCtx.putImageData(display.toImageData(), 0, 0);
+      this.displayDirty = false;
+    } else if (!postProcess && this.displayDirty) {
+      offCtx.putImageData(imageData, 0, 0);
+      this.displayDirty = false;
     }
 
     this.draw(doc, viewport, opts, W, H);
@@ -209,11 +235,11 @@ export class CanvasCompositor implements ICompositor {
     ctx.beginPath();
     ctx.rect(0, 0, doc.width, doc.height);
     ctx.clip();
-    // Checkerboard in screen space.
+    // Checkerboard in screen space (black behind single-channel views).
     const cell = Math.max(1, opts.checkerSize ?? 8);
     ctx.save();
     ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.fillStyle = this.checkerPattern(cell) ?? css(c.light);
+    ctx.fillStyle = (opts.viewChannel ?? "rgb") === "rgb" ? (this.checkerPattern(cell) ?? css(c.light)) : "#000";
     ctx.fillRect(0, 0, W, H);
     ctx.restore();
     ctx.imageSmoothingEnabled = zoom < 1;

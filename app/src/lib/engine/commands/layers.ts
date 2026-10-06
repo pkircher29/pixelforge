@@ -12,6 +12,8 @@ import {
   setLayerProps,
   ungroupLayers,
 } from "../document";
+import { assertEditable } from "../locks";
+import { getLayer } from "../document";
 import type { Command, Document, Layer, LayerId, LayerProps } from "../types";
 import { StructuralCommand } from "./structural";
 
@@ -38,7 +40,7 @@ export class AddLayerCommand implements Command {
   }
 
   byteSize(): number {
-    return this.layer.kind === "raster" ? this.layer.raster.byteLength() : 0;
+    return this.layer.raster ? this.layer.raster.byteLength() : 0;
   }
 }
 
@@ -66,7 +68,7 @@ export class RemoveLayerCommand implements Command {
 
   byteSize(): number {
     let n = 0;
-    for (const l of this.removed?.layers ?? []) if (l.kind === "raster") n += l.raster.byteLength();
+    for (const l of this.removed?.layers ?? []) if (l.raster) n += l.raster.byteLength();
     return n;
   }
 }
@@ -108,7 +110,7 @@ export class DuplicateLayerCommand implements Command {
 
   byteSize(): number {
     let n = 0;
-    for (const l of this.copies) if (l.kind === "raster") n += l.raster.byteLength();
+    for (const l of this.copies) if (l.raster) n += l.raster.byteLength();
     return n;
   }
 }
@@ -135,11 +137,12 @@ export class ReorderLayerCommand implements Command {
   }
 }
 
-const MERGEABLE_KEYS: ReadonlySet<keyof LayerProps> = new Set(["opacity", "offset"]);
+const MERGEABLE_KEYS: ReadonlySet<keyof LayerProps> = new Set(["opacity", "offset", "fillOpacity"]);
 
 /**
  * Change layer properties. Consecutive changes of the same continuous property
- * (opacity, offset) on the same layer merge into one history entry.
+ * (opacity, fill opacity, offset) on the same layer merge into one history entry.
+ * Changing `offset` is refused (`LayerLockedError`) when the layer's position is locked.
  */
 export class SetLayerPropsCommand implements Command {
   readonly label: string;
@@ -154,6 +157,7 @@ export class SetLayerPropsCommand implements Command {
   }
 
   do(doc: Document): void {
+    if (this.next.offset !== undefined) assertEditable(getLayer(doc, this.layerId), "position");
     const prev = setLayerProps(doc, this.layerId, this.next);
     if (!this.prev) this.prev = prev;
   }
@@ -191,6 +195,18 @@ function labelFor(props: Partial<LayerProps>): string {
         return "Move Layer";
       case "collapsed":
         return "Toggle Group";
+      case "fillOpacity":
+        return "Fill Opacity";
+      case "clipToBelow":
+        return props.clipToBelow ? "Create Clipping Mask" : "Release Clipping Mask";
+      case "maskEnabled":
+        return props.maskEnabled ? "Enable Layer Mask" : "Disable Layer Mask";
+      case "maskLinked":
+        return props.maskLinked ? "Link Layer Mask" : "Unlink Layer Mask";
+      case "passThrough":
+        return "Group Blending";
+      case "color":
+        return "Layer Color";
     }
   }
   return "Layer Properties";

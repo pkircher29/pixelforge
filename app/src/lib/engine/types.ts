@@ -1,5 +1,5 @@
 /**
- * Public contract of the Pixelforge document engine.
+ * Public contract of the Pixelforge document engine (v2 — PLAN-v2 §1 "Layer system").
  *
  * Everything the UI shell, tools, AI panel and filters program against lives here (or is
  * re-exported from here). Concrete classes (`Raster`, `Selection`, `History`, `Viewport`,
@@ -10,15 +10,23 @@
  * - `layers[0]` is the **bottom** layer; higher indices are drawn on top.
  * - A group's children are the contiguous run of layers with `parentId === group.id`
  *   located **immediately after** the group entry (higher indices), bottom to top.
- *   Only one nesting level is supported in v1.
+ *   Only one nesting level is supported.
+ * - A layer with `clipToBelow` is clipped by the nearest layer below it (same parent)
+ *   that is *not* itself clipped: the "base". The base plus its chain of clipped layers
+ *   is composited as one unit and then blended with the base's blend mode and opacity
+ *   (Photoshop "Blend Clipped Layers as Group").
  * - All document coordinates are integer pixel units with the origin at the top-left.
  * - Screen coordinates passed to `Viewport` are CSS pixels; the compositor applies DPR.
+ *
+ * This file is the contract for Wave 6 (`layers-v2`, `tools-v2`, `panels-v2`): extend,
+ * do not rename or remove.
  */
 
 import type { Rect, Point } from "./rect";
 import type { Raster } from "./raster";
 import type { Selection } from "./selection";
 import type { Viewport } from "./viewport";
+import type { ParamValues } from "./ops/types";
 
 export type { Rect, Point };
 
@@ -108,7 +116,32 @@ export enum BlendMode {
 }
 
 export type LayerId = string;
-export type LayerKind = "raster" | "group";
+
+/**
+ * Layer kinds (PLAN-v2 §1):
+ * - `raster` pixel layer
+ * - `group` folder (pass-through by default)
+ * - `adjustment` non-destructive op applied to everything below (or to its clip base)
+ * - `fill` solid / gradient / pattern covering the canvas
+ * - `shape` vector path with fill + stroke, rasterized on edit (cached raster)
+ * - `text` editable type layer, rasterized on edit (cached raster)
+ */
+export type LayerKind = "raster" | "group" | "adjustment" | "fill" | "shape" | "text";
+
+/** Photoshop's four lock toggles. `all` implies the other three. */
+export interface LayerLock {
+  /** Paint ops keep the existing alpha (pixels multiply by the original alpha). */
+  transparent: boolean;
+  /** Painting / filters / pixel replacement refuse (`LayerLockedError`). */
+  pixels: boolean;
+  /** Move / transform refuse. */
+  position: boolean;
+  /** Everything refuses. */
+  all: boolean;
+}
+
+/** Row tint in the Layers panel (PS "Layer Properties > Color"). */
+export type LayerColor = "red" | "orange" | "yellow" | "green" | "blue" | "violet" | "gray";
 
 /** Fields shared by every layer. */
 export interface LayerBase {
@@ -117,18 +150,38 @@ export interface LayerBase {
   readonly kind: LayerKind;
   /** Position of the layer's raster origin in document space. */
   offset: Point;
-  /** 0..1 */
+  /** 0..1 — master opacity: affects pixels *and* effects. */
   opacity: number;
   blendMode: BlendMode;
   visible: boolean;
+  /**
+   * Legacy single lock flag (v1 UI). Treated as `lock.all` by `isLayerEditable`;
+   * `SetLayerLockCommand` keeps it in sync with `lock.all`.
+   */
   locked: boolean;
   /** Id of the enclosing group, or `null` at top level. */
   parentId: LayerId | null;
   /**
-   * Optional layer mask (v1.1 UI). When present it is a raster the size of the layer's
-   * raster; its red channel (0..255) multiplies the layer alpha. `null` = no mask.
+   * Layer mask. Grayscale stored in the **red** channel (255 = reveal, 0 = hide). For
+   * raster/shape/text layers it is the size of the layer's raster (same origin); for
+   * adjustment/fill layers it is document-sized. `null` = no mask.
    */
   mask: Raster | null;
+  /** False = mask temporarily disabled (Shift-click, red X). The mask is kept. */
+  maskEnabled: boolean;
+  /** Chain icon: the Move tool moves layer and mask together. */
+  maskLinked: boolean;
+  /** Clipping mask: this layer is clipped by the base below it (Alt-click between rows). */
+  clipToBelow: boolean;
+  /** 0..1 — "Fill": affects the layer's own pixels but not its effects. */
+  fillOpacity: number;
+  lock: LayerLock;
+  /** Layer styles, or `null` when none. */
+  effects: LayerEffects | null;
+  /** Linked layers move together (symmetric; both sides list each other). */
+  linkedTo: LayerId[];
+  /** Layers-panel row tint. */
+  color: LayerColor | null;
 }
 
 /** A pixel layer. */
@@ -137,14 +190,293 @@ export interface RasterLayer extends LayerBase {
   raster: Raster;
 }
 
-/** A folder of layers. Composited as an isolated group (children blended together first). */
+/**
+ * A folder of layers. `passThrough` (default true, PS "Pass Through") composites the
+ * children straight onto the stack below so blend modes of children see the backdrop;
+ * false composites the children in isolation first and then blends the result with the
+ * group's own blend mode.
+ */
 export interface GroupLayer extends LayerBase {
   readonly kind: "group";
   raster: null;
   collapsed: boolean;
+  passThrough: boolean;
 }
 
-export type Layer = RasterLayer | GroupLayer;
+/**
+ * Non-destructive adjustment: `op` is an id from the engine op registry
+ * (`ops/registry.ts`, e.g. `"levels"`, `"hue-saturation"`); `params` are its parameter
+ * values. Affects everything below it in its container (or only the clip base when
+ * `clipToBelow`). `mask` (document-sized) limits where it applies.
+ */
+export interface AdjustmentLayer extends LayerBase {
+  readonly kind: "adjustment";
+  raster: null;
+  op: string;
+  params: ParamValues;
+}
+
+/** Solid-colour fill. */
+export interface SolidFill {
+  type: "solid";
+  color: RGBA;
+}
+
+/** One colour stop; `pos` 0..1. */
+export interface GradientStop {
+  pos: number;
+  color: RGBA;
+}
+
+/** A gradient definition (opacity lives in the stops' alpha). */
+export interface Gradient {
+  stops: GradientStop[];
+}
+
+export type GradientStyle = "linear" | "radial" | "angle" | "reflected" | "diamond";
+
+/**
+ * Gradient fill evaluated over a rect (the layer's content bounds for overlays, the
+ * canvas for fill layers). `angle` in degrees, PS convention (0 = left→right, 90 =
+ * bottom→top). `scale` 0.1..10 stretches the ramp around the centre; `offset` moves the
+ * centre as a fraction of the rect.
+ */
+export interface GradientFill {
+  type: "gradient";
+  gradient: Gradient;
+  style: GradientStyle;
+  angle: number;
+  scale: number;
+  reverse: boolean;
+  offset: Point;
+}
+
+/** Tiled raster pattern. `scale` multiplies the tile size; `offset` shifts the tiling (px). */
+export interface PatternFill {
+  type: "pattern";
+  pattern: Raster;
+  scale: number;
+  offset: Point;
+}
+
+export type FillSpec = SolidFill | GradientFill | PatternFill;
+
+/** Fill layer: covers the whole canvas (masked / clipped like any layer). */
+export interface FillLayer extends LayerBase {
+  readonly kind: "fill";
+  raster: null;
+  fill: FillSpec;
+}
+
+// ---------------------------------------------------------------------------
+// Paths (bezier) — PLAN-v2 §1 "Paths"
+// ---------------------------------------------------------------------------
+
+/** One bezier anchor with its incoming and outgoing handles (absolute coordinates). */
+export interface Anchor {
+  x: number;
+  y: number;
+  /** Incoming handle (from the previous anchor). Equal to `x,y` for a straight segment end. */
+  inX: number;
+  inY: number;
+  /** Outgoing handle (towards the next anchor). */
+  outX: number;
+  outY: number;
+  /** `smooth` keeps the handles collinear when one is dragged; `corner` lets them break. */
+  type: "corner" | "smooth";
+}
+
+export interface Subpath {
+  closed: boolean;
+  anchors: Anchor[];
+}
+
+export interface Path {
+  id: string;
+  name: string;
+  subpaths: Subpath[];
+}
+
+export type FillRule = "nonzero" | "evenodd";
+export type LineCap = "butt" | "round" | "square";
+export type LineJoin = "miter" | "round" | "bevel";
+
+/** Stroke of a shape layer (PS "Stroke" in the shape options bar). */
+export interface StrokeSpec {
+  width: number;
+  fill: SolidFill | GradientFill;
+  /** Where the stroke sits relative to the path edge. */
+  position: "inside" | "outside" | "center";
+  cap: LineCap;
+  join: LineJoin;
+  /** Dash pattern in px (`[on, off, ...]`), or `null` for solid. */
+  dash: number[] | null;
+}
+
+/** Vector shape layer: rasterized into the document-sized `raster` cache on every edit. */
+export interface ShapeLayer extends LayerBase {
+  readonly kind: "shape";
+  /** Cached rasterization (document-sized, origin 0,0 plus `offset`). Rebuild with `rerasterizeShape`. */
+  raster: Raster;
+  path: Path;
+  fill: SolidFill | GradientFill | null;
+  stroke: StrokeSpec | null;
+  fillRule: FillRule;
+}
+
+/** Editable type. `x, y` is the baseline origin of the first line (document px). */
+export interface TextSpec {
+  text: string;
+  x: number;
+  y: number;
+  /** CSS font family, e.g. `"Segoe UI"`. */
+  font: string;
+  /** Font size in px. */
+  size: number;
+  color: RGBA;
+  align: "left" | "center" | "right";
+  /** Line height in px; `null` = auto (1.2 × size). */
+  leading: number | null;
+  /** Extra inter-character spacing in 1/1000 em (PS tracking). */
+  tracking: number;
+  bold: boolean;
+  italic: boolean;
+  /** Vertical type: one glyph per line, stacked downwards from `x, y`. */
+  vertical: boolean;
+  antialias: boolean;
+}
+
+/** Type layer: rasterized into the document-sized `raster` cache with `rerasterizeText`. */
+export interface TextLayer extends LayerBase {
+  readonly kind: "text";
+  raster: Raster;
+  text: TextSpec;
+}
+
+export type Layer = RasterLayer | GroupLayer | AdjustmentLayer | FillLayer | ShapeLayer | TextLayer;
+
+/** Layers that carry a pixel buffer (`raster` is a `Raster`). */
+export type PixelLayer = RasterLayer | ShapeLayer | TextLayer;
+
+// ---------------------------------------------------------------------------
+// Layer styles (effects) — PLAN-v2 §1
+// ---------------------------------------------------------------------------
+
+/** Common to every effect. `opacity` 0..1. */
+export interface EffectBase {
+  enabled: boolean;
+  blendMode: BlendMode;
+  opacity: number;
+}
+
+/**
+ * Drop Shadow. `angle` is the *light* angle in degrees (PS): the shadow is offset in
+ * the opposite direction, so the default 120° casts down-right. `spread` 0..100 (% of
+ * `size` applied as a hard expand before the blur), `size` = blur radius px.
+ */
+export interface DropShadowEffect extends EffectBase {
+  color: RGBA;
+  angle: number;
+  useGlobalLight: boolean;
+  distance: number;
+  spread: number;
+  size: number;
+  /** PS "Layer Knocks Out Drop Shadow" (default true). */
+  knockout: boolean;
+}
+
+/** Inner Shadow: shadow of the inverse shape, offset like a drop shadow, clipped to the shape. */
+export interface InnerShadowEffect extends EffectBase {
+  color: RGBA;
+  angle: number;
+  useGlobalLight: boolean;
+  distance: number;
+  /** 0..100 */
+  choke: number;
+  size: number;
+}
+
+/** Outer Glow: blurred, expanded alpha outside the shape (default blend Screen). */
+export interface OuterGlowEffect extends EffectBase {
+  color: RGBA;
+  /** 0..100 */
+  spread: number;
+  size: number;
+}
+
+/** Inner Glow: inside the shape, from the edge or from the centre. */
+export interface InnerGlowEffect extends EffectBase {
+  color: RGBA;
+  /** 0..100 */
+  choke: number;
+  size: number;
+  source: "center" | "edge";
+}
+
+/**
+ * Bevel & Emboss (simplified: distance-field height map + directional lighting).
+ * `depth` 1..1000 (%), `size` px, `soften` px, `angle`/`altitude` degrees.
+ */
+export interface BevelEmbossEffect extends EffectBase {
+  style: "outerBevel" | "innerBevel" | "emboss" | "pillowEmboss";
+  technique: "smooth" | "chiselHard" | "chiselSoft";
+  depth: number;
+  direction: "up" | "down";
+  size: number;
+  soften: number;
+  angle: number;
+  altitude: number;
+  useGlobalLight: boolean;
+  highlightMode: BlendMode;
+  highlightColor: RGBA;
+  highlightOpacity: number;
+  shadowMode: BlendMode;
+  shadowColor: RGBA;
+  shadowOpacity: number;
+}
+
+export interface ColorOverlayEffect extends EffectBase {
+  color: RGBA;
+}
+
+export interface GradientOverlayEffect extends EffectBase {
+  gradient: Gradient;
+  style: GradientStyle;
+  angle: number;
+  scale: number;
+  reverse: boolean;
+  /** Evaluate the gradient over the layer's content bounds (true) or the whole canvas. */
+  alignWithLayer: boolean;
+}
+
+export interface StrokeEffect extends EffectBase {
+  size: number;
+  position: "inside" | "outside" | "center";
+  fillType: "color" | "gradient";
+  color: RGBA;
+  gradient: Gradient | null;
+  gradientStyle: GradientStyle;
+  gradientAngle: number;
+}
+
+/**
+ * Photoshop Layer Style subset. Missing / `enabled: false` effects are skipped. Render
+ * order (PS): drop shadow → outer glow → fill (at `fillOpacity`) → inner shadow → inner
+ * glow → bevel & emboss → colour overlay → gradient overlay → stroke.
+ */
+export interface LayerEffects {
+  dropShadow?: DropShadowEffect;
+  innerShadow?: InnerShadowEffect;
+  outerGlow?: OuterGlowEffect;
+  innerGlow?: InnerGlowEffect;
+  bevelEmboss?: BevelEmbossEffect;
+  colorOverlay?: ColorOverlayEffect;
+  gradientOverlay?: GradientOverlayEffect;
+  stroke?: StrokeEffect;
+  /** Global light shared by effects with `useGlobalLight` (PS default 120° / 30°). */
+  globalLightAngle?: number;
+  globalLightAltitude?: number;
+}
 
 /** Mutable, user-editable layer properties (for `SetLayerProps`). */
 export interface LayerProps {
@@ -155,6 +487,41 @@ export interface LayerProps {
   visible: boolean;
   locked: boolean;
   collapsed: boolean;
+  passThrough: boolean;
+  fillOpacity: number;
+  maskEnabled: boolean;
+  maskLinked: boolean;
+  clipToBelow: boolean;
+  color: LayerColor | null;
+}
+
+// ---------------------------------------------------------------------------
+// Channels, quick mask
+// ---------------------------------------------------------------------------
+
+/** A saved selection (Channels panel). `mask` is document-sized, gray in R (255 = selected). */
+export interface AlphaChannel {
+  id: string;
+  name: string;
+  mask: Raster;
+  /** Overlay colour shown when the channel is viewed together with the composite. */
+  color: RGBA;
+  /** Overlay opacity 0..1. */
+  opacity: number;
+}
+
+/**
+ * Quick Mask mode state. While `active`, `raster` (document-sized, gray in R, 255 =
+ * selected) is the editable selection; the compositor tints the *masked* (unselected)
+ * areas with `color` at `opacity` (or the selected areas when `maskedAreas` is false).
+ */
+export interface QuickMask {
+  active: boolean;
+  raster: Raster | null;
+  color: RGBA;
+  opacity: number;
+  /** PS "Color Indicates: Masked Areas" (default) vs "Selected Areas". */
+  maskedAreas: boolean;
 }
 
 /** Document-level metadata persisted to `manifest.json`. Open-ended for other agents. */
@@ -186,6 +553,14 @@ export interface Document {
   /** True when there are unsaved changes. */
   dirty: boolean;
   meta: DocumentMeta;
+  /** Saved selections (Channels panel). */
+  alphaChannels: AlphaChannel[];
+  /** Quick Mask mode (transient, not saved). */
+  quickMask: QuickMask;
+  /** Vector paths (Paths panel). */
+  paths: Path[];
+  /** Id of the "Work Path" in `paths`, or null. */
+  workPathId: string | null;
 }
 
 /**
@@ -228,6 +603,20 @@ export interface HistoryEntry {
   readonly seq: number;
 }
 
+/** A History panel snapshot (camera button). */
+export interface HistorySnapshot {
+  readonly id: string;
+  name: string;
+  /** `History.index` when the snapshot was taken (adjusted on eviction). */
+  historyIndex: number;
+  /** Bytes held by the snapshot's rasters. */
+  readonly bytes: number;
+  readonly createdAt: number;
+}
+
+/** History Brush source: a snapshot or a history state. */
+export type HistorySource = { kind: "snapshot"; id: string } | { kind: "state"; index: number };
+
 /** Pan/zoom/rotation of the document inside the canvas, in CSS pixels. */
 export interface ViewportState {
   /** Scale factor, 1 = 100 %. */
@@ -241,6 +630,12 @@ export interface ViewportState {
 }
 
 export type CompositorKind = "webgl2" | "canvas2d";
+
+/**
+ * Channel view mode: `"rgb"` the composite; `"r"`/`"g"`/`"b"` one channel as grayscale;
+ * `"alpha:<channelId>"` an alpha channel; `"mask"` the active layer's mask.
+ */
+export type ViewChannel = "rgb" | "r" | "g" | "b" | `alpha:${string}` | "mask";
 
 /** Per-frame options for {@link ICompositor.render}. */
 export interface RenderOptions {
@@ -266,6 +661,10 @@ export interface RenderOptions {
   activeLayerId?: LayerId | null;
   /** Force a full re-composite this frame (debugging / after context restore). */
   forceFull?: boolean;
+  /** Channel view (Channels panel). Default `"rgb"`. */
+  viewChannel?: ViewChannel;
+  /** Overlay the document's quick mask when active. Default true. */
+  showQuickMask?: boolean;
 }
 
 /** What a `render` call did; useful for stats overlays and tests. */
@@ -290,7 +689,8 @@ export interface ICompositor {
   /**
    * Tell the compositor that pixels of `layerId` changed inside `rect` (raster-space,
    * relative to the layer's own origin). Omit `rect` for the whole layer. Property changes
-   * (opacity, visibility, offset, order) are detected automatically on `render`.
+   * (opacity, visibility, offset, order, effects, masks, ...) are detected automatically
+   * on `render`. The compositor expands the rect by the layer's effect extent itself.
    */
   markDirty(layerId: LayerId, rect?: Rect): void;
   /** Drop every cache; next render re-uploads and re-composites everything. */

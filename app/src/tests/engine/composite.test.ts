@@ -264,10 +264,14 @@ describe("GlCompositor bookkeeping (mock GL)", () => {
     expect(removed.recomposited).toBe(true);
     expect(m.count("deleteTexture")).toBe(delBefore + 1);
     expect(comp.debugState().layers).toBe(2);
-    groupLayers(doc, [top]);
+    const group = groupLayers(doc, [top]);
     const grouped = comp.render(doc, vp);
     expect(grouped.recomposited).toBe(true);
-    expect(grouped.passes).toBe(3); // bottom + child into group buffer + group onto stack
+    expect(grouped.passes).toBe(2); // pass-through (PS default): bottom + child straight onto the stack
+    group.passThrough = false;
+    const isolated = comp.render(doc, vp);
+    expect(isolated.recomposited).toBe(true);
+    expect(isolated.passes).toBe(3); // bottom + child into group buffer + group onto stack
     comp.invalidateAll();
     const inv = comp.render(doc, vp);
     expect(inv.uploads).toBe(2);

@@ -5,9 +5,9 @@
 
 import type { ICompositor } from "../types";
 import { CanvasCompositor } from "./CanvasCompositor";
-import { GlCompositor, type GlCompositorOptions, type CompositorColors, DEFAULT_COMPOSITOR_COLORS } from "./GlCompositor";
+import { GlCompositor, buildUnits, type GlCompositorOptions, type CompositorColors, DEFAULT_COMPOSITOR_COLORS } from "./GlCompositor";
 
-export { GlCompositor, CanvasCompositor, DEFAULT_COMPOSITOR_COLORS };
+export { GlCompositor, CanvasCompositor, DEFAULT_COMPOSITOR_COLORS, buildUnits };
 export type { GlCompositorOptions, CompositorColors };
 export { DirtyTracker, lowestIndexOf } from "./dirty";
 export { computeSelectionEdge, thresholdMask } from "./ants";
@@ -19,6 +19,7 @@ export {
   buildBlendSingle,
   BLEND_UNIFORMS,
   PRESENT_UNIFORMS,
+  UNPREMUL_PASS,
 } from "./shaders";
 
 export interface CreateCompositorOptions extends GlCompositorOptions {

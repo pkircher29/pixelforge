@@ -161,6 +161,9 @@ pub struct ProjectHeader {
     /// Optional 8-bit masks, keyed by layer id.
     #[serde(default)]
     pub masks: Vec<LayerBlob>,
+    /// Optional 8-bit alpha channels (canvas-sized), keyed by channel id (format 2).
+    #[serde(default)]
+    pub channels: Vec<LayerBlob>,
     /// Optional 8-bit canvas-sized selection.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub selection: Option<BlobRef>,
@@ -414,6 +417,15 @@ pub fn io_open_pfproj(path: String) -> CommandResult<Response> {
             });
         }
     }
+    let mut channels = Vec::new();
+    for ch in &doc.manifest.channels {
+        if let Some(img) = doc.channels.get(&ch.id) {
+            channels.push(LayerBlob {
+                id: ch.id.clone(),
+                data: push_blob(img, &mut blobs),
+            });
+        }
+    }
     let selection = doc.selection.as_ref().map(|s| push_blob(s, &mut blobs));
     let thumbnail = doc.thumbnail.as_ref().map(|t| push_blob(t, &mut blobs));
 
@@ -422,6 +434,7 @@ pub fn io_open_pfproj(path: String) -> CommandResult<Response> {
         manifest: doc.manifest.clone(),
         layers,
         masks,
+        channels,
         selection,
         thumbnail,
     };
@@ -454,6 +467,7 @@ pub fn io_save_pfproj(request: Request<'_>) -> CommandResult<WriteResult> {
         manifest,
         layers: BTreeMap::new(),
         masks: BTreeMap::new(),
+        channels: BTreeMap::new(),
         selection: None,
         thumbnail: None,
     };
@@ -464,6 +478,10 @@ pub fn io_save_pfproj(request: Request<'_>) -> CommandResult<WriteResult> {
     for m in &header.masks {
         doc.masks
             .insert(m.id.clone(), blob_image(&frame, &m.data, 1)?);
+    }
+    for c in &header.channels {
+        doc.channels
+            .insert(c.id.clone(), blob_image(&frame, &c.data, 1)?);
     }
     if let Some(s) = &header.selection {
         doc.selection = Some(blob_image(&frame, s, 1)?);

@@ -9,62 +9,8 @@
 
 import { Rect, type Point } from "./rect";
 import { Raster } from "./raster";
-import type { IRaster, Size } from "./types";
-
-const INF = 1e20;
-
-/**
- * Felzenszwalb & Huttenlocher 1-D squared Euclidean distance transform.
- * `f` is the input (0 at features, INF elsewhere), result written to `d`.
- */
-function edt1d(f: Float32Array, n: number, d: Float32Array, v: Int32Array, z: Float32Array): void {
-  let k = 0;
-  v[0] = 0;
-  z[0] = -INF;
-  z[1] = INF;
-  for (let q = 1; q < n; q++) {
-    let s = (f[q]! + q * q - (f[v[k]!]! + v[k]! * v[k]!)) / (2 * q - 2 * v[k]!);
-    while (s <= z[k]!) {
-      k--;
-      s = (f[q]! + q * q - (f[v[k]!]! + v[k]! * v[k]!)) / (2 * q - 2 * v[k]!);
-    }
-    k++;
-    v[k] = q;
-    z[k] = s;
-    z[k + 1] = INF;
-  }
-  k = 0;
-  for (let q = 0; q < n; q++) {
-    while (z[k + 1]! < q) k++;
-    const dx = q - v[k]!;
-    d[q] = dx * dx + f[v[k]!]!;
-  }
-}
-
-/** Squared distance from every pixel to the nearest pixel where `feature[i] !== 0`. */
-function distanceTransformSquared(feature: Uint8Array, w: number, h: number): Float32Array {
-  const grid = new Float32Array(w * h);
-  for (let i = 0; i < grid.length; i++) grid[i] = feature[i] ? 0 : INF;
-  const n = Math.max(w, h);
-  const f = new Float32Array(n);
-  const d = new Float32Array(n);
-  const v = new Int32Array(n);
-  const z = new Float32Array(n + 1);
-  // Columns.
-  for (let x = 0; x < w; x++) {
-    for (let y = 0; y < h; y++) f[y] = grid[y * w + x]!;
-    edt1d(f, h, d, v, z);
-    for (let y = 0; y < h; y++) grid[y * w + x] = d[y]!;
-  }
-  // Rows.
-  for (let y = 0; y < h; y++) {
-    const row = y * w;
-    for (let x = 0; x < w; x++) f[x] = grid[row + x]!;
-    edt1d(f, w, d, v, z);
-    for (let x = 0; x < w; x++) grid[row + x] = d[x]!;
-  }
-  return grid;
-}
+import { distanceTransformSquared } from "./ops/distance";
+import type { IRaster, RGBA, Size } from "./types";
 
 export class Selection {
   readonly width: number;
@@ -313,6 +259,56 @@ export class Selection {
     const d = raster.data;
     for (let i = 0, p = 3; i < local.length; i++, p += 4) local[i] = d[p]!;
     s.copyLocal(local, w, h, off);
+    return s;
+  }
+
+  /**
+   * Select ▸ Color Range (basic). Every pixel's coverage is `1 - d / fuzziness` where
+   * `d` is the smallest maximum-per-channel RGB difference to any of `sampledColors`
+   * (0..255). `fuzziness` 0..255 (PS: 0..200); 0 selects exact matches only. Fully
+   * transparent pixels are never selected. `invert` flips the result.
+   */
+  static fromColorRange(
+    raster: IRaster,
+    sampledColors: readonly RGBA[],
+    fuzziness: number,
+    opts: { invert?: boolean; target?: { size: Size; offset: Point } } = {},
+  ): Selection {
+    const w = raster.width;
+    const h = raster.height;
+    const size = opts.target?.size ?? { w, h };
+    const off = opts.target?.offset ?? { x: 0, y: 0 };
+    const s = new Selection(size.w, size.h);
+    const local = new Uint8Array(w * h);
+    const d = raster.data;
+    const fuzz = Math.max(0, fuzziness);
+    const n = sampledColors.length;
+    for (let i = 0, p = 0; i < local.length; i++, p += 4) {
+      if (d[p + 3] === 0 || n === 0) {
+        local[i] = opts.invert ? 255 : 0;
+        continue;
+      }
+      let best = Infinity;
+      for (let k = 0; k < n; k++) {
+        const c = sampledColors[k]!;
+        const dd = Math.max(Math.abs(d[p]! - c.r), Math.abs(d[p + 1]! - c.g), Math.abs(d[p + 2]! - c.b));
+        if (dd < best) best = dd;
+      }
+      let cov: number;
+      if (best === 0) cov = 255;
+      else if (fuzz <= 0 || best >= fuzz) cov = 0;
+      else cov = Math.round(255 * (1 - best / fuzz));
+      local[i] = opts.invert ? 255 - cov : cov;
+    }
+    s.copyLocal(local, w, h, off);
+    return s;
+  }
+
+  /** Build a selection from a document-sized grayscale raster (red channel = coverage). */
+  static fromLuminance(raster: IRaster): Selection {
+    const s = new Selection(raster.width, raster.height);
+    const d = raster.data;
+    for (let i = 0, p = 0; i < s.mask.length; i++, p += 4) s.mask[i] = d[p]!;
     return s;
   }
 
