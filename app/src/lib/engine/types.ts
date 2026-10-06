@@ -1,0 +1,302 @@
+/**
+ * Public contract of the Pixelforge document engine.
+ *
+ * Everything the UI shell, tools, AI panel and filters program against lives here (or is
+ * re-exported from here). Concrete classes (`Raster`, `Selection`, `History`, `Viewport`,
+ * the compositors) live in their own modules and are re-exported by `index.ts`.
+ *
+ * Conventions used throughout the engine:
+ * - Pixels are RGBA8 with **straight (non-premultiplied) alpha** in storage.
+ * - `layers[0]` is the **bottom** layer; higher indices are drawn on top.
+ * - A group's children are the contiguous run of layers with `parentId === group.id`
+ *   located **immediately after** the group entry (higher indices), bottom to top.
+ *   Only one nesting level is supported in v1.
+ * - All document coordinates are integer pixel units with the origin at the top-left.
+ * - Screen coordinates passed to `Viewport` are CSS pixels; the compositor applies DPR.
+ */
+
+import type { Rect, Point } from "./rect";
+import type { Raster } from "./raster";
+import type { Selection } from "./selection";
+import type { Viewport } from "./viewport";
+
+export type { Rect, Point };
+
+/** Width/height pair. */
+export interface Size {
+  w: number;
+  h: number;
+}
+
+/** A colour with 0..255 integer channels and straight alpha. */
+export interface RGBA {
+  r: number;
+  g: number;
+  b: number;
+  a: number;
+}
+
+/** Resampling filter for {@link IRaster.resize}. */
+export type ResampleMethod = "nearest" | "bilinear" | "bicubic";
+
+/**
+ * Minimal pixel-buffer contract. `Raster` is the v1 full-canvas implementation; a tiled
+ * implementation can replace it in v2 without touching tools (PLAN.md decision).
+ */
+export interface IRaster {
+  readonly width: number;
+  readonly height: number;
+  /** RGBA8, straight alpha, row-major, `width * height * 4` bytes. */
+  readonly data: Uint8ClampedArray<ArrayBuffer>;
+  /** `{ 0, 0, width, height }`. */
+  bounds(): Rect;
+  /** Deep copy. */
+  clone(): IRaster;
+  /** Fill the whole raster (or `rect`) with one colour. */
+  fill(rgba: RGBA, rect?: Rect): void;
+  /** Read a pixel; out-of-range reads return transparent black. */
+  getPixel(x: number, y: number, out?: RGBA): RGBA;
+  /** Write a pixel; out-of-range writes are ignored. */
+  setPixel(x: number, y: number, rgba: RGBA): void;
+  /** Composite `src` onto this raster at `dx, dy` with straight-alpha "over". */
+  blit(src: IRaster, dx: number, dy: number, srcRect?: Rect, opts?: BlitOptions): void;
+  /** Copy of the given rect (clamped to bounds; outside pixels are transparent). */
+  crop(rect: Rect): IRaster;
+  /** Resampled copy. */
+  resize(w: number, h: number, method?: ResampleMethod): IRaster;
+  flipH(): IRaster;
+  flipV(): IRaster;
+  /** Rotate by 90 degrees; `cw = true` is clockwise. Returns an `h x w` raster. */
+  rotate90(cw: boolean): IRaster;
+  /** Smallest rect containing every pixel with `alpha > threshold`, or `null` if none. */
+  boundingBoxOfAlpha(threshold?: number): Rect | null;
+  /** Canvas-2D `ImageData` view (shares the buffer where the platform allows it). */
+  toImageData(): ImageData;
+  /** Approximate heap bytes held by the pixel buffer. */
+  byteLength(): number;
+}
+
+/** Options for {@link IRaster.blit}. */
+export interface BlitOptions {
+  /** `"over"` (default) composites with straight-alpha over; `"replace"` copies bytes. */
+  mode?: "over" | "replace";
+  /** Extra opacity multiplier 0..1 for `"over"`. */
+  opacity?: number;
+}
+
+/**
+ * The 16 blend modes of PLAN.md section 2.1. Values are the stable string ids used in
+ * `.pfproj` manifests and the GLSL mode switch (`BLEND_MODE_INDEX`).
+ */
+export enum BlendMode {
+  Normal = "normal",
+  Multiply = "multiply",
+  Screen = "screen",
+  Overlay = "overlay",
+  Darken = "darken",
+  Lighten = "lighten",
+  ColorDodge = "color-dodge",
+  ColorBurn = "color-burn",
+  HardLight = "hard-light",
+  SoftLight = "soft-light",
+  Difference = "difference",
+  Exclusion = "exclusion",
+  Hue = "hue",
+  Saturation = "saturation",
+  Color = "color",
+  Luminosity = "luminosity",
+}
+
+export type LayerId = string;
+export type LayerKind = "raster" | "group";
+
+/** Fields shared by every layer. */
+export interface LayerBase {
+  readonly id: LayerId;
+  name: string;
+  readonly kind: LayerKind;
+  /** Position of the layer's raster origin in document space. */
+  offset: Point;
+  /** 0..1 */
+  opacity: number;
+  blendMode: BlendMode;
+  visible: boolean;
+  locked: boolean;
+  /** Id of the enclosing group, or `null` at top level. */
+  parentId: LayerId | null;
+  /**
+   * Optional layer mask (v1.1 UI). When present it is a raster the size of the layer's
+   * raster; its red channel (0..255) multiplies the layer alpha. `null` = no mask.
+   */
+  mask: Raster | null;
+}
+
+/** A pixel layer. */
+export interface RasterLayer extends LayerBase {
+  readonly kind: "raster";
+  raster: Raster;
+}
+
+/** A folder of layers. Composited as an isolated group (children blended together first). */
+export interface GroupLayer extends LayerBase {
+  readonly kind: "group";
+  raster: null;
+  collapsed: boolean;
+}
+
+export type Layer = RasterLayer | GroupLayer;
+
+/** Mutable, user-editable layer properties (for `SetLayerProps`). */
+export interface LayerProps {
+  name: string;
+  offset: Point;
+  opacity: number;
+  blendMode: BlendMode;
+  visible: boolean;
+  locked: boolean;
+  collapsed: boolean;
+}
+
+/** Document-level metadata persisted to `manifest.json`. Open-ended for other agents. */
+export interface DocumentMeta {
+  /** Pixels per inch (informational). */
+  dpi: number;
+  createdAt: number;
+  modifiedAt: number;
+  /** Absolute path of the backing `.pfproj` / image, or `null` for unsaved docs. */
+  path: string | null;
+  /** Free-form extension slot (AI history, UI state, ...). */
+  [key: string]: unknown;
+}
+
+/**
+ * The live document. A plain mutable object: commands mutate it, stores wrap it and bump
+ * a version counter. Never hold a reference to `layers` across a command; re-read it.
+ */
+export interface Document {
+  readonly id: string;
+  name: string;
+  width: number;
+  height: number;
+  /** Bottom to top. See module header for group layout. */
+  layers: Layer[];
+  /** Always `width x height`. An empty selection means "whole canvas" for most tools. */
+  selection: Selection;
+  activeLayerId: LayerId | null;
+  /** True when there are unsaved changes. */
+  dirty: boolean;
+  meta: DocumentMeta;
+}
+
+/**
+ * Undoable unit of work. `do` is called by `History.push` (unless already applied) and by
+ * redo; `undo` reverses it exactly. Commands own their snapshots and report their size so
+ * the history can enforce its memory budget.
+ */
+export interface Command {
+  readonly label: string;
+  do(doc: Document): void;
+  undo(doc: Document): void;
+  /**
+   * Try to absorb `next` (pushed immediately after this command) into this one, e.g.
+   * successive opacity slider ticks. Return `true` if absorbed; `next` is then dropped.
+   */
+  mergeWith?(next: Command): boolean;
+  /** Approximate bytes of snapshots held. Defaults to 0 when absent. */
+  byteSize?(): number;
+  /**
+   * Layers whose **pixels** this command writes in place (both on `do` and `undo`), with
+   * the raster-space rect touched (omit for the whole layer). Stores forward these to
+   * `ICompositor.markDirty` after every do/undo/redo. Commands that only swap `raster`
+   * objects or change props/structure need not report: the compositor detects those.
+   */
+  affected?(): readonly LayerDirtyRegion[];
+}
+
+/** A dirty region on one layer, in that layer's raster space. */
+export interface LayerDirtyRegion {
+  layerId: LayerId;
+  rect?: Rect;
+}
+
+/** A history entry as shown in the History panel. */
+export interface HistoryEntry {
+  readonly label: string;
+  readonly command: Command;
+  readonly bytes: number;
+  /** Monotonic id, stable across eviction. */
+  readonly seq: number;
+}
+
+/** Pan/zoom/rotation of the document inside the canvas, in CSS pixels. */
+export interface ViewportState {
+  /** Scale factor, 1 = 100 %. */
+  zoom: number;
+  /** Screen x (CSS px) of the document origin. */
+  panX: number;
+  /** Screen y (CSS px) of the document origin. */
+  panY: number;
+  /** View rotation in radians, clockwise positive (screen y is down). */
+  rotation: number;
+}
+
+export type CompositorKind = "webgl2" | "canvas2d";
+
+/** Per-frame options for {@link ICompositor.render}. */
+export interface RenderOptions {
+  /** Backing-store size of the canvas in device pixels. Defaults to the canvas's size. */
+  width?: number;
+  height?: number;
+  /** Device pixel ratio applied on top of the viewport (CSS px -> device px). Default 1. */
+  dpr?: number;
+  /** Draw the animated selection outline. Default true. */
+  showSelection?: boolean;
+  /** Marching-ants phase in screen px; advance ~1 px every 50-100 ms. Default 0. */
+  antsPhase?: number;
+  /** Draw a pixel grid at zoom >= `pixelGridMinZoom`. Default true. */
+  showPixelGrid?: boolean;
+  /** Default 8 (800 %). */
+  pixelGridMinZoom?: number;
+  /** Checkerboard cell size in device px. Default 8. */
+  checkerSize?: number;
+  /**
+   * The layer the user is editing. Lets the GL compositor keep a cache of the layers
+   * below it so brush strokes re-composite only the layers above.
+   */
+  activeLayerId?: LayerId | null;
+  /** Force a full re-composite this frame (debugging / after context restore). */
+  forceFull?: boolean;
+}
+
+/** What a `render` call did; useful for stats overlays and tests. */
+export interface RenderStats {
+  /** False when the frame was skipped (e.g. context lost). */
+  drawn: boolean;
+  /** True when the layer stack was re-composited (not just re-presented). */
+  recomposited: boolean;
+  /** Area in doc pixels that was re-composited (0 when nothing changed). */
+  compositedArea: number;
+  /** Number of blend passes executed. */
+  passes: number;
+  /** Number of layer texture uploads (full or partial). */
+  uploads: number;
+}
+
+/** Compositor contract: one instance per canvas element. */
+export interface ICompositor {
+  readonly kind: CompositorKind;
+  /** Draw the document through the viewport into the canvas. Cheap when nothing changed. */
+  render(doc: Document, viewport: Viewport, opts?: RenderOptions): RenderStats;
+  /**
+   * Tell the compositor that pixels of `layerId` changed inside `rect` (raster-space,
+   * relative to the layer's own origin). Omit `rect` for the whole layer. Property changes
+   * (opacity, visibility, offset, order) are detected automatically on `render`.
+   */
+  markDirty(layerId: LayerId, rect?: Rect): void;
+  /** Drop every cache; next render re-uploads and re-composites everything. */
+  invalidateAll(): void;
+  /** True when the GL context is currently lost (renders are skipped). */
+  isContextLost(): boolean;
+  /** Release GPU/CPU resources; the instance is unusable afterwards. */
+  dispose(): void;
+}
