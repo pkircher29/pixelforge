@@ -1,0 +1,25 @@
+{
+  "name": "pixelforge",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Open-source Photoshop-style image editor with chained AI (ChatGPT, Grok, Gemini) - Tauri 2 + Svelte 5 + Rust",
+  "license": "MIT",
+  "author": "Paul Kircher",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/pkircher29/pixelforge.git"
+  },
+  "workspaces": [
+    "app"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace app",
+    "build": "npm run build --workspace app",
+    "check": "npm run check --workspace app",
+    "test": "npm run test --workspace app",
+    "tauri": "npm run tauri --workspace app --"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

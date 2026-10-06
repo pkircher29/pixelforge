@@ -1,0 +1,15 @@
+[package]
+name = "pf-io"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Image codecs, PSD import and the .pfproj project format for Pixelforge"
+
+[dependencies]
+image.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+uuid.workspace = true

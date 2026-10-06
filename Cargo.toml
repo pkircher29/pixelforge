@@ -1,0 +1,35 @@
+[workspace]
+resolver = "2"
+members = ["crates/pf-ai", "crates/pf-io", "app/src-tauri"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+authors = ["Paul Kircher"]
+repository = "https://github.com/pkircher29/pixelforge"
+rust-version = "1.85"
+
+[workspace.dependencies]
+# Internal crates
+pf-ai = { path = "crates/pf-ai" }
+pf-io = { path = "crates/pf-io" }
+
+# Shared third-party deps (see PLAN.md §4 rule 5 for the allow-list)
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time"] }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json", "multipart", "http2"] }
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp", "gif", "bmp", "tiff"] }
+uuid = { version = "1", features = ["v4", "serde"] }
+base64 = "0.22"
+anyhow = "1"
+tracing = "0.1"
+async-trait = "0.1"
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+strip = true

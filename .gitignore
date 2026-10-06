@@ -1,0 +1,23 @@
+# Rust
+/target/
+**/target/
+Cargo.lock.bak
+
+# Node
+node_modules/
+dist/
+*.tsbuildinfo
+npm-debug.log*
+
+# Tauri generated schemas / build artefacts
+app/src-tauri/gen/
+app/src-tauri/target/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+*.local
+*.local.*
+.vscode/*
+!.vscode/extensions.json
+.idea/
