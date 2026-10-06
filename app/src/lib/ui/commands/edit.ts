@@ -7,6 +7,7 @@ import { registerCommands } from "../registry.svelte";
 import { openDialog } from "../dialogs/dialogs.svelte";
 import PreferencesDialog from "../dialogs/PreferencesDialog.svelte";
 import { copyRegion, readRasterFromClipboard, writeRasterToClipboard } from "$lib/io/clipboard";
+import { withoutDiffOverlays } from "$lib/ai/overlay";
 import { clearThroughMask, fillThroughMask } from "$lib/tools/paint/fill";
 import { nextUntitledName } from "./file";
 
@@ -51,7 +52,7 @@ export function clearSelection(): void {
 export async function copy(): Promise<boolean> {
   const doc = docStore.doc;
   if (!doc) return false;
-  const region = copyRegion(doc);
+  const region = copyRegion(withoutDiffOverlays(doc));
   if (!region) {
     toast.info("Nothing to copy — the layer is empty.");
     return false;

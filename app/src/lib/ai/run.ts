@@ -34,6 +34,7 @@ import {
   resolveMode,
   type ModeResolution,
 } from "./modes";
+import { withoutDiffOverlays } from "./overlay";
 import { coverageToLumaRaster, decodeImage, encodePng, thumbnailDataUrl } from "./png";
 import { estimateCost } from "./pricing";
 import type { AiMode, ImageSize, ProviderInfo } from "./types";
@@ -111,7 +112,8 @@ async function safeThumb(raster: Raster, opaque: boolean): Promise<string | unde
 
 /** Build the inputs. Heavy (composites + PNG encodes) but no IPC yet. */
 export async function prepareRun(req: AiRunRequest, open: OpenDoc | null): Promise<PreparedRun> {
-  const doc = open?.doc ?? null;
+  // The diff overlay is a screen-only helper: never send it to a provider.
+  const doc = open ? withoutDiffOverlays(open.doc) : null;
   const selection = req.selection ?? doc?.selection ?? null;
   const resolution = resolveMode({
     hasDoc: doc !== null,
@@ -282,7 +284,7 @@ export function runFor(jobId: string): ActiveRun | undefined {
 export async function runAi(req: AiRunRequest): Promise<ActiveRun> {
   const open = docStore.active;
   const prepared = await prepareRun(req, open);
-  const doc = open?.doc ?? null;
+  const doc = open?.doc ?? null; // the live document (history entries go here)
   const { mode, emulated } = prepared.resolution;
   const cost = estimateCost({ provider: req.provider.id, model: req.model, mode, size: req.size, quality: req.quality, n: req.n });
 

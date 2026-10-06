@@ -63,6 +63,18 @@ export function removeAllDiffOverlays(doc: Document): void {
 }
 
 /**
+ * A shallow view of `doc` without any diff overlay layers, for save / export / copy /
+ * AI inputs. The live document is untouched (the overlay keeps showing on screen); when
+ * there is no overlay the document itself is returned.
+ */
+export function withoutDiffOverlays(doc: Document): Document {
+  if (!doc.layers.some(isDiffOverlayLayer)) return doc;
+  const layers = doc.layers.filter((l) => !isDiffOverlayLayer(l));
+  const active = doc.activeLayerId && layers.some((l) => l.id === doc.activeLayerId) ? doc.activeLayerId : (layers[layers.length - 1]?.id ?? null);
+  return { ...doc, layers, activeLayerId: active };
+}
+
+/**
  * Compute `composite(with result layer hidden)` vs `composite(with it visible)` and show
  * the difference. Returns the overlay info, or null when toggled off / layer missing.
  */

@@ -1,9 +1,11 @@
 # AI history (`doc.meta.aiHistory` / manifest `ai_history`)
 
 Every AI job run on a document is recorded in the document's metadata so it round-trips
-through `.pfproj`: the UI reads and writes `doc.meta.aiHistory` (an array), and the save
-path hands it to `io_save_pfproj` as `manifest.ai_history`, which Rust passes through
-untouched (`docs/ipc.md`). Owner: `app/src/lib/ai/history.ts`.
+through `.pfproj`: the UI reads and writes `doc.meta.aiHistory` (an array, key constant
+`AI_HISTORY_KEY`), and `app/src/lib/io/convert.ts` maps it to `manifest.ai_history`
+(snake_case) on save and back on open; Rust passes the array through untouched
+(`docs/ipc.md`, `docs/pfproj-format.md`). Owner: `app/src/lib/ai/history.ts`; the
+save → open round trip is covered by `tests/io.test.ts`.
 
 Thumbnails are data URLs no larger than 160 px on the longest edge; full inputs, masks and
 results are **never** stored here (the result lives on its layer). A typical entry is
@@ -59,4 +61,4 @@ Rules:
 | Edit prompt & re-run | Inline textarea; runs with the chosen provider. |
 | Load into panel | Fills the AI panel form with the entry's prompt / provider / model. |
 | Reveal layer | Activates the document that holds the latest surviving result layer and selects it. |
-| Diff | Toggles the "AI diff" overlay layer (magenta where the result changed the composite; non-undoable, `id` prefixed `aidiff_`, skip it on save/export). |
+| Diff | Toggles the "AI diff" overlay layer (magenta where the result changed the composite; non-undoable, `id` prefixed `aidiff_`). `withoutDiffOverlays(doc)` in `lib/ai/overlay.ts` gives a view without it; save, export, copy, merge/flatten and AI inputs all use it, so the overlay never leaves the screen. |

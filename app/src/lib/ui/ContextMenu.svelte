@@ -55,7 +55,7 @@
 <style>
   .menu {
     position: fixed;
-    z-index: 90;
+    z-index: 980;
     min-width: 200px;
     padding: 4px;
     animation: pop var(--t-fast) ease-out;

@@ -4,6 +4,7 @@
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { open as openDialog, save as saveDialog } from "@tauri-apps/plugin-dialog";
 import { Raster, compositeToRaster, type Document } from "$lib/engine";
+import { withoutDiffOverlays } from "$lib/ai/overlay";
 import { decodeFrame, encodeFrame } from "./frame";
 import {
   IMPORT_EXTENSIONS,
@@ -104,10 +105,10 @@ export async function saveProject(entry: OpenDoc, path: string): Promise<void> {
   await recentAdd(res.path);
 }
 
-/** Export the composite as PNG / JPEG / WebP. */
+/** Export the composite as PNG / JPEG / WebP (AI diff overlays are never exported). */
 export async function exportComposite(doc: Document, path: string, format: ExportFormat, opts: ExportOptions = {}): Promise<number> {
   requireTauri();
-  const comp = compositeToRaster(doc);
+  const comp = compositeToRaster(withoutDiffOverlays(doc));
   const body = encodeFrame({ path, format, opts, width: comp.width, height: comp.height, blob: 0 }, [bytesOf(comp.data)]);
   const res = await invoke<{ path: string; bytes: number }>("io_export", body);
   await recentAdd(res.path);
@@ -122,7 +123,7 @@ export async function encodeRaster(r: Raster, format: ExportFormat = "png", opts
 }
 
 function thumbnailOf(doc: Document, maxPx: number): Raster {
-  const comp = compositeToRaster(doc);
+  const comp = compositeToRaster(withoutDiffOverlays(doc));
   const s = Math.min(1, maxPx / Math.max(comp.width, comp.height));
   if (s >= 1) return comp;
   return comp.resize(Math.max(1, Math.round(comp.width * s)), Math.max(1, Math.round(comp.height * s)), "bilinear");

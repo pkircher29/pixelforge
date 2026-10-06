@@ -33,13 +33,16 @@ class DialogStore {
         props: props as Record<string, unknown>,
         resolve: (r) => {
           const i = this.stack.findIndex((d) => d.id === id);
-          if (i >= 0) this.stack.splice(i, 1);
-          ui.modalDepth = this.stack.length;
+          if (i < 0) return; // already resolved
+          this.stack.splice(i, 1);
+          // Relative, not `= stack.length`: other modal hosts (filters dialogs, API keys)
+          // share the counter.
+          ui.modalDepth = Math.max(0, ui.modalDepth - 1);
           res(r as R | null);
         },
       };
       this.stack.push(req);
-      ui.modalDepth = this.stack.length;
+      ui.modalDepth++;
     });
   }
 

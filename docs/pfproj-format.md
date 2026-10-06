@@ -65,7 +65,9 @@ default names above when a path is absent), not by listing the archive.
 
   // Opaque to pf-io: owned by the AI panel (`app/src/lib/ai`). Any JSON array; every
   // element is passed through byte-for-byte (thumbnails are small data: URLs, not full
-  // inputs — PLAN.md §2.2).
+  // inputs — PLAN.md §2.2). In memory this is `doc.meta.aiHistory` (camelCase);
+  // `app/src/lib/io/convert.ts` maps it to/from this key on save/open. Schema:
+  // docs/ai-history.md.
   "ai_history": []
 }
 ```
@@ -96,6 +98,12 @@ light, hard mix, ...) become `normal`, and `darker color` / `lighter color` beco
   version supports"). Additive changes (new optional fields) do **not** bump `format`;
   only incompatible changes do.
 - Archive entries the reader does not know about are ignored (and dropped on re-save).
+
+### What the UI leaves out
+
+The AI "diff overlay" layer (`id` prefixed `aidiff_`, see docs/ai-history.md) is a
+screen-only helper: `projectFrameParts` drops it before building the frame, and export /
+copy / merge / flatten / AI inputs composite without it. It never appears in a `.pfproj`.
 
 ## Validation performed by the writer
 

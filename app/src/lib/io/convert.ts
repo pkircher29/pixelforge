@@ -14,6 +14,8 @@ import {
   type Layer,
   type LayerId,
 } from "$lib/engine";
+import { AI_HISTORY_KEY } from "$lib/ai/history";
+import { withoutDiffOverlays } from "$lib/ai/overlay";
 import type { Frame, FrameHeader } from "./frame";
 
 /** `color-dodge` (engine) ↔ `color_dodge` (pfproj / IPC). */
@@ -251,7 +253,8 @@ export function documentFromProjectFrame(frame: Frame<ProjectHeader>): Document 
   doc.activeLayerId = (m.active_layer && idMap.get(m.active_layer)) || doc.layers[doc.layers.length - 1]?.id || null;
   doc.meta.projectId = m.doc.id;
   doc.meta.created = m.created;
-  doc.meta.ai_history = Array.isArray(m.ai_history) ? m.ai_history : [];
+  // Manifest `ai_history` (snake_case) <-> in-memory `doc.meta.aiHistory` (docs/ai-history.md).
+  doc.meta[AI_HISTORY_KEY] = Array.isArray(m.ai_history) ? m.ai_history : [];
   doc.meta.manifestExtra = stripKnown(m);
   return doc;
 }
@@ -276,13 +279,17 @@ function grayToRaster(bytes: Uint8Array, w: number, h: number): Raster {
   return r;
 }
 
-/** Build the `io_save_pfproj` header + blobs for a document. */
+/**
+ * Build the `io_save_pfproj` header + blobs for a document. AI diff overlay layers
+ * (`aidiff_*`, non-undoable screen-only helpers) are never written.
+ */
 export function projectFrameParts(
-  doc: Document,
+  source: Document,
   path: string,
   appVersion: string,
   thumbnail: Raster | null,
 ): { header: ProjectHeaderBody; blobs: Uint8Array[] } {
+  const doc = withoutDiffOverlays(source);
   const blobs: Uint8Array[] = [];
   const layers: PixelRef[] = [];
   const masks: PixelRef[] = [];
@@ -320,7 +327,7 @@ export function projectFrameParts(
     doc: { id: typeof doc.meta.projectId === "string" ? doc.meta.projectId : doc.id, name: doc.name, width: doc.width, height: doc.height },
     layers: manifestLayers,
     active_layer: doc.activeLayerId,
-    ai_history: Array.isArray(doc.meta.ai_history) ? (doc.meta.ai_history as unknown[]) : [],
+    ai_history: Array.isArray(doc.meta[AI_HISTORY_KEY]) ? JSON.parse(JSON.stringify(doc.meta[AI_HISTORY_KEY])) : [],
   };
   const header: ProjectHeaderBody = { path, manifest, layers, masks };
   if (!doc.selection.isEmpty) {

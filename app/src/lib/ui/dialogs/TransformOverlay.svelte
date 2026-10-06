@@ -15,6 +15,7 @@
   import { onMount } from "svelte";
   import type { Point } from "$lib/engine";
   import { docStore } from "$lib/stores/doc.svelte";
+  import { ui } from "$lib/stores/ui.svelte";
   import { Mat } from "$lib/filters/transform/affine";
   import { transformSession as session } from "$lib/filters/transform/session.svelte";
 
@@ -272,6 +273,10 @@
 
   function onKey(e: KeyboardEvent): void {
     if (!session.active) return;
+    // A dialog / the palette on top owns Enter and Esc (this listener runs in the capture
+    // phase, before the shell's dispatcher and the dialogs' own handlers).
+    if (ui.modalOpen || ui.paletteOpen || ui.textEdit) return;
+    if (e.target instanceof HTMLElement && e.target.closest('[role="dialog"]') && !e.target.closest(".pf-transform-overlay")) return;
     if (e.key === "Enter") {
       e.preventDefault();
       e.stopPropagation();

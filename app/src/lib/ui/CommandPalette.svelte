@@ -130,7 +130,8 @@
   .backdrop {
     position: fixed;
     inset: 0;
-    z-index: 95;
+    /* Above dialogs (950) and the filters' live-preview dialogs (900). */
+    z-index: 960;
     background: rgba(4, 6, 10, 0.35);
     display: flex;
     justify-content: center;

@@ -2,10 +2,13 @@
  * Mounts a dialog component into a body-level container and tears it down on close.
  * One filters dialog at a time: opening another closes the current one.
  *
- * TODO(integration): replace with the shell's dialog/overlay host when available.
+ * The host is separate from the shell's `Dialog` primitive on purpose (non-dimming live
+ * preview), but it reports itself to `ui.modalDepth` so the shell's shortcut dispatcher
+ * and command palette stay out of the way while a dialog is open.
  */
 
 import { mount, unmount, type Component } from "svelte";
+import { ui } from "$lib/stores/ui.svelte";
 
 let current: (() => void) | null = null;
 
@@ -26,10 +29,12 @@ export function openDialog<P extends DialogProps>(component: Component<P>, props
     instance = null;
     void unmount(inst);
     target.remove();
+    ui.modalDepth = Math.max(0, ui.modalDepth - 1);
     if (current === close) current = null;
   };
   const full = { ...props, onclose: close } as unknown as P;
   instance = mount(component, { target, props: full });
+  ui.modalDepth++;
   current = close;
 }
 

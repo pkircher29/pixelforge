@@ -23,7 +23,8 @@
     position: fixed;
     right: 16px;
     bottom: calc(var(--statusbar-h) + 12px);
-    z-index: 80;
+    /* Toasts stay visible over every dialog host (API keys dialog is 1000). */
+    z-index: 1100;
     display: flex;
     flex-direction: column;
     gap: 8px;

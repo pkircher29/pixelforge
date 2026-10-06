@@ -13,7 +13,28 @@ import {
   type ProjectHeader,
 } from "../lib/io/convert";
 import { decodeFrame, encodeFrame } from "../lib/io/frame";
-import { BlendMode, Raster, Rect, Selection, createDocument, createGroupLayer, createRasterLayer, type RasterLayer } from "../lib/engine";
+import { BlendMode, Raster, Rect, Selection, compositeToRaster, createDocument, createGroupLayer, createRasterLayer, type RasterLayer } from "../lib/engine";
+import { AI_HISTORY_KEY, addEntry, getHistory, newHistoryId, type AiHistoryEntry } from "../lib/ai/history";
+import { DIFF_LAYER_PREFIX, withoutDiffOverlays } from "../lib/ai/overlay";
+
+function historyEntry(over: Partial<AiHistoryEntry> = {}): AiHistoryEntry {
+  return {
+    id: newHistoryId(),
+    ts: 1700000000000,
+    provider: "x_ai",
+    providerName: "Grok",
+    model: "grok-imagine-image-2.0",
+    mode: "instruct",
+    emulated: false,
+    prompt: "hi",
+    n: 1,
+    resultThumbs: ["data:image/png;base64,AAAA"],
+    resultLayerIds: ["l-9"],
+    durationMs: 10,
+    status: "completed",
+    ...over,
+  };
+}
 
 describe("blend names", () => {
   it("round-trips hyphen ↔ underscore", () => {
@@ -102,7 +123,7 @@ describe("pfproj round trip", () => {
     doc.layers = [bg, g, c];
     doc.activeLayerId = c.id;
     doc.selection = Selection.fromRect(6, 5, Rect.make(1, 1, 2, 2));
-    doc.meta.ai_history = [{ provider: "x_ai", prompt: "hi" }];
+    const hist = addEntry(doc, historyEntry());
 
     const { header, blobs } = projectFrameParts(doc, "C:/x/round.pfproj", "0.1.0", null);
     expect(header.manifest.layers.map((l) => l.name)).toEqual(["bg", "c", "G"]);
@@ -126,7 +147,40 @@ describe("pfproj round trip", () => {
     expect(back.layers[1]!.opacity).toBeCloseTo(0.7);
     expect(back.selection.bbox).toEqual(Rect.make(1, 1, 2, 2));
     expect(back.activeLayerId).toBe(bc.id);
-    expect(back.meta.ai_history).toEqual([{ provider: "x_ai", prompt: "hi" }]);
+    // The manifest key is snake_case; in memory the AI panel reads `doc.meta.aiHistory`.
+    expect(header.manifest.ai_history).toEqual([hist]);
+    expect(back.meta.ai_history).toBeUndefined();
+    expect(back.meta[AI_HISTORY_KEY]).toEqual([hist]);
+    expect(getHistory(back)).toEqual([hist]);
+    expect(getHistory(back)[0]!.resultLayerIds).toEqual(["l-9"]);
+  });
+
+  it("AI history survives save → open even when a thumbnail-less running entry is present", () => {
+    const doc = createDocument({ name: "H", width: 2, height: 2 });
+    addEntry(doc, historyEntry({ status: "running", resultThumbs: [], resultLayerIds: [], durationMs: 0 }));
+    addEntry(doc, historyEntry({ mode: "mask", emulated: true, maskRect: { x: 0, y: 0, w: 1, h: 1 } }));
+    const { header, blobs } = projectFrameParts(doc, "h.pfproj", "0.1.0", null);
+    const back = documentFromProjectFrame(decodeFrame<ProjectHeader>(encodeFrame(header as unknown as Record<string, unknown>, blobs)));
+    expect(getHistory(back)).toHaveLength(2);
+    expect(getHistory(back)[1]!.maskRect).toEqual({ x: 0, y: 0, w: 1, h: 1 });
+    expect(getHistory(back)[0]!.status).toBe("running");
+  });
+
+  it("never writes AI diff overlay layers and keeps them out of composites", () => {
+    const doc = createDocument({ name: "D", width: 2, height: 2, background: "white" });
+    const overlay = createRasterLayer(doc, { id: `${DIFF_LAYER_PREFIX}1`, name: "AI diff", raster: Raster.filled(2, 2, { r: 255, g: 0, b: 255, a: 255 }) });
+    doc.layers.push(overlay);
+    doc.activeLayerId = overlay.id;
+    const { header } = projectFrameParts(doc, "d.pfproj", "0.1.0", null);
+    expect(header.manifest.layers.map((l) => l.id)).not.toContain(overlay.id);
+    expect(header.layers).toHaveLength(1);
+    expect(header.manifest.active_layer).toBe(doc.layers[0]!.id);
+    // The live document still has the overlay.
+    expect(doc.layers).toHaveLength(2);
+    const clean = withoutDiffOverlays(doc);
+    expect(compositeToRaster(clean).getPixel(0, 0)).toEqual({ r: 255, g: 255, b: 255, a: 255 });
+    expect(compositeToRaster(doc).getPixel(0, 0)).toEqual({ r: 255, g: 0, b: 255, a: 255 });
+    expect(withoutDiffOverlays(clean)).toBe(clean);
   });
 
   it("writes a thumbnail blob when given", () => {

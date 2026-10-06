@@ -79,7 +79,8 @@
   .backdrop {
     position: fixed;
     inset: 0;
-    z-index: 100;
+    /* Above the Free Transform overlay (800) and the filters' live-preview dialogs (900). */
+    z-index: 950;
     display: grid;
     place-items: center;
     background: rgba(4, 6, 10, 0.55);

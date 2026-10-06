@@ -24,6 +24,13 @@ import { toast } from "$lib/stores/toast.svelte";
 import { registerCommands } from "../registry.svelte";
 import { openDialog } from "../dialogs/dialogs.svelte";
 import LayerPropsDialog from "../dialogs/LayerPropsDialog.svelte";
+import { removeDiffOverlay } from "$lib/ai/overlay";
+
+/** Merges bake pixels together: drop the screen-only AI diff overlay first so it is never merged in. */
+function dropOverlay(): void {
+  const open = docStore.active;
+  if (open) removeDiffOverlay(open);
+}
 
 const doc = () => docStore.doc;
 const active = (): Layer | null => {
@@ -157,9 +164,9 @@ registerCommands([
   { id: "layer.flipV", label: "Flip layer vertical", menu: "Layer/Transform", order: 351, enabled: () => !!activeRaster(), run: () => { const d = doc(); const l = activeRaster(); if (d && l) docStore.exec(flipLayerCommand(d, l.id, "v")); } },
   { id: "layer.rotateCW", label: "Rotate layer 90° clockwise", menu: "Layer/Transform", order: 352, enabled: () => !!activeRaster(), run: () => { const d = doc(); const l = activeRaster(); if (d && l) docStore.exec(rotateLayer90Command(d, l.id, true)); } },
   { id: "layer.rotateCCW", label: "Rotate layer 90° counter-clockwise", menu: "Layer/Transform", order: 353, enabled: () => !!activeRaster(), run: () => { const d = doc(); const l = activeRaster(); if (d && l) docStore.exec(rotateLayer90Command(d, l.id, false)); } },
-  { id: "layer.mergeDown", label: "Merge down", menu: "Layer", order: 400, shortcut: "CmdOrCtrl+E", enabled: canMergeDown, run: () => { const l = active(); if (l && canMergeDown()) docStore.exec(new MergeDownCommand(l.id)); } },
-  { id: "layer.mergeVisible", label: "Merge visible", menu: "Layer", order: 401, shortcut: "CmdOrCtrl+Shift+M", enabled: () => (doc()?.layers.length ?? 0) > 1, run: () => docStore.exec(new MergeVisibleCommand()) },
-  { id: "layer.flatten", label: "Flatten image", menu: "Layer", order: 402, enabled: () => (doc()?.layers.length ?? 0) > 1, run: () => docStore.exec(new FlattenCommand()) },
+  { id: "layer.mergeDown", label: "Merge down", menu: "Layer", order: 400, shortcut: "CmdOrCtrl+E", enabled: canMergeDown, run: () => { dropOverlay(); const l = active(); if (l && canMergeDown()) docStore.exec(new MergeDownCommand(l.id)); } },
+  { id: "layer.mergeVisible", label: "Merge visible", menu: "Layer", order: 401, shortcut: "CmdOrCtrl+Shift+M", enabled: () => (doc()?.layers.length ?? 0) > 1, run: () => { dropOverlay(); if ((doc()?.layers.length ?? 0) > 1) docStore.exec(new MergeVisibleCommand()); } },
+  { id: "layer.flatten", label: "Flatten image", menu: "Layer", order: 402, enabled: () => (doc()?.layers.length ?? 0) > 1, run: () => { dropOverlay(); if ((doc()?.layers.length ?? 0) > 1) docStore.exec(new FlattenCommand()); } },
   { id: "layer.toggleVisible", label: "Show / hide layer", menu: "Layer", order: 500, enabled: () => !!active(), run: () => { const l = active(); if (l) docStore.exec(new SetLayerPropsCommand(l.id, { visible: !l.visible })); } },
   { id: "layer.toggleLock", label: "Lock / unlock layer", menu: "Layer", order: 501, shortcut: "CmdOrCtrl+/", enabled: () => !!active(), run: () => { const l = active(); if (l) docStore.exec(new SetLayerPropsCommand(l.id, { locked: !l.locked })); } },
 ]);

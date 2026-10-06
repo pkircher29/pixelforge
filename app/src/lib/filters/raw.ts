@@ -1,15 +1,12 @@
 /**
  * Raw (non-proxied) engine objects behind the doc store.
  *
- * `docStore.docs` is `$state<OpenDoc[]>`, so `docStore.doc`, `.layers[i]` and
- * `docStore.activeLayer` are Svelte 5 deep proxies of the plain `Document` / `Layer`
- * objects. Reads fall through to the raw objects, but a *write* through a proxy (e.g.
- * `layer.raster = r`) is stored in the proxy's own signal and never reaches the raw
- * document that `History` and every `Command` operate on — the two views silently
- * diverge. Class instances (Raster, Selection, History, Viewport) are not proxied.
- *
- * Rule for this module: read ids through the store, then mutate only raw objects
- * obtained here. `History.doc` is the raw document the store was opened with.
+ * Historical note: `docStore.docs` used to be deep `$state`, so `docStore.doc` and
+ * `docStore.activeLayer` were Svelte proxies and writes through them never reached the
+ * raw document that `History` and every `Command` operate on. The store is now
+ * `$state.raw` with class-instance entries, so `docStore.doc === entry.history.doc`.
+ * These helpers are kept as the explicit "I am about to mutate" entry point for the
+ * filters module; they are harmless either way.
  */
 
 import type { Document, Layer, LayerId, RasterLayer } from "$lib/engine";
