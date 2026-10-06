@@ -138,6 +138,23 @@ UI: Settings ▸ **AI Providers** (replaces "AI API Keys"): left list (built-ins
 
 Research first (same rule as v0.1: verify endpoints from official docs, cite in `docs/ai-research.md` §4 "Custom providers").
 
+### 1c. Multi-model shootout (Paul: "one text prompt and all the models return images; keep one, some, or all")
+
+Command `ai.shootout` "Generate with all models…" (menu AI, Ctrl+Shift+Alt+M) and a **"Run on all ▸"** split-button
+next to Run in the AI panel. Flow: one prompt (+ negative, size, n per model) → fan out one job per
+*enabled* provider (built-in + custom; a checklist lets the user exclude some; remembered) → a **Results
+gallery** dialog (`lib/ui/dialogs/AiShootout.svelte`): grid of cards, one column per provider, rows per
+variant; each card shows the image (zoomable on hover/click → lightbox with A/B flip between any two),
+provider/model, elapsed, cost, and a checkbox; per-column "select all"; footer: **Keep as layers** (each kept
+image → its own layer named `<Provider>: <prompt>`, stacked, all hidden except the top? no — all visible,
+top-most selected), **Keep as new documents**, **Keep & re-run unselected** (re-roll only the ones you
+didn't like), Discard. Works for all three modes (generate / mask / instruct): in mask/instruct mode every
+provider gets the same composite + mask, so the gallery becomes a direct "which model did the edit best"
+comparison with the original shown as the first column. Jobs stream in as they finish (cards fill in;
+failures show the typed error in the card with a retry). The AI History records the shootout as one entry
+with per-provider sub-results and which were kept. Owned by `ai-custom` (`lib/ai/shootout.ts`, the dialog,
+command, history schema bump); `panels-v2` wires the split-button into the restyled panel.
+
 ---
 
 ## 2. Tools — full Photoshop CC single-column toolbar
