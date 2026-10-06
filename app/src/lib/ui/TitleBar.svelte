@@ -1,21 +1,15 @@
 <script lang="ts">
   /**
-   * Custom dark title bar.
-   *
-   * Dragging: every element that should start a window drag carries
-   * `data-tauri-drag-region` (Tauri only honours the attribute on the event target
-   * itself, not on ancestors). Double-click toggles maximize (also handled by Tauri).
-   *
-   * Buttons call `@tauri-apps/api/window`; in a plain browser (`npm run dev`) they are
-   * no-ops so the shell can still be previewed.
+   * Custom title bar: brand, registry-driven menus, centred document title, window
+   * controls. Drag regions carry `data-tauri-drag-region` on the element itself.
    */
   import { isTauri } from "@tauri-apps/api/core";
   import { getCurrentWindow } from "@tauri-apps/api/window";
+  import MenuBar from "./MenuBar.svelte";
 
   interface Props {
     title?: string;
   }
-
   let { title = "Pixelforge" }: Props = $props();
 
   const inTauri = isTauri();
@@ -24,13 +18,10 @@
 
   let maximized = $state(false);
 
-  const menus = ["File", "Edit", "Image", "Layer", "Select", "Filter", "AI", "View", "Window", "Help"];
-
   $effect(() => {
     if (!win) return;
     let cancelled = false;
     let unlisten: (() => void) | undefined;
-
     const sync = async () => {
       try {
         maximized = await win.isMaximized();
@@ -39,7 +30,6 @@
       }
     };
     void sync();
-
     win
       .onResized(() => void sync())
       .then((fn) => {
@@ -47,11 +37,14 @@
         else unlisten = fn;
       })
       .catch((err: unknown) => console.warn("onResized failed", err));
-
     return () => {
       cancelled = true;
       unlisten?.();
     };
+  });
+
+  $effect(() => {
+    if (win) void win.setTitle(title).catch(() => {});
   });
 
   async function run(action: "minimize" | "toggleMaximize" | "close") {
@@ -70,13 +63,10 @@
     <span class="name" data-tauri-drag-region>Pixelforge</span>
   </div>
 
-  <nav class="menus" aria-label="Main menu">
-    {#each menus as m (m)}
-      <button type="button" class="menu" disabled title="{m} menu (coming soon)">{m}</button>
-    {/each}
-  </nav>
+  <MenuBar />
 
   <div class="title" data-tauri-drag-region>{title}</div>
+  <div class="spacer" data-tauri-drag-region></div>
 
   {#if !isMac}
     <div class="controls">
@@ -116,85 +106,57 @@
     padding-left: 12px;
     background: linear-gradient(180deg, var(--bg-2) 0%, var(--bg-1) 100%);
     border-bottom: 1px solid var(--border);
-    box-shadow: var(--shadow-1);
-    z-index: 10;
+    z-index: 50;
   }
-
-  /* macOS: native traffic lights sit at the left (titleBarStyle: Overlay). */
   .titlebar.mac {
     padding-left: 84px;
   }
-
   .brand {
     display: flex;
     align-items: center;
     gap: 8px;
-    margin-right: 14px;
+    margin-right: 12px;
   }
-
   .logo {
     width: 16px;
     height: 16px;
     border-radius: 5px;
     background: linear-gradient(135deg, var(--accent) 0%, var(--accent-2) 100%);
-    box-shadow: 0 0 10px rgba(124, 92, 255, 0.55);
+    box-shadow: 0 0 10px rgba(139, 108, 255, 0.5);
   }
-
   .name {
-    font-weight: 700;
+    font-weight: 600;
     font-size: var(--fs-md);
-    letter-spacing: 0.2px;
-    background: linear-gradient(90deg, var(--fg-0), var(--fg-1));
-    -webkit-background-clip: text;
-    background-clip: text;
-    color: transparent;
-  }
-
-  .menus {
-    display: flex;
-    gap: 2px;
-  }
-
-  .menu {
-    padding: 4px 8px;
-    border-radius: var(--radius-sm);
-    font-size: var(--fs-sm);
-    color: var(--fg-1);
-  }
-  .menu:not(:disabled):hover {
-    background: var(--bg-3);
+    letter-spacing: -0.01em;
     color: var(--fg-0);
   }
-  .menu:disabled {
-    color: var(--fg-2);
-  }
-
   .title {
     position: absolute;
     left: 50%;
     transform: translateX(-50%);
-    max-width: 40%;
+    max-width: 34%;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
     font-size: var(--fs-sm);
-    color: var(--fg-1);
+    color: var(--fg-2);
     pointer-events: none;
   }
-
-  .controls {
-    display: flex;
-    margin-left: auto;
+  .spacer {
+    flex: 1;
     height: 100%;
   }
-
+  .controls {
+    display: flex;
+    height: 100%;
+  }
   .ctl {
     width: 46px;
     height: 100%;
     display: grid;
     place-items: center;
     color: var(--fg-1);
-    transition: background 90ms ease, color 90ms ease;
+    transition: background var(--t-fast) ease-out, color var(--t-fast) ease-out;
   }
   .ctl:hover {
     background: var(--bg-3);

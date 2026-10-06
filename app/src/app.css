@@ -1,47 +1,53 @@
-/* Pixelforge dark theme tokens. Light theme is v2; keep every colour behind a token. */
+/* Pixelforge theme. Dark-first; every colour is a token so a light theme (v2) only swaps :root. */
 :root {
   color-scheme: dark;
 
-  /* Surfaces, darkest to lightest */
-  --bg-0: #0b0d12;
-  --bg-1: #12151c;
-  --bg-2: #1a1e27;
-  --bg-3: #232835;
+  /* Surfaces: a blue-cast near-black so the white canvas reads as the brightest thing. */
+  --bg-0: #090b10; /* canvas well */
+  --bg-1: #10131a; /* chrome */
+  --bg-2: #161a23; /* raised rows, panel heads */
+  --bg-3: #1f2430; /* hover */
 
-  /* Text, strongest to weakest */
-  --fg-0: #eef1f7;
-  --fg-1: #aab1c2;
-  --fg-2: #6b7384;
+  /* Text */
+  --fg-0: #e9ecf3;
+  --fg-1: #a4abbb;
+  --fg-2: #666d7d;
 
-  /* Brand */
-  --accent: #7c5cff;
+  /* One accent for "what is live"; cyan only for ok/GL/live indicators. */
+  --accent: #8b6cff;
   --accent-2: #22d3ee;
-  --accent-soft: rgba(124, 92, 255, 0.18);
+  --accent-soft: rgba(139, 108, 255, 0.16);
   --danger: #ff5c7a;
+  --ok: #3ddc97;
 
-  /* Lines */
+  /* Hairlines */
   --border: rgba(255, 255, 255, 0.07);
-  --border-strong: rgba(255, 255, 255, 0.14);
+  --border-strong: rgba(255, 255, 255, 0.13);
 
-  /* Shape */
+  /* Glass for floating surfaces only (menus, palette, dialogs, toasts). */
+  --glass: rgba(22, 26, 35, 0.82);
+
   --radius-sm: 4px;
-  --radius-md: 8px;
+  --radius-md: 7px;
   --radius-lg: 12px;
 
-  /* Depth */
   --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.45);
-  --shadow-2: 0 8px 24px rgba(0, 0, 0, 0.55);
-  --glow-accent: 0 0 0 1px rgba(124, 92, 255, 0.35), 0 0 18px rgba(124, 92, 255, 0.35);
+  --shadow-2: 0 16px 40px rgba(0, 0, 0, 0.55);
+  --glow-accent: 0 0 0 1px rgba(139, 108, 255, 0.45), 0 0 14px rgba(139, 108, 255, 0.3);
 
   /* Layout */
   --titlebar-h: 38px;
-  --toolbar-w: 48px;
-  --panel-w: 280px;
+  --toolbar-w: 44px;
+  --optionsbar-h: 36px;
+  --tabs-h: 30px;
   --statusbar-h: 24px;
 
+  /* Motion: short, ease-out, never bouncy. */
+  --t-fast: 120ms;
+  --t-mid: 180ms;
+
   /* Type */
-  --font-ui: "Segoe UI Variable", "Segoe UI", system-ui, -apple-system, "Inter", Roboto,
-    "Helvetica Neue", Arial, sans-serif;
+  --font-ui: "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, "Inter", Roboto, "Helvetica Neue", Arial, sans-serif;
   --font-mono: "Cascadia Code", "JetBrains Mono", Consolas, "SF Mono", Menlo, monospace;
   --fs-xs: 11px;
   --fs-sm: 12px;
@@ -95,6 +101,191 @@ button:focus-visible,
   outline-offset: -2px;
 }
 
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+/* ---- shared controls ---------------------------------------------------- */
+
+.input,
+.select {
+  height: 24px;
+  padding: 0 7px;
+  background: var(--bg-0);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  color: var(--fg-0);
+  font-size: var(--fs-sm);
+  outline: none;
+  transition: border-color var(--t-fast) ease-out, box-shadow var(--t-fast) ease-out;
+}
+.input {
+  user-select: text;
+  -webkit-user-select: text;
+  font-variant-numeric: tabular-nums;
+}
+.input[type="number"] {
+  font-family: var(--font-mono);
+}
+.input:focus,
+.select:focus {
+  border-color: var(--accent);
+  box-shadow: var(--glow-accent);
+}
+.input:disabled,
+.select:disabled {
+  color: var(--fg-2);
+}
+.select {
+  padding-right: 4px;
+}
+.select option {
+  background: var(--bg-2);
+}
+input[type="number"]::-webkit-inner-spin-button {
+  opacity: 0.4;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 14px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  background: var(--bg-2);
+  color: var(--fg-0);
+  font-size: var(--fs-sm);
+  transition: background var(--t-fast) ease-out, border-color var(--t-fast) ease-out, box-shadow var(--t-fast) ease-out;
+}
+.btn:hover:not(:disabled) {
+  background: var(--bg-3);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+.btn:disabled {
+  color: var(--fg-2);
+}
+.btn.primary {
+  background: var(--accent);
+  border-color: transparent;
+  color: #fff;
+}
+.btn.primary:hover:not(:disabled) {
+  background: #9b80ff;
+  box-shadow: 0 0 16px rgba(139, 108, 255, 0.4);
+}
+.btn.danger {
+  color: var(--danger);
+}
+.btn.sm {
+  height: 24px;
+  padding: 0 10px;
+}
+
+.icon-btn {
+  display: inline-grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius-sm);
+  color: var(--fg-2);
+  transition: background var(--t-fast) ease-out, color var(--t-fast) ease-out;
+}
+.icon-btn:hover:not(:disabled) {
+  background: var(--bg-3);
+  color: var(--fg-0);
+}
+.icon-btn:disabled {
+  opacity: 0.4;
+}
+
+/* Floating surfaces */
+.glass {
+  background: var(--glass);
+  backdrop-filter: blur(16px) saturate(140%);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-2), 0 0 0 1px rgba(0, 0, 0, 0.45);
+}
+
+/* Range sliders */
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 14px;
+  background: transparent;
+  cursor: default;
+}
+input[type="range"]::-webkit-slider-runnable-track {
+  height: 3px;
+  border-radius: 2px;
+  background: var(--bg-3);
+}
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 12px;
+  height: 12px;
+  margin-top: -4.5px;
+  border-radius: 50%;
+  background: var(--fg-0);
+  border: 1px solid rgba(0, 0, 0, 0.5);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+  transition: box-shadow var(--t-fast) ease-out;
+}
+input[type="range"]:hover::-webkit-slider-thumb,
+input[type="range"]:focus-visible::-webkit-slider-thumb {
+  box-shadow: var(--glow-accent);
+}
+input[type="range"]:focus-visible {
+  outline: none;
+}
+input[type="range"]:disabled {
+  opacity: 0.4;
+}
+input[type="checkbox"] {
+  accent-color: var(--accent);
+  margin: 0;
+}
+
+/* Tooltips: data-tip on any positioned element. Delayed so they don't flicker. */
+[data-tip] {
+  position: relative;
+}
+[data-tip]::after {
+  content: attr(data-tip);
+  position: absolute;
+  left: 50%;
+  top: calc(100% + 6px);
+  transform: translateX(-50%);
+  z-index: 200;
+  padding: 3px 8px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-3);
+  border: 1px solid var(--border-strong);
+  box-shadow: var(--shadow-1);
+  color: var(--fg-0);
+  font-size: var(--fs-xs);
+  font-weight: 400;
+  white-space: pre;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity var(--t-fast) ease-out 450ms;
+}
+[data-tip]:hover::after {
+  opacity: 1;
+}
+/* Vertical toolbar tooltips sit to the right. */
+aside[aria-label="Tools"] [data-tip]::after {
+  left: calc(100% + 8px);
+  top: 50%;
+  transform: translateY(-50%);
+}
+
 ::-webkit-scrollbar {
   width: 10px;
   height: 10px;
@@ -109,4 +300,13 @@ button:focus-visible,
 }
 ::-webkit-scrollbar-thumb:hover {
   background: var(--fg-2);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0ms !important;
+    animation-duration: 0ms !important;
+  }
 }
