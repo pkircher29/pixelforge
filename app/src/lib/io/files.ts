@@ -94,13 +94,15 @@ export async function pickSavePath(defaultName: string, kind: "pfproj" | ExportF
 export async function saveProject(entry: OpenDoc, path: string): Promise<void> {
   requireTauri();
   const doc = entry.doc;
+  // The display name follows the file (Save As "poster.pfproj" -> "poster"); set it
+  // before the manifest is built so `doc.name` in the file matches the tab on reopen.
+  doc.name = baseName(path);
   const thumb = thumbnailOf(doc, 512);
   const { header, blobs } = projectFrameParts(doc, path, APP_VERSION, thumb);
   const body = encodeFrame({ ...header }, blobs);
   const res = await invoke<{ path: string; bytes: number; modified: string }>("io_save_pfproj", body);
   doc.meta.modified = res.modified;
   if (typeof doc.meta.created !== "string" || !doc.meta.created) doc.meta.created = res.modified;
-  doc.name = baseName(path);
   docStore.markSaved(res.path);
   await recentAdd(res.path);
 }

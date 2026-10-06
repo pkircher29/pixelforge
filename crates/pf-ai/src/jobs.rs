@@ -163,8 +163,15 @@ pub struct JobEvent {
 }
 
 /// Lifecycle transitions.
+///
+/// `rename_all_fields` matters: the UI reads `durationMs` (docs/ipc.md); `rename_all`
+/// alone only renames the variant tags.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(tag = "type", rename_all = "camelCase")]
+#[serde(
+    tag = "type",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
 pub enum JobEventKind {
     /// Accepted and waiting.
     Queued,
@@ -503,5 +510,25 @@ mod tests {
         assert_eq!(v["code"], "ai_http");
         let st = serde_json::to_value(JobStatus::Queued).expect("ser");
         assert_eq!(st["state"], "queued");
+    }
+
+    #[test]
+    fn completed_event_uses_camel_case_fields() {
+        // The webview reads `durationMs` (docs/ipc.md); `rename_all` alone leaves struct
+        // variant fields snake_case, which surfaced as "NaN s" in the jobs list.
+        let ev = JobEvent {
+            job: JobId("abc".into()),
+            provider: ProviderId::Gemini,
+            kind: JobEventKind::Completed {
+                results: vec![],
+                duration_ms: 1234,
+            },
+        };
+        let v = serde_json::to_value(&ev).expect("ser");
+        assert_eq!(v["type"], "completed");
+        assert_eq!(v["durationMs"], 1234);
+        assert!(v.get("duration_ms").is_none());
+        let back: JobEvent = serde_json::from_value(v).expect("de");
+        assert_eq!(back, ev);
     }
 }
