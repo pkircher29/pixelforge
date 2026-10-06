@@ -46,6 +46,7 @@
   let lastDpr = 0;
   let lastRulerKey = "";
   let lastChecker = -1;
+  let lastViewChannel = "rgb";
 
   // Pointer state.
   let panning: { x: number; y: number } | null = null;
@@ -161,9 +162,11 @@
     const sizeChanged = cssW !== lastW || cssH !== lastH || dpr !== lastDpr;
     const vpChanged = !lastVp || !vp.equals(lastVp);
     const checker = checkerSizePx(dpr);
-    const need = sizeChanged || vpChanged || entry.version !== lastVersion || ants !== lastAnts || checker !== lastChecker;
+    const viewChannel = ui.viewChannel;
+    const need = sizeChanged || vpChanged || entry.version !== lastVersion || ants !== lastAnts || checker !== lastChecker || viewChannel !== lastViewChannel;
     if (need) {
       lastChecker = checker;
+      lastViewChannel = viewChannel;
       const t0 = performance.now();
       stats = c.render(doc, vp, {
         width: Math.round(cssW * dpr),
@@ -174,6 +177,7 @@
         showPixelGrid: ui.showPixelGrid,
         checkerSize: checker,
         activeLayerId: doc.activeLayerId,
+        viewChannel,
       });
       if (sizeChanged || vpChanged || entry.version !== lastVersion) ui.lastRenderMs = performance.now() - t0;
       lastVersion = entry.version;

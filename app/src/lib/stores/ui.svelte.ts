@@ -4,6 +4,8 @@
  * document-independent. Preferences that must survive machines live in `settings`.
  */
 
+import type { ViewChannel } from "$lib/engine/types";
+
 const LS_KEY = "pixelforge.ui.v2";
 export const DEFAULT_DOCK_WIDTH = 280;
 
@@ -106,6 +108,12 @@ class UiStore {
   recentFiles = $state<string[]>([]);
   /** Last frame render time in ms (status bar "Timing"). */
   lastRenderMs = $state(0);
+  /**
+   * Channel view (Channels panel / Alt-click mask): `"rgb"` composite, `"r"|"g"|"b"`,
+   * `"alpha:<id>"` or `"mask"` (the active layer's mask). Not persisted; reset to
+   * `"rgb"` when the document changes. Owned by `layers-v2`, read by CanvasView.
+   */
+  viewChannel = $state<ViewChannel>("rgb");
 
   constructor() {
     const p = load();
