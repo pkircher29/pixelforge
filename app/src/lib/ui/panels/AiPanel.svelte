@@ -14,7 +14,6 @@
     ChevronDown,
     ChevronRight,
     ImagePlus,
-    KeyRound,
     LoaderCircle,
     ScanEye,
     Sparkles,
@@ -23,15 +22,18 @@
   import { Raster } from "$lib/engine";
   import { decodeFrame } from "$lib/io/frame";
   import { docStore } from "$lib/stores/doc.svelte";
+  import { assistProviders, improvePrompt } from "$lib/ai/assist";
   import { hasTauri } from "$lib/ai/client";
   import { openApiKeysDialog } from "$lib/ai/dialogs";
   import { jobStore, TERMINAL, type AiJob } from "$lib/ai/jobs.svelte";
   import { toggleDiffOverlay } from "$lib/ai/overlay";
   import { decodeImage, thumbnailDataUrl } from "$lib/ai/png";
   import { estimateCost, formatUsd } from "$lib/ai/pricing";
+  import ProviderPicker from "$lib/ai/ProviderPicker.svelte";
   import { applyAll, applyOne, resolveForDoc, resultPreviews, runAi, runFor, type AiRunRequest } from "$lib/ai/run";
+  import { runOnAll } from "$lib/ai/shootout";
   import { aiUi, type SizeOption } from "$lib/ai/ui.svelte";
-  import { PROVIDER_LABEL, PROVIDER_IDS, type AiMode, type ImageSize, type ProviderId } from "$lib/ai/types";
+  import { type AiMode, type ImageSize, type ProviderId } from "$lib/ai/types";
 
   let promptEl = $state<HTMLTextAreaElement | null>(null);
   let dropEl = $state<HTMLDivElement | null>(null);
@@ -105,11 +107,36 @@
 
   const cost = $derived(
     provider
-      ? estimateCost({ provider: provider.id, model: effectiveModel, mode, size: chosenSize, quality: aiUi.quality || undefined, n: aiUi.n })
+      ? estimateCost({ provider: provider.id, model: effectiveModel, mode, size: chosenSize, quality: aiUi.quality || undefined, n: aiUi.n, local: provider.local })
       : null,
   );
 
-  const canRun = $derived(Boolean(provider && aiUi.prompt.trim().length > 0 && !busy && (provider?.hasKey || !hasTauri())));
+  const canRun = $derived(Boolean(provider && aiUi.prompt.trim().length > 0 && !busy && (provider?.hasKey || provider?.keyOptional || !hasTauri())));
+  const assistants = $derived(assistProviders(aiUi.providers));
+  let improving = $state(false);
+
+  // Wave 5 hooks (ai-custom): "Run on all ▸" and "✨ Improve prompt"; the Wave 6 restyle
+  // keeps these behind a split-button / icon.
+  function runAll(): void {
+    notice = null;
+    void runOnAll().catch((e: unknown) => {
+      notice = { kind: "error", text: e instanceof Error ? e.message : String(e) };
+    });
+  }
+
+  async function improve(): Promise<void> {
+    improving = true;
+    notice = null;
+    try {
+      await improvePrompt();
+      notice = { kind: "info", text: `${assistants[0]?.name ?? "Ollama"} rewrote the prompt.` };
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : ((e as { message?: string }).message ?? String(e));
+      notice = { kind: "error", text: msg };
+    } finally {
+      improving = false;
+    }
+  }
   const modeLabel = $derived(mode === "generate" ? "Generate" : mode === "mask" ? "Mask edit" : "Instruct edit");
   const flow = $derived.by(() => {
     const name = provider?.name ?? "provider";
@@ -153,8 +180,8 @@
 
   function pickProvider(id: ProviderId): void {
     const p = aiUi.providers.find((x) => x.id === id);
-    if (p && !p.hasKey && hasTauri()) {
-      openApiKeysDialog();
+    if (p && !p.hasKey && !p.keyOptional && hasTauri()) {
+      openApiKeysDialog({ select: id });
     }
     aiUi.providerId = id;
     aiUi.model = "";
@@ -298,34 +325,10 @@
     }
   }
 
-  const providerRows = $derived(
-    PROVIDER_IDS.map((id) => {
-      const p = aiUi.providers.find((x) => x.id === id);
-      return { id, name: p?.name ?? PROVIDER_LABEL[id], hasKey: p?.hasKey ?? false, known: Boolean(p) };
-    }),
-  );
 </script>
 
 <div class="ai" onpaste={onPaste}>
-  <div class="providers" role="radiogroup" aria-label="Provider">
-    {#each providerRows as p (p.id)}
-      <button
-        type="button"
-        class="chip"
-        class:on={aiUi.providerId === p.id}
-        role="radio"
-        aria-checked={aiUi.providerId === p.id}
-        title={p.hasKey ? `${p.name}: key saved` : `${p.name}: no key yet, click to add one`}
-        onclick={() => pickProvider(p.id)}
-      >
-        <span class="dot" class:ok={p.hasKey}></span>
-        {p.name}
-      </button>
-    {/each}
-    <button type="button" class="icon" title="AI API keys" aria-label="AI API keys" onclick={openApiKeysDialog}>
-      <KeyRound size={14} />
-    </button>
-  </div>
+  <ProviderPicker providers={aiUi.providers} selected={aiUi.providerId} onselect={pickProvider} onmanage={() => openApiKeysDialog()} />
 
   {#if aiUi.providersError}
     <p class="notice error">{aiUi.providersError}</p>
@@ -451,11 +454,15 @@
       {#if busy}<LoaderCircle size={14} class="spin" />{:else}<Sparkles size={14} />{/if}
       Run
     </button>
-    {#if cost}
-      <span class="cost" title={cost.note}>{formatUsd(cost.usd, cost.approx)}</span>
+    <button type="button" class="link" disabled={!aiUi.prompt.trim()} title="Generate with all models (Ctrl+Shift+Alt+M)" onclick={runAll}>Run on all ▸</button>
+    {#if assistants.length}
+      <button type="button" class="link" disabled={improving} title="Rewrite the prompt with {assistants[0]?.name} (vision model); never generates an image" onclick={() => void improve()}>{improving ? "✨ …" : "✨ Improve prompt"}</button>
     {/if}
-    {#if provider && !provider.hasKey && hasTauri()}
-      <button type="button" class="link" onclick={openApiKeysDialog}>Add {provider.name} key</button>
+    {#if cost}
+      <span class="cost" title={cost.note}>{provider?.local ? "free" : formatUsd(cost.usd, cost.approx)}</span>
+    {/if}
+    {#if provider && !provider.hasKey && !provider.keyOptional && hasTauri()}
+      <button type="button" class="link" onclick={() => openApiKeysDialog({ select: provider.id })}>Add {provider.name} key</button>
     {/if}
   </div>
 
@@ -541,41 +548,6 @@
   }
   .ai > * {
     flex: none;
-  }
-
-  .providers {
-    display: flex;
-    gap: 4px;
-    align-items: center;
-  }
-  .chip {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 4px 9px;
-    border-radius: 999px;
-    background: var(--bg-2);
-    border: 1px solid var(--border);
-    color: var(--fg-1);
-  }
-  .chip:hover {
-    color: var(--fg-0);
-    border-color: var(--border-strong);
-  }
-  .chip.on {
-    background: var(--accent-soft);
-    border-color: var(--accent);
-    color: var(--fg-0);
-  }
-  .dot {
-    width: 7px;
-    height: 7px;
-    border-radius: 50%;
-    background: var(--fg-2);
-  }
-  .dot.ok {
-    background: var(--ok);
-    box-shadow: 0 0 6px rgba(67, 209, 122, 0.6);
   }
 
   .icon {

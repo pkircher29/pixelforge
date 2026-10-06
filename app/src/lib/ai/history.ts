@@ -6,23 +6,55 @@
  */
 
 import type { Document, Rect } from "$lib/engine";
-import type { AiMode, ImageSize, ProviderId } from "./types";
+import { isProviderId, type AiMode, type ImageSize, type ProviderId } from "./types";
 
 export const AI_HISTORY_KEY = "aiHistory";
-export const AI_HISTORY_SCHEMA = 1;
+/** 2: custom provider ids (`custom:<id>`), `mode: "shootout"` with `subResults` / `kept`. */
+export const AI_HISTORY_SCHEMA = 2;
 
 export type AiHistoryStatus = "running" | "completed" | "failed" | "cancelled";
+
+/** `shootout` = one prompt fanned out to several providers (`subResults`). */
+export type AiHistoryMode = AiMode | "shootout";
+
+/** One provider's outcome inside a shootout entry. */
+export interface AiShootoutSubResult {
+  provider: ProviderId;
+  providerName: string;
+  model: string;
+  /** The mode this provider ran (mask may be emulated per provider). */
+  mode: AiMode;
+  emulated: boolean;
+  status: AiHistoryStatus;
+  durationMs: number;
+  costUsd?: number;
+  error?: { code: string; message: string };
+  /** Data URL thumbnails, one per variant. */
+  thumbs: string[];
+}
+
+/** A variant the user kept from a shootout. */
+export interface AiShootoutKept {
+  provider: ProviderId;
+  /** Variant index within that provider's results. */
+  index: number;
+  /** `layer` = added to the document; `document` = opened as a new document. */
+  as: "layer" | "document";
+  layerId?: string;
+  docId?: string;
+}
 
 export interface AiHistoryEntry {
   /** Unique within the document (`ai_<8 hex>`). */
   id: string;
   /** Unix ms when the job was submitted. */
   ts: number;
+  /** For a shootout: the first provider that took part. */
   provider: ProviderId;
-  /** `ChatGPT` / `Grok` / `Gemini` at the time of the run. */
+  /** `ChatGPT` / `Grok` / `Gemini` / custom name at the time of the run; "Shootout (n)" for shootouts. */
   providerName: string;
   model: string;
-  mode: AiMode;
+  mode: AiHistoryMode;
   /** Mask mode on a provider without native masks. */
   emulated: boolean;
   prompt: string;
@@ -48,6 +80,23 @@ export interface AiHistoryEntry {
   durationMs: number;
   status: AiHistoryStatus;
   error?: { code: string; message: string };
+  /** Shootout only: one entry per provider that took part. */
+  subResults?: AiShootoutSubResult[];
+  /** Shootout only: which variants were kept and where they went. */
+  kept?: AiShootoutKept[];
+}
+
+/** Runtime guard for one shootout sub-result. */
+export function isShootoutSubResult(v: unknown): v is AiShootoutSubResult {
+  if (typeof v !== "object" || v === null) return false;
+  const s = v as Record<string, unknown>;
+  return (
+    isProviderId(s.provider) &&
+    typeof s.model === "string" &&
+    (s.mode === "generate" || s.mode === "mask" || s.mode === "instruct") &&
+    typeof s.status === "string" &&
+    Array.isArray(s.thumbs)
+  );
 }
 
 let counter = 0;
@@ -63,17 +112,19 @@ export function newHistoryId(): string {
 export function isAiHistoryEntry(v: unknown): v is AiHistoryEntry {
   if (typeof v !== "object" || v === null) return false;
   const e = v as Record<string, unknown>;
-  return (
+  const base =
     typeof e.id === "string" &&
     typeof e.ts === "number" &&
-    (e.provider === "open_ai" || e.provider === "x_ai" || e.provider === "gemini") &&
+    isProviderId(e.provider) &&
     typeof e.model === "string" &&
-    (e.mode === "generate" || e.mode === "mask" || e.mode === "instruct") &&
+    (e.mode === "generate" || e.mode === "mask" || e.mode === "instruct" || e.mode === "shootout") &&
     typeof e.prompt === "string" &&
     Array.isArray(e.resultThumbs) &&
     Array.isArray(e.resultLayerIds) &&
-    typeof e.status === "string"
-  );
+    typeof e.status === "string";
+  if (!base) return false;
+  if (e.mode === "shootout") return Array.isArray(e.subResults) && e.subResults.every(isShootoutSubResult);
+  return true;
 }
 
 /** Read the history list (newest last). Repairs a missing/garbled slot. */

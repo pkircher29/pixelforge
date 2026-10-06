@@ -91,6 +91,43 @@ describe("AI history on doc.meta", () => {
     expect(getHistory(doc)).toEqual([]);
   });
 
+  it("schema 2: custom provider ids are accepted, unknown ids are not", () => {
+    expect(isAiHistoryEntry(entry({ provider: "custom:my-comfy", providerName: "My ComfyUI" }))).toBe(true);
+    expect(isAiHistoryEntry(entry({ provider: "custom:" as never }))).toBe(false);
+    expect(isAiHistoryEntry(entry({ provider: "dall_e" as never }))).toBe(false);
+  });
+
+  it("schema 2: a shootout entry round-trips with subResults and kept", () => {
+    const doc = createDocument({ width: 4, height: 4 });
+    const e = addEntry(
+      doc,
+      entry({
+        mode: "shootout",
+        provider: "open_ai",
+        providerName: "Shootout (2 providers)",
+        model: "",
+        emulated: false,
+        n: 1,
+        subResults: [
+          { provider: "open_ai", providerName: "ChatGPT", model: "gpt-image-2.5-flare", mode: "mask", emulated: false, status: "completed", durationMs: 900, costUsd: 0.05, thumbs: ["data:image/png;base64,AA"] },
+          { provider: "custom:comfy", providerName: "My ComfyUI", model: "sd_xl.safetensors", mode: "mask", emulated: false, status: "failed", durationMs: 10, error: { code: "ai_transport", message: "refused" }, thumbs: [] },
+        ],
+        kept: [{ provider: "open_ai", index: 0, as: "layer", layerId: "layer_9" }],
+      }),
+    );
+    const back = deserializeHistory(JSON.parse(JSON.stringify(serializeHistory(getHistory(doc)))));
+    expect(back).toHaveLength(1);
+    expect(back[0]).toEqual(e);
+    expect(back[0]!.subResults?.[1]?.error?.code).toBe("ai_transport");
+    expect(back[0]!.kept?.[0]?.layerId).toBe("layer_9");
+  });
+
+  it("schema 2: a shootout entry without valid subResults is dropped", () => {
+    expect(isAiHistoryEntry(entry({ mode: "shootout" }))).toBe(false);
+    expect(isAiHistoryEntry(entry({ mode: "shootout", subResults: [{ provider: "nope" }] as never }))).toBe(false);
+    expect(isAiHistoryEntry(entry({ mode: "shootout", subResults: [] }))).toBe(true);
+  });
+
   it("ids are unique", () => {
     const ids = new Set(Array.from({ length: 50 }, () => newHistoryId()));
     expect(ids.size).toBe(50);

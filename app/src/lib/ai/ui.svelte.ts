@@ -8,7 +8,7 @@ import type { Raster } from "$lib/engine";
 import { listProviders, hasTauri } from "./client";
 import { toFriendlyError } from "./errors";
 import type { AiRunRequest } from "./run";
-import type { AiMode, ImageSize, ProviderId, ProviderInfo } from "./types";
+import { canGenerate, isReady, type AiMode, type ImageSize, type ProviderId, type ProviderInfo } from "./types";
 
 export interface RefImage {
   id: string;
@@ -68,10 +68,7 @@ class AiUiState {
     try {
       this.providers = await listProviders();
       this.providersError = null;
-      if (!this.providers.some((p) => p.id === this.providerId)) {
-        const first = this.providers.find((p) => p.hasKey) ?? this.providers[0];
-        if (first) this.providerId = first.id;
-      }
+      this.ensureSelectable();
     } catch (e) {
       this.providersError = toFriendlyError(e).title;
     } finally {
@@ -83,7 +80,19 @@ class AiUiState {
   setProviders(list: ProviderInfo[]): void {
     this.providers = list;
     this.providersLoaded = true;
-    if (!list.some((p) => p.id === this.providerId) && list[0]) this.providerId = list[0].id;
+    this.ensureSelectable();
+  }
+
+  /**
+   * Keep `providerId` on a provider that can make images: a ready generator first, then
+   * any generator, then whatever exists (prompt-assist-only entries are never picked).
+   */
+  private ensureSelectable(): void {
+    const current = this.providers.find((p) => p.id === this.providerId);
+    if (current && canGenerate(current)) return;
+    const gens = this.providers.filter(canGenerate);
+    const pick = gens.find(isReady) ?? gens[0] ?? this.providers[0];
+    if (pick) this.providerId = pick.id;
   }
 
   addRef(ref: Omit<RefImage, "id">): void {

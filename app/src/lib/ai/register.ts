@@ -3,12 +3,13 @@
  * module once (`import("$lib/ai/register")`); nothing else in `lib/ai` has side effects.
  */
 
-import { KeyRound, ScanEye, Sparkles, WandSparkles, History as HistoryIcon, RotateCcw } from "@lucide/svelte";
+import { KeyRound, Layers, ScanEye, Sparkles, WandSparkles, History as HistoryIcon, RotateCcw } from "@lucide/svelte";
 import { docStore } from "$lib/stores/doc.svelte";
 import { registerCommands, registerPanel } from "$lib/ui/registry.svelte";
 import AiPanel from "$lib/ui/panels/AiPanel.svelte";
 import AiHistoryPanel from "$lib/ui/panels/AiHistoryPanel.svelte";
-import { openApiKeysDialog } from "./dialogs";
+import { assistProviders, improvePrompt } from "./assist";
+import { openAiProvidersDialog, openShootoutDialog } from "./dialogs";
 import { lastEntry } from "./history";
 import { toggleDiffOverlay } from "./overlay";
 import { runAi } from "./run";
@@ -19,13 +20,21 @@ registerPanel({ id: "ai-history", title: "AI History", dock: "right", order: 35,
 
 registerCommands([
   {
+    // Id kept from v0.1 so existing menu wiring still works; the dialog is now AI Providers.
     id: "settings.apiKeys",
-    label: "AI API Keys…",
+    label: "AI Providers…",
     menu: "Edit",
     order: 900,
     icon: KeyRound,
-    keywords: ["settings", "openai", "chatgpt", "grok", "xai", "gemini", "key", "token"],
-    run: () => openApiKeysDialog(),
+    keywords: ["settings", "openai", "chatgpt", "grok", "xai", "gemini", "key", "token", "ollama", "comfyui", "stable diffusion", "hugging face", "local", "custom", "api keys"],
+    run: () => openAiProvidersDialog(),
+  },
+  {
+    id: "settings.aiProviders",
+    label: "AI Providers…",
+    icon: KeyRound,
+    keywords: ["custom provider", "local model", "comfy", "a1111", "forge", "replicate"],
+    run: () => openAiProvidersDialog(),
   },
   {
     id: "ai.generate",
@@ -52,6 +61,29 @@ registerCommands([
       return Boolean(d && !d.selection.isEmpty);
     },
     run: () => aiUi.focusPrompt("mask"),
+  },
+  {
+    id: "ai.shootout",
+    label: "Generate with all models…",
+    menu: "AI",
+    order: 120,
+    shortcut: "CmdOrCtrl+Shift+Alt+M",
+    icon: Layers,
+    keywords: ["shootout", "compare", "every provider", "run on all", "multi-model"],
+    run: () => openShootoutDialog(null),
+  },
+  {
+    id: "ai.improvePrompt",
+    label: "Improve prompt with Ollama",
+    menu: "AI",
+    order: 130,
+    icon: WandSparkles,
+    keywords: ["prompt assist", "rewrite", "describe image", "llava", "vision"],
+    enabled: () => assistProviders().length > 0,
+    run: async () => {
+      await improvePrompt();
+      aiUi.focusPrompt();
+    },
   },
   {
     id: "ai.rerunLast",

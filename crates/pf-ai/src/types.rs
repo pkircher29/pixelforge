@@ -1,14 +1,15 @@
 //! Request / response shapes shared by every provider (PLAN.md section 2.2).
 
+use std::borrow::Cow;
 use std::fmt;
 
 use serde::{Deserialize, Serialize};
 
 use crate::secret::SecretString;
 
-/// Which hosted provider a request goes to.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
+/// Which provider a request goes to: one of the three built-ins, or a user-defined
+/// custom provider (`custom:<id>` on the wire, see `crate::custom`).
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum ProviderId {
     /// OpenAI (ChatGPT image models, e.g. `gpt-image-1`).
     OpenAi,
@@ -16,43 +17,102 @@ pub enum ProviderId {
     XAi,
     /// Google (Gemini image models via AI Studio).
     Gemini,
+    /// A user-configured provider (OpenAI-compatible server, Hugging Face, Ollama,
+    /// ComfyUI, A1111, Replicate). The payload is the registry id.
+    Custom(String),
 }
 
-impl ProviderId {
-    /// Every provider, in UI display order.
-    pub const ALL: [ProviderId; 3] = [ProviderId::OpenAi, ProviderId::XAi, ProviderId::Gemini];
+/// Wire prefix of custom provider ids.
+pub const CUSTOM_PREFIX: &str = "custom:";
 
-    /// Short, user-facing label used for layer names (`"<Provider>: <prompt>"`).
-    pub fn label(self) -> &'static str {
+impl ProviderId {
+    /// The built-in providers, in UI display order.
+    pub const BUILTIN: [ProviderId; 3] = [ProviderId::OpenAi, ProviderId::XAi, ProviderId::Gemini];
+
+    /// A custom provider id.
+    pub fn custom(id: impl Into<String>) -> Self {
+        ProviderId::Custom(id.into())
+    }
+
+    /// `true` for [`ProviderId::Custom`].
+    pub fn is_custom(&self) -> bool {
+        matches!(self, ProviderId::Custom(_))
+    }
+
+    /// The registry id of a custom provider.
+    pub fn custom_id(&self) -> Option<&str> {
         match self {
-            ProviderId::OpenAi => "ChatGPT",
-            ProviderId::XAi => "Grok",
-            ProviderId::Gemini => "Gemini",
+            ProviderId::Custom(id) => Some(id),
+            _ => None,
+        }
+    }
+
+    /// Short, user-facing label used for layer names (`"<Provider>: <prompt>"`). For a
+    /// custom provider this is its id; the Tauri layer substitutes the display name.
+    pub fn label(&self) -> Cow<'static, str> {
+        match self {
+            ProviderId::OpenAi => Cow::Borrowed("ChatGPT"),
+            ProviderId::XAi => Cow::Borrowed("Grok"),
+            ProviderId::Gemini => Cow::Borrowed("Gemini"),
+            ProviderId::Custom(id) => Cow::Owned(id.clone()),
         }
     }
 
     /// Longer label for settings / pickers.
-    pub fn vendor(self) -> &'static str {
+    pub fn vendor(&self) -> &'static str {
         match self {
             ProviderId::OpenAi => "OpenAI",
             ProviderId::XAi => "xAI",
             ProviderId::Gemini => "Google",
+            ProviderId::Custom(_) => "Custom",
         }
     }
 
-    /// Stable identifier matching the serde representation (`open_ai`, `x_ai`, `gemini`).
-    pub fn as_str(self) -> &'static str {
+    /// Stable identifier matching the serde representation (`open_ai`, `x_ai`, `gemini`,
+    /// `custom:<id>`). Also the key-store user name.
+    pub fn as_str(&self) -> Cow<'static, str> {
         match self {
-            ProviderId::OpenAi => "open_ai",
-            ProviderId::XAi => "x_ai",
-            ProviderId::Gemini => "gemini",
+            ProviderId::OpenAi => Cow::Borrowed("open_ai"),
+            ProviderId::XAi => Cow::Borrowed("x_ai"),
+            ProviderId::Gemini => Cow::Borrowed("gemini"),
+            ProviderId::Custom(id) => Cow::Owned(format!("{CUSTOM_PREFIX}{id}")),
+        }
+    }
+
+    /// Parse the wire form. Unknown strings are `None`.
+    pub fn parse(s: &str) -> Option<ProviderId> {
+        match s {
+            "open_ai" => Some(ProviderId::OpenAi),
+            "x_ai" => Some(ProviderId::XAi),
+            "gemini" => Some(ProviderId::Gemini),
+            _ => s
+                .strip_prefix(CUSTOM_PREFIX)
+                .filter(|id| !id.is_empty())
+                .map(ProviderId::custom),
         }
     }
 }
 
 impl fmt::Display for ProviderId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(self.label())
+        f.write_str(&self.label())
+    }
+}
+
+impl Serialize for ProviderId {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(&self.as_str())
+    }
+}
+
+impl<'de> Deserialize<'de> for ProviderId {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let s = <Cow<'de, str>>::deserialize(deserializer)?;
+        ProviderId::parse(&s).ok_or_else(|| {
+            serde::de::Error::custom(format!(
+                "unknown provider id {s:?} (expected open_ai, x_ai, gemini or custom:<id>)"
+            ))
+        })
     }
 }
 
@@ -398,7 +458,7 @@ impl ImageResult {
         ImageResultMeta {
             width: self.width,
             height: self.height,
-            provider: self.provider,
+            provider: self.provider.clone(),
             model: self.model.clone(),
             revised_prompt: self.revised_prompt.clone(),
             cost_usd: self.cost_usd,

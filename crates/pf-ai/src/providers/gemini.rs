@@ -180,7 +180,7 @@ impl GeminiProvider {
                 .json(&body)
                 .send()
                 .await?;
-            let resp = http::ensure_success(self.id(), resp).await?;
+            let resp = http::ensure_success(&self.id(), resp).await?;
             let parsed: GenerateContentResponse = resp.json().await?;
             results.push(parsed.into_result(model, cost)?);
         }
@@ -225,11 +225,11 @@ impl ImageProvider for GeminiProvider {
     }
 
     fn capabilities(&self) -> Capabilities {
-        capabilities_for(ProviderId::Gemini)
+        capabilities_for(&ProviderId::Gemini)
     }
 
     async fn generate(&self, req: GenerateRequest) -> Result<Vec<ImageResult>, Error> {
-        validate_generate(self.id(), &self.capabilities(), &req)?;
+        validate_generate(&self.id(), &self.capabilities(), &req)?;
         let prompt = http::effective_prompt(&req.prompt, req.negative_prompt.as_deref());
         let model = req.model.clone().unwrap_or_else(|| GEMINI_MODEL.to_owned());
         let images: Vec<&ImageBytes> = req.reference_images.iter().collect();
@@ -237,7 +237,7 @@ impl ImageProvider for GeminiProvider {
     }
 
     async fn edit(&self, req: EditRequest) -> Result<Vec<ImageResult>, Error> {
-        validate_edit(self.id(), &self.capabilities(), &req)?;
+        validate_edit(&self.id(), &self.capabilities(), &req)?;
         let prompt = http::effective_prompt(&req.prompt, req.negative_prompt.as_deref());
         let model = req.model.clone().unwrap_or_else(|| GEMINI_MODEL.to_owned());
         let mut images: Vec<&ImageBytes> = vec![&req.image];
@@ -253,7 +253,7 @@ impl ImageProvider for GeminiProvider {
             .header(API_KEY_HEADER, self.auth.token().expose())
             .send()
             .await?;
-        http::ensure_success(self.id(), resp).await.map(|_| ())
+        http::ensure_success(&self.id(), resp).await.map(|_| ())
     }
 }
 

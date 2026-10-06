@@ -13,7 +13,7 @@
   import { formatUsd } from "$lib/ai/pricing";
   import { rememberedSelection, revealLayer, runAi, type AiRunRequest } from "$lib/ai/run";
   import { aiUi } from "$lib/ai/ui.svelte";
-  import { PROVIDER_LABEL, PROVIDER_IDS, type ProviderId } from "$lib/ai/types";
+  import { canGenerate, type ProviderId } from "$lib/ai/types";
 
   let expanded = $state<string | null>(null);
   let editing = $state<string | null>(null);
@@ -37,8 +37,13 @@
   }
 
   function modeLabel(e: AiHistoryEntry): string {
+    if (e.mode === "shootout") return `Shootout · ${e.kept?.length ?? 0} kept`;
     return e.mode === "generate" ? "Generate" : e.mode === "mask" ? (e.emulated ? "Mask (emulated)" : "Mask") : "Instruct";
   }
+
+  // Wave 5 hook (ai-custom): re-run targets come from the live provider list (custom
+  // providers included), not the three built-in ids.
+  const rerunTargets = $derived(aiUi.providers.filter(canGenerate));
 
   function liveLayer(e: AiHistoryEntry): string | null {
     const doc = docStore.doc;
@@ -195,8 +200,8 @@
                   <RotateCcw size={12} />
                   <span>Re-run with</span>
                   <select bind:value={rerunProvider[e.id]}>
-                    {#each PROVIDER_IDS as id (id)}
-                      <option value={id} selected={id === e.provider}>{aiUi.providers.find((p) => p.id === id)?.name ?? PROVIDER_LABEL[id]}</option>
+                    {#each rerunTargets as p (p.id)}
+                      <option value={p.id} selected={p.id === e.provider}>{p.local ? "🖥 " : ""}{p.name}</option>
                     {/each}
                   </select>
                   <button type="button" class="btn" onclick={() => void rerun(e, e.prompt, rerunProvider[e.id] ?? e.provider)}>Go</button>

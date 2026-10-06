@@ -113,7 +113,7 @@ describe("jobStore", () => {
     });
     expect(job.state).toBe("failed");
     expect(job.error?.code).toBe("ai_not_configured");
-    expect(job.error?.hint).toMatch(/AI API Keys/);
+    expect(job.error?.hint).toMatch(/AI Providers/);
     expect((await jobStore.whenDone(job.id)).state).toBe("failed");
   });
 

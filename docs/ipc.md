@@ -185,7 +185,7 @@ Frame errors surface as `ai_invalid_request`.
 ### Types
 
 ```ts
-type ProviderId = 'open_ai' | 'x_ai' | 'gemini';
+type ProviderId = 'open_ai' | 'x_ai' | 'gemini' | `custom:${string}`;   // custom = registry id, see "Custom providers"
 type EditMode = 'mask' | 'instruct';
 type ImageSize = { width: number; height: number };
 
@@ -206,6 +206,11 @@ type ProviderInfo = {
   id: ProviderId; name: string; vendor: string; capabilities: Capabilities;
   hasKey: boolean; keyBackend: 'keyring' | 'file';
   defaultModel: string; editModel: string; models: string[];
+  kind: 'builtin' | CustomKind;  // which wire protocol
+  local: boolean;                // base URL is loopback / LAN: no cost, 🖥 glyph
+  icon: 'cloud' | 'local' | 'hub' | 'assist';
+  promptAssist: boolean;         // can rewrite prompts (Ollama) but never makes images
+  keyOptional: boolean;          // a secret is optional (local servers)
 };
 
 type JobId = string;           // 32 hex chars
@@ -258,7 +263,12 @@ APIs has a negative-prompt field). `size` maps to OpenAI `size` (presets or a cu
 | `ai_job_status` | `{ job: JobId }` | `JobStatus` (`ai_unknown_job` otherwise) |
 | `ai_cancel` | `{ job: JobId }` | `boolean` — `true` if it was still queued/running |
 | `ai_take_result` | `{ job: JobId }` | frame (below); `ai_no_result` if not finished / already taken |
-| `ai_test_key` | `{ provider: ProviderId }` | `null`; `ai_auth` on a bad key, `ai_not_configured` if none |
+| `ai_test_key` | `{ provider: ProviderId }` | `null`; `ai_auth` on a bad key, `ai_not_configured` if none. For `custom:<id>` this runs the kind's probe. |
+
+`ai_list_providers` returns the three built-ins followed by every registered custom
+provider (registry order). `ai_submit_*` accept any `ProviderId`; a custom id resolves its
+registry entry and its optional secret (`ai_not_configured` when the kind needs one and
+none is stored, or when the entry was removed).
 
 Generate-with-reference-images is expressed as an **instruct edit** whose image blob is
 the first reference and `refs` carries the rest (OpenAI and xAI route references through
@@ -333,6 +343,60 @@ before they start. Cancelling a running job aborts the HTTP request.
 | `ai_image` | local image decode/encode failure | fix the input |
 | `ai_unknown_job`, `ai_no_result` | bad job id / nothing to take | – |
 
+## Custom providers (`commands/ai.rs` + `pf_ai::custom`, owner: ai-custom)
+
+User-defined providers live in `<config>/ai-providers.json` (`{ version: 1, providers: [] }`);
+their secrets go to the key store under the user name `custom:<id>` and never cross IPC
+back. Research and wire shapes per kind: `docs/ai-research.md` §4.
+
+```ts
+type CustomKind = 'openai_compat' | 'hugging_face' | 'ollama' | 'comfy_ui' | 'a1111' | 'replicate';
+
+type CustomProvider = {
+  id: string;                  // [a-z0-9][a-z0-9-]{0,63}, unique
+  name: string;                // display name (layer names use it)
+  kind: CustomKind;
+  baseUrl: string;             // http(s) root; trailing slashes ignored
+  model: string;               // model / repo id / checkpoint title / owner/name per kind
+  capabilities: Capabilities;  // kind defaults, user-editable (mask_edit only where native)
+  extra: Record<string, unknown>;  // steps, cfg, sampler, scheduler, denoise, seed, checkpoint,
+                               // workflow | workflowImg2img | workflowInpaint (ComfyUI, object or JSON string),
+                               // maskBlur, inpaintingFill, inpaintFullRes (A1111), version, imageField, input (Replicate),
+                               // hubUrl (HF, tests), models (cached probe list)
+  hasAuth: boolean;            // a secret is stored for it
+};
+
+type ProbeResult = { reachable: boolean; models: string[]; detectedCaps?: Capabilities; message: string; version?: string; authFailed: boolean };
+type HubModel = { id: string; pipelineTag?: string; downloads: number; likes: number; gated: boolean };
+type CustomKindInfo = { kind: CustomKind; label: string; description: string; defaultBaseUrl: string; helpUrl: string; requiresAuth: boolean; promptAssist: boolean; defaultCapabilities: Capabilities };
+```
+
+| command | args | returns |
+|---|---|---|
+| `ai_custom_kinds` | – | `CustomKindInfo[]` (static) |
+| `ai_custom_list` | – | `CustomProvider[]` |
+| `ai_custom_add` | `{ provider: CustomProvider, auth?: string \| null }` | `CustomProvider[]`; `ai_invalid_request` on a bad id / URL / duplicate |
+| `ai_custom_update` | `{ provider, auth?: string \| null, clearAuth?: boolean }` | `CustomProvider[]`; a non-empty `auth` replaces the secret, `clearAuth` deletes it, otherwise it is kept |
+| `ai_custom_remove` | `{ id: string }` | `CustomProvider[]` (secret deleted too) |
+| `ai_custom_probe` | `{ provider: CustomProvider, auth?: string \| null }` | `ProbeResult` — probes the entry **as given** (unsaved form values are fine); `auth` overrides the stored secret for this call only. Server-side problems never reject: they come back as `reachable: false` / `authFailed: true`. |
+| `ai_prompt_assist` | frame: header `{ provider: ProviderId, text: string }` + at most one image blob (PNG/JPEG) | `string` — the rewritten prompt. Only `custom:<id>` entries of kind `ollama`; `ai_unsupported` otherwise, `ai_invalid_request` when neither text nor image is given. |
+| `ai_hub_search` | `{ query: string, pipelineTag?: 'text-to-image' \| 'image-to-image', limit?: number }` | `HubModel[]` (public Hub, no token) |
+| `ai_comfy_templates` | – | `{ txt2img, img2img, inpaint }` — the bundled API-format workflows as JSON text |
+
+Probe endpoints per kind: OpenAI-compat `GET /v1/models`; Hugging Face `GET
+https://huggingface.co/api/models/{model}` (router) or `GET base` (dedicated endpoint);
+Ollama `GET /api/tags` (+ `/api/version`); ComfyUI `GET /system_stats` + `GET
+/object_info/CheckpointLoaderSimple`; A1111 `GET /sdapi/v1/sd-models` (+ `/sdapi/v1/options`);
+Replicate `GET /v1/models/{owner}/{name}`.
+
+Ollama entries report `capabilities` all `false` and `promptAssist: true`: Ollama's HTTP API
+has no image output, so Pixelforge only uses it to rewrite prompts (`ai_prompt_assist`).
+Masks: ComfyUI and A1111 take Pixelforge's white-is-editable mask natively; Hugging Face
+never does (emulated in the webview); OpenAI-compatible servers get OpenAI's alpha mask and
+only when the user ticked `maskEdit`.
+
+Dev fake for every kind: `node scripts/fake-local-ai.mjs` (port 8790), see its header.
+
 ## Settings commands (`commands/settings.rs`, owner: ai-rust)
 
 ```ts
@@ -346,11 +410,12 @@ type Settings = {
 |---|---|---|
 | `settings_get` | – | `Settings` (read from `<config>/settings.json` on first call) |
 | `settings_set` | `{ settings: Settings }` | `Settings` as stored (atomic write) |
-| `settings_get_key_status` | – | `{ open_ai: boolean; x_ai: boolean; gemini: boolean }` |
-| `settings_set_key` | `{ provider, key: string }` | `null`; `settings_key_empty` / `settings_key_invalid` |
+| `settings_get_key_status` | – | `{ open_ai: boolean; x_ai: boolean; gemini: boolean; [`custom:${id}`]: boolean }` (every registered custom provider too) |
+| `settings_set_key` | `{ provider: ProviderId, key: string }` | `null`; `settings_key_empty` / `settings_key_invalid`. Works for `custom:<id>`. |
 | `settings_delete_key` | `{ provider }` | `null` |
 
-Keys live in the OS keychain (service `com.pixelforge.app`, user = provider id). When
+Keys live in the OS keychain (service `com.pixelforge.app`, user = provider id, i.e.
+`open_ai` / `x_ai` / `gemini` / `custom:<id>`). When
 the keychain is unavailable (headless Linux) they fall back to `<config>/ai-keys.json`,
 obfuscated with a per-install random secret in `<config>/ai-keys.secret` — **that is
 obfuscation, not encryption**. `PF_KEYSTORE=file` forces the file backend. Key values

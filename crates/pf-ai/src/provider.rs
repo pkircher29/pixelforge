@@ -44,13 +44,13 @@ pub type BoxedProvider = Box<dyn ImageProvider>;
 ///
 /// Shared by all providers so the error messages are consistent.
 pub fn validate_generate(
-    provider: ProviderId,
+    provider: &ProviderId,
     caps: &Capabilities,
     req: &GenerateRequest,
 ) -> Result<(), Error> {
     if !caps.generate {
         return Err(Error::Unsupported {
-            provider,
+            provider: provider.clone(),
             capability: "generate",
         });
     }
@@ -65,7 +65,7 @@ pub fn validate_generate(
     }
     if req.reference_images.len() > 1 && !caps.multi_ref {
         return Err(Error::Unsupported {
-            provider,
+            provider: provider.clone(),
             capability: "multiple reference images",
         });
     }
@@ -76,7 +76,7 @@ pub fn validate_generate(
     Ok(())
 }
 
-fn check_size(provider: ProviderId, caps: &Capabilities, size: ImageSize) -> Result<(), Error> {
+fn check_size(provider: &ProviderId, caps: &Capabilities, size: ImageSize) -> Result<(), Error> {
     if size.width == 0 || size.height == 0 {
         return Err(Error::InvalidRequest(format!("{size} has a zero edge")));
     }
@@ -94,7 +94,7 @@ fn check_size(provider: ProviderId, caps: &Capabilities, size: ImageSize) -> Res
     Ok(())
 }
 
-fn check_ref_count(provider: ProviderId, caps: &Capabilities, images: usize) -> Result<(), Error> {
+fn check_ref_count(provider: &ProviderId, caps: &Capabilities, images: usize) -> Result<(), Error> {
     if caps.max_refs > 0 && images > usize::from(caps.max_refs) {
         return Err(Error::InvalidRequest(format!(
             "{images} input images exceed the {} {provider} accepts",
@@ -106,7 +106,7 @@ fn check_ref_count(provider: ProviderId, caps: &Capabilities, images: usize) -> 
 
 /// Validate an [`EditRequest`] against a provider's capabilities before sending it.
 pub fn validate_edit(
-    provider: ProviderId,
+    provider: &ProviderId,
     caps: &Capabilities,
     req: &EditRequest,
 ) -> Result<(), Error> {
@@ -114,7 +114,7 @@ pub fn validate_edit(
         EditMode::Mask => {
             if !caps.mask_edit {
                 return Err(Error::Unsupported {
-                    provider,
+                    provider: provider.clone(),
                     capability: "mask edit",
                 });
             }
@@ -127,7 +127,7 @@ pub fn validate_edit(
         EditMode::Instruct => {
             if !caps.instruct_edit {
                 return Err(Error::Unsupported {
-                    provider,
+                    provider: provider.clone(),
                     capability: "instruct edit",
                 });
             }
@@ -141,7 +141,7 @@ pub fn validate_edit(
     }
     if !req.reference_images.is_empty() && !caps.multi_ref {
         return Err(Error::Unsupported {
-            provider,
+            provider: provider.clone(),
             capability: "multiple reference images",
         });
     }
@@ -183,7 +183,7 @@ mod tests {
         }
 
         async fn generate(&self, req: GenerateRequest) -> Result<Vec<ImageResult>, Error> {
-            validate_generate(self.id(), &self.capabilities(), &req)?;
+            validate_generate(&self.id(), &self.capabilities(), &req)?;
             Ok(vec![ImageResult {
                 image: ImageBytes::png(vec![0x89, b'P', b'N', b'G']),
                 width: 1,
@@ -196,7 +196,7 @@ mod tests {
         }
 
         async fn edit(&self, req: EditRequest) -> Result<Vec<ImageResult>, Error> {
-            validate_edit(self.id(), &self.capabilities(), &req)?;
+            validate_edit(&self.id(), &self.capabilities(), &req)?;
             Ok(Vec::new())
         }
 

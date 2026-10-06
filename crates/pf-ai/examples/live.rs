@@ -64,7 +64,7 @@ async fn main() {
             println!("[{id}] no key, skipped");
             continue;
         };
-        let provider = match build_provider(id, AuthMethod::ApiKey(key)) {
+        let provider = match build_provider(&id, AuthMethod::ApiKey(key)) {
             Ok(p) => p,
             Err(e) => {
                 println!("[{id}] cannot build provider: {e}");

@@ -102,7 +102,7 @@ impl OpenAiProvider {
             .multipart(form)
             .send()
             .await?;
-        let resp = http::ensure_success(ProviderId::OpenAi, resp).await?;
+        let resp = http::ensure_success(&ProviderId::OpenAi, resp).await?;
         let body: ImagesResponse = resp.json().await?;
         body.into_results(model, n)
     }
@@ -186,11 +186,11 @@ impl ImageProvider for OpenAiProvider {
     }
 
     fn capabilities(&self) -> Capabilities {
-        capabilities_for(ProviderId::OpenAi)
+        capabilities_for(&ProviderId::OpenAi)
     }
 
     async fn generate(&self, req: GenerateRequest) -> Result<Vec<ImageResult>, Error> {
-        validate_generate(self.id(), &self.capabilities(), &req)?;
+        validate_generate(&self.id(), &self.capabilities(), &req)?;
         let prompt = http::effective_prompt(&req.prompt, req.negative_prompt.as_deref());
         Self::check_prompt(&prompt)?;
 
@@ -239,13 +239,13 @@ impl ImageProvider for OpenAiProvider {
             .json(&body)
             .send()
             .await?;
-        let resp = http::ensure_success(self.id(), resp).await?;
+        let resp = http::ensure_success(&self.id(), resp).await?;
         let parsed: ImagesResponse = resp.json().await?;
         parsed.into_results(&model, req.n)
     }
 
     async fn edit(&self, req: EditRequest) -> Result<Vec<ImageResult>, Error> {
-        validate_edit(self.id(), &self.capabilities(), &req)?;
+        validate_edit(&self.id(), &self.capabilities(), &req)?;
         let prompt = http::effective_prompt(&req.prompt, req.negative_prompt.as_deref());
         Self::check_prompt(&prompt)?;
         Self::check_image(&req.image, "input image")?;
@@ -299,7 +299,7 @@ impl ImageProvider for OpenAiProvider {
             .header(reqwest::header::AUTHORIZATION, http::bearer(&self.auth))
             .send()
             .await?;
-        http::ensure_success(self.id(), resp).await.map(|_| ())
+        http::ensure_success(&self.id(), resp).await.map(|_| ())
     }
 }
 

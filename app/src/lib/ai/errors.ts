@@ -46,9 +46,9 @@ export function describeAiError(code: string, message: string): FriendlyError {
   const base = { code, detail: message };
   switch (code) {
     case "ai_not_configured":
-      return { ...base, title: "No API key for this provider.", hint: "Add your key in Edit > AI API Keys.", retryable: false };
+      return { ...base, title: "No API key for this provider.", hint: "Add your key in Settings > AI Providers (Edit menu).", retryable: false };
     case "ai_auth":
-      return { ...base, title: "The provider rejected the API key.", hint: "Add your key in Settings (Edit > AI API Keys) and test it.", retryable: false };
+      return { ...base, title: "The provider rejected the API key.", hint: "Add your key in Settings > AI Providers (Edit menu) and test it.", retryable: false };
     case "ai_rate_limited": {
       const retryAfterSecs = parseRetryAfter(message);
       return {

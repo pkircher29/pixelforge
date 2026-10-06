@@ -39,11 +39,11 @@ describe("describeAiError", () => {
 
 describe("estimateCost", () => {
   it("xAI flat rate, doubled for edits, times n", () => {
-    expect(estimateCost({ provider: "x_ai", model: "grok-imagine-image-2.0", mode: "generate", n: 3 }).usd).toBeCloseTo(0.12);
-    const edit = estimateCost({ provider: "x_ai", model: "grok-imagine-image-2.0", mode: "instruct", n: 1 });
+    expect(estimateCost({ provider: "x_ai", model: "grok-imagine-image-2.0", mode: "generate", n: 3 })!.usd).toBeCloseTo(0.12);
+    const edit = estimateCost({ provider: "x_ai", model: "grok-imagine-image-2.0", mode: "instruct", n: 1 })!;
     expect(edit.usd).toBeCloseTo(0.08);
     expect(edit.approx).toBe(true);
-    expect(estimateCost({ provider: "x_ai", model: "grok-imagine-image", mode: "generate", n: 1 }).usd).toBeCloseTo(0.02);
+    expect(estimateCost({ provider: "x_ai", model: "grok-imagine-image", mode: "generate", n: 1 })!.usd).toBeCloseTo(0.02);
   });
 
   it("Gemini tiers by longest edge", () => {
@@ -51,23 +51,31 @@ describe("estimateCost", () => {
     expect(geminiTier({ width: 1024, height: 768 })).toBe("1K");
     expect(geminiTier({ width: 2048, height: 1152 })).toBe("2K");
     expect(geminiTier({ width: 4096, height: 4096 })).toBe("4K");
-    expect(estimateCost({ provider: "gemini", model: "gemini-3.1-flash-image", mode: "generate", n: 1, size: { width: 2048, height: 2048 } }).usd).toBeCloseTo(0.101);
-    expect(estimateCost({ provider: "gemini", model: "gemini-3-pro-image", mode: "generate", n: 1, size: { width: 4096, height: 2304 } }).usd).toBeCloseTo(0.24);
-    expect(estimateCost({ provider: "gemini", model: "gemini-3.1-flash-lite-image", mode: "generate", n: 2 }).usd).toBeCloseTo(0.0672);
+    expect(estimateCost({ provider: "gemini", model: "gemini-3.1-flash-image", mode: "generate", n: 1, size: { width: 2048, height: 2048 } })!.usd).toBeCloseTo(0.101);
+    expect(estimateCost({ provider: "gemini", model: "gemini-3-pro-image", mode: "generate", n: 1, size: { width: 4096, height: 2304 } })!.usd).toBeCloseTo(0.24);
+    expect(estimateCost({ provider: "gemini", model: "gemini-3.1-flash-lite-image", mode: "generate", n: 2 })!.usd).toBeCloseTo(0.0672);
   });
 
   it("OpenAI uses the gpt-image-2 table and flags 2.5 as approximate", () => {
-    const g2 = estimateCost({ provider: "open_ai", model: "gpt-image-2", mode: "generate", n: 1, quality: "high", size: { width: 1024, height: 1024 } });
+    const g2 = estimateCost({ provider: "open_ai", model: "gpt-image-2", mode: "generate", n: 1, quality: "high", size: { width: 1024, height: 1024 } })!;
     expect(g2.usd).toBeCloseTo(0.211);
     expect(g2.approx).toBe(false);
-    const g25 = estimateCost({ provider: "open_ai", model: "gpt-image-2.5-flare", mode: "generate", n: 1, quality: "low" });
+    const g25 = estimateCost({ provider: "open_ai", model: "gpt-image-2.5-flare", mode: "generate", n: 1, quality: "low" })!;
     expect(g25.usd).toBeCloseTo(0.006);
     expect(g25.approx).toBe(true);
-    const xhigh = estimateCost({ provider: "open_ai", model: "gpt-image-2.5-sunburst", mode: "generate", n: 1, quality: "xhigh" });
+    const xhigh = estimateCost({ provider: "open_ai", model: "gpt-image-2.5-sunburst", mode: "generate", n: 1, quality: "xhigh" })!;
     expect(xhigh.usd).toBeGreaterThan(0.211);
-    const edit = estimateCost({ provider: "open_ai", model: "gpt-image-2.5-sunburst", mode: "mask", n: 1, quality: "medium" });
+    const edit = estimateCost({ provider: "open_ai", model: "gpt-image-2.5-sunburst", mode: "mask", n: 1, quality: "medium" })!;
     expect(edit.usd).toBeCloseTo(0.063);
-    expect(estimateCost({ provider: "open_ai", model: "gpt-image-1-mini", mode: "generate", n: 1 }).usd).toBeCloseTo(0.005);
+    expect(estimateCost({ provider: "open_ai", model: "gpt-image-1-mini", mode: "generate", n: 1 })!.usd).toBeCloseTo(0.005);
+  });
+
+  it("custom providers: local is free, hosted has no estimate", () => {
+    const local = estimateCost({ provider: "custom:comfy", model: "sd_xl.safetensors", mode: "generate", n: 4, local: true });
+    expect(local?.usd).toBe(0);
+    expect(local?.approx).toBe(false);
+    expect(estimateCost({ provider: "custom:hf", model: "x/y", mode: "generate", n: 1, local: false })).toBeNull();
+    expect(estimateCost({ provider: "custom:hf", model: "x/y", mode: "generate", n: 1 })).toBeNull();
   });
 
   it("formatUsd", () => {

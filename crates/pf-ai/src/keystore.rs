@@ -36,16 +36,16 @@ pub const FILE_STORE_SECRET_NAME: &str = "ai-keys.secret";
 /// Where API keys live.
 pub trait KeyStore: Send + Sync {
     /// Fetch the key for `provider`, `Ok(None)` when absent.
-    fn get(&self, provider: ProviderId) -> Result<Option<SecretString>, Error>;
+    fn get(&self, provider: &ProviderId) -> Result<Option<SecretString>, Error>;
     /// Store (or replace) the key for `provider`.
-    fn set(&self, provider: ProviderId, key: &SecretString) -> Result<(), Error>;
+    fn set(&self, provider: &ProviderId, key: &SecretString) -> Result<(), Error>;
     /// Remove the key for `provider` (no error when absent).
-    fn delete(&self, provider: ProviderId) -> Result<(), Error>;
+    fn delete(&self, provider: &ProviderId) -> Result<(), Error>;
     /// Short backend label for diagnostics (`"keyring"`, `"file"`).
     fn backend(&self) -> &'static str;
 
     /// `true` when a non-empty key is stored.
-    fn has(&self, provider: ProviderId) -> Result<bool, Error> {
+    fn has(&self, provider: &ProviderId) -> Result<bool, Error> {
         Ok(self.get(provider)?.is_some_and(|k| !k.is_empty()))
     }
 }
@@ -78,15 +78,16 @@ impl KeyringStore {
     ///
     /// keyring 3's Linux backend blocks on zbus internally and its docs say calling it
     /// from a tokio worker can deadlock; a fresh std thread sidesteps that everywhere.
-    fn run<T, F>(&self, provider: ProviderId, f: F) -> Result<T, Error>
+    fn run<T, F>(&self, provider: &ProviderId, f: F) -> Result<T, Error>
     where
         T: Send + 'static,
         F: FnOnce(keyring::Entry) -> keyring::Result<T> + Send + 'static,
     {
         let service = self.service.clone();
+        let user = provider.as_str().into_owned();
         let handle = std::thread::Builder::new()
             .name("pf-keyring".to_owned())
-            .spawn(move || keyring::Entry::new(&service, provider.as_str()).and_then(f))
+            .spawn(move || keyring::Entry::new(&service, &user).and_then(f))
             .map_err(|e| Error::KeyStore(format!("cannot spawn keyring thread: {e}")))?;
         handle
             .join()
@@ -96,7 +97,7 @@ impl KeyringStore {
 }
 
 impl KeyStore for KeyringStore {
-    fn get(&self, provider: ProviderId) -> Result<Option<SecretString>, Error> {
+    fn get(&self, provider: &ProviderId) -> Result<Option<SecretString>, Error> {
         self.run(provider, |entry| match entry.get_password() {
             Ok(p) => Ok(Some(SecretString::new(p))),
             Err(keyring::Error::NoEntry) => Ok(None),
@@ -104,12 +105,12 @@ impl KeyStore for KeyringStore {
         })
     }
 
-    fn set(&self, provider: ProviderId, key: &SecretString) -> Result<(), Error> {
+    fn set(&self, provider: &ProviderId, key: &SecretString) -> Result<(), Error> {
         let value = key.expose().to_owned();
         self.run(provider, move |entry| entry.set_password(&value))
     }
 
-    fn delete(&self, provider: ProviderId) -> Result<(), Error> {
+    fn delete(&self, provider: &ProviderId) -> Result<(), Error> {
         self.run(provider, |entry| match entry.delete_credential() {
             Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
             Err(e) => Err(e),
@@ -224,10 +225,10 @@ impl FileStore {
 }
 
 impl KeyStore for FileStore {
-    fn get(&self, provider: ProviderId) -> Result<Option<SecretString>, Error> {
+    fn get(&self, provider: &ProviderId) -> Result<Option<SecretString>, Error> {
         let _guard = self.lock.lock().map_err(|_| poisoned())?;
         let contents = self.load()?;
-        let Some(encoded) = contents.keys.get(provider.as_str()) else {
+        let Some(encoded) = contents.keys.get(provider.as_str().as_ref()) else {
             return Ok(None);
         };
         let Some(secret) = self.secret(false)? else {
@@ -242,7 +243,7 @@ impl KeyStore for FileStore {
         Ok(Some(SecretString::new(plain)))
     }
 
-    fn set(&self, provider: ProviderId, key: &SecretString) -> Result<(), Error> {
+    fn set(&self, provider: &ProviderId, key: &SecretString) -> Result<(), Error> {
         let _guard = self.lock.lock().map_err(|_| poisoned())?;
         let secret = self
             .secret(true)?
@@ -250,16 +251,16 @@ impl KeyStore for FileStore {
         let mut contents = self.load()?;
         let blob = obfuscate(&secret, key.expose().as_bytes());
         contents.keys.insert(
-            provider.as_str().to_owned(),
+            provider.as_str().into_owned(),
             base64::engine::general_purpose::STANDARD.encode(blob),
         );
         self.save(&contents)
     }
 
-    fn delete(&self, provider: ProviderId) -> Result<(), Error> {
+    fn delete(&self, provider: &ProviderId) -> Result<(), Error> {
         let _guard = self.lock.lock().map_err(|_| poisoned())?;
         let mut contents = self.load()?;
-        if contents.keys.remove(provider.as_str()).is_some() {
+        if contents.keys.remove(provider.as_str().as_ref()).is_some() {
             self.save(&contents)?;
         }
         Ok(())
@@ -419,7 +420,7 @@ impl AutoKeyStore {
 }
 
 impl KeyStore for AutoKeyStore {
-    fn get(&self, provider: ProviderId) -> Result<Option<SecretString>, Error> {
+    fn get(&self, provider: &ProviderId) -> Result<Option<SecretString>, Error> {
         if !self.file_only() {
             match self.keyring.get(provider) {
                 Ok(Some(k)) => return Ok(Some(k)),
@@ -431,7 +432,7 @@ impl KeyStore for AutoKeyStore {
         self.file.get(provider)
     }
 
-    fn set(&self, provider: ProviderId, key: &SecretString) -> Result<(), Error> {
+    fn set(&self, provider: &ProviderId, key: &SecretString) -> Result<(), Error> {
         if !self.file_only() {
             match self.keyring.set(provider, key) {
                 Ok(()) => {
@@ -445,7 +446,7 @@ impl KeyStore for AutoKeyStore {
         self.file.set(provider, key)
     }
 
-    fn delete(&self, provider: ProviderId) -> Result<(), Error> {
+    fn delete(&self, provider: &ProviderId) -> Result<(), Error> {
         let mut first_err = None;
         if !self.file_only() {
             if let Err(e) = self.keyring.delete(provider) {

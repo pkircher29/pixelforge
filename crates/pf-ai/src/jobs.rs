@@ -286,7 +286,7 @@ impl JobManager {
                 },
             );
         }
-        self.emit(&id, provider_id, JobEventKind::Queued);
+        self.emit(&id, &provider_id, JobEventKind::Queued);
 
         let inner = Arc::clone(&self.inner);
         let job_id = id.clone();
@@ -336,17 +336,17 @@ impl JobManager {
         before - jobs.len()
     }
 
-    fn emit(&self, id: &JobId, provider: ProviderId, kind: JobEventKind) {
+    fn emit(&self, id: &JobId, provider: &ProviderId, kind: JobEventKind) {
         Inner::emit(&self.inner, id, provider, kind);
     }
 }
 
 impl Inner {
-    fn emit(inner: &Arc<Inner>, id: &JobId, provider: ProviderId, kind: JobEventKind) {
+    fn emit(inner: &Arc<Inner>, id: &JobId, provider: &ProviderId, kind: JobEventKind) {
         // A send error only means nobody is listening.
         let _ = inner.events.send(JobEvent {
             job: id.clone(),
-            provider,
+            provider: provider.clone(),
             kind,
         });
     }
@@ -382,7 +382,7 @@ async fn run_job(
         biased;
         _ = &mut cancel_rx => {
             Inner::set_status(&inner, &id, JobStatus::Cancelled, None);
-            Inner::emit(&inner, &id, provider_id, JobEventKind::Cancelled);
+            Inner::emit(&inner, &id, &provider_id, JobEventKind::Cancelled);
             return;
         }
         p = semaphore.acquire_owned() => p,
@@ -403,11 +403,11 @@ async fn run_job(
     };
 
     Inner::set_status(&inner, &id, JobStatus::Running, None);
-    Inner::emit(&inner, &id, provider_id, JobEventKind::Started);
+    Inner::emit(&inner, &id, &provider_id, JobEventKind::Started);
     Inner::emit(
         &inner,
         &id,
-        provider_id,
+        &provider_id,
         JobEventKind::Progress { pct: None },
     );
 
@@ -446,7 +446,7 @@ async fn run_job(
             Inner::emit(
                 &inner,
                 &id,
-                provider_id,
+                &provider_id,
                 JobEventKind::Completed {
                     results: metas,
                     duration_ms,
@@ -455,7 +455,7 @@ async fn run_job(
         }
         Err(Error::Cancelled) => {
             Inner::set_status(&inner, &id, JobStatus::Cancelled, None);
-            Inner::emit(&inner, &id, provider_id, JobEventKind::Cancelled);
+            Inner::emit(&inner, &id, &provider_id, JobEventKind::Cancelled);
         }
         Err(err) => {
             let (code, message) = (err.code().to_owned(), err.to_string());
@@ -472,7 +472,7 @@ async fn run_job(
             Inner::emit(
                 &inner,
                 &id,
-                provider_id,
+                &provider_id,
                 JobEventKind::Failed { code, message },
             );
         }

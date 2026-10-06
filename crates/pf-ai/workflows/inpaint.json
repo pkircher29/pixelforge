@@ -1,0 +1,68 @@
+{
+  "3": {
+    "class_type": "KSampler",
+    "_meta": { "title": "KSampler" },
+    "inputs": {
+      "seed": "{{seed}}",
+      "steps": "{{steps}}",
+      "cfg": "{{cfg}}",
+      "sampler_name": "{{sampler}}",
+      "scheduler": "{{scheduler}}",
+      "denoise": "{{denoise}}",
+      "model": ["4", 0],
+      "positive": ["6", 0],
+      "negative": ["7", 0],
+      "latent_image": ["14", 0]
+    }
+  },
+  "4": {
+    "class_type": "CheckpointLoaderSimple",
+    "_meta": { "title": "Load Checkpoint" },
+    "inputs": { "ckpt_name": "{{checkpoint}}" }
+  },
+  "6": {
+    "class_type": "CLIPTextEncode",
+    "_meta": { "title": "Positive prompt" },
+    "inputs": { "text": "{{prompt}}", "clip": ["4", 1] }
+  },
+  "7": {
+    "class_type": "CLIPTextEncode",
+    "_meta": { "title": "Negative prompt" },
+    "inputs": { "text": "{{negative}}", "clip": ["4", 1] }
+  },
+  "8": {
+    "class_type": "VAEDecode",
+    "_meta": { "title": "VAE Decode" },
+    "inputs": { "samples": ["3", 0], "vae": ["4", 2] }
+  },
+  "9": {
+    "class_type": "SaveImage",
+    "_meta": { "title": "Save Image" },
+    "inputs": { "filename_prefix": "pixelforge", "images": ["8", 0] }
+  },
+  "10": {
+    "class_type": "LoadImage",
+    "_meta": { "title": "Load Image (input)" },
+    "inputs": { "image": "{{image}}" }
+  },
+  "11": {
+    "class_type": "VAEEncodeForInpaint",
+    "_meta": { "title": "VAE Encode (for Inpainting)" },
+    "inputs": { "pixels": ["10", 0], "vae": ["4", 2], "mask": ["13", 0], "grow_mask_by": 6 }
+  },
+  "12": {
+    "class_type": "LoadImage",
+    "_meta": { "title": "Load Image (mask, white = repaint)" },
+    "inputs": { "image": "{{mask}}" }
+  },
+  "13": {
+    "class_type": "ImageToMask",
+    "_meta": { "title": "Convert Image to Mask" },
+    "inputs": { "image": ["12", 0], "channel": "red" }
+  },
+  "14": {
+    "class_type": "RepeatLatentBatch",
+    "_meta": { "title": "Repeat Latent Batch" },
+    "inputs": { "samples": ["11", 0], "amount": "{{batch}}" }
+  }
+}

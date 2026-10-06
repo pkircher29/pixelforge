@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 
-use pf_ai::{AutoKeyStore, KeyStore, ProviderId, SecretString};
+use pf_ai::{AutoKeyStore, CustomRegistry, KeyStore, ProviderId, SecretString};
 use tauri::{AppHandle, Manager, State};
 
 use crate::error::{CommandError, CommandResult};
@@ -106,14 +106,30 @@ pub(crate) fn key_store(app: &AppHandle, state: &AppState) -> CommandResult<Arc<
     Ok(state.key_store(&config_dir(app)?))
 }
 
+/// The process-wide custom provider registry (`ai-providers.json`).
+pub(crate) fn custom_registry(
+    app: &AppHandle,
+    state: &AppState,
+) -> CommandResult<Arc<CustomRegistry>> {
+    Ok(state.custom_registry(&config_dir(app)?))
+}
+
 /// Fetch the key for `provider` off the async runtime, or `ai_not_configured`.
 pub(crate) async fn load_key(
     store: Arc<AutoKeyStore>,
     provider: ProviderId,
 ) -> CommandResult<SecretString> {
-    let key = tauri::async_runtime::spawn_blocking(move || store.get(provider)).await??;
-    key.filter(|k| !k.is_empty())
-        .ok_or_else(|| pf_ai::Error::NotConfigured(provider).into())
+    let key = load_key_opt(store, provider.clone()).await?;
+    key.ok_or_else(|| pf_ai::Error::NotConfigured(provider).into())
+}
+
+/// Fetch the key for `provider`, `None` when absent (custom providers may need none).
+pub(crate) async fn load_key_opt(
+    store: Arc<AutoKeyStore>,
+    provider: ProviderId,
+) -> CommandResult<Option<SecretString>> {
+    let key = tauri::async_runtime::spawn_blocking(move || store.get(&provider)).await??;
+    Ok(key.filter(|k| !k.is_empty()))
 }
 
 /// Reject obviously broken keys (paste errors) before they hit the keychain.
@@ -140,18 +156,27 @@ pub(crate) fn validate_key(raw: &str) -> CommandResult<SecretString> {
     Ok(SecretString::new(key))
 }
 
-/// `{ "open_ai": true, "x_ai": false, "gemini": true }`.
+/// `{ "open_ai": true, "x_ai": false, "gemini": true, "custom:<id>": bool, ... }` for the
+/// three built-ins plus every registered custom provider.
 #[tauri::command]
 pub async fn settings_get_key_status(
     app: AppHandle,
     state: State<'_, AppState>,
 ) -> CommandResult<HashMap<ProviderId, bool>> {
     let store = key_store(&app, &state)?;
+    let registry = custom_registry(&app, &state)?;
     tauri::async_runtime::spawn_blocking(move || {
-        let mut out = HashMap::with_capacity(ProviderId::ALL.len());
-        for id in ProviderId::ALL {
+        let customs = registry.load().unwrap_or_else(|e| {
+            tracing::warn!("custom provider registry unreadable: {e}");
+            Vec::new()
+        });
+        let ids = ProviderId::BUILTIN
+            .into_iter()
+            .chain(customs.iter().map(pf_ai::CustomProvider::provider_id));
+        let mut out = HashMap::new();
+        for id in ids {
             // A keychain hiccup on one provider should not hide the others.
-            let has = store.has(id).unwrap_or_else(|e| {
+            let has = store.has(&id).unwrap_or_else(|e| {
                 tracing::warn!("key status for {id}: {e}");
                 false
             });
@@ -164,6 +189,7 @@ pub async fn settings_get_key_status(
 }
 
 /// Store (or replace) a provider's API key. The value never crosses back to the UI.
+/// Works for `custom:<id>` too (the key store user name is the wire id).
 #[tauri::command]
 pub async fn settings_set_key(
     app: AppHandle,
@@ -173,7 +199,8 @@ pub async fn settings_set_key(
 ) -> CommandResult<()> {
     let secret = validate_key(&key)?;
     let store = key_store(&app, &state)?;
-    tauri::async_runtime::spawn_blocking(move || store.set(provider, &secret)).await??;
+    let id = provider.clone();
+    tauri::async_runtime::spawn_blocking(move || store.set(&id, &secret)).await??;
     tracing::info!("stored API key for {provider}");
     Ok(())
 }
@@ -186,7 +213,8 @@ pub async fn settings_delete_key(
     provider: ProviderId,
 ) -> CommandResult<()> {
     let store = key_store(&app, &state)?;
-    tauri::async_runtime::spawn_blocking(move || store.delete(provider)).await??;
+    let id = provider.clone();
+    tauri::async_runtime::spawn_blocking(move || store.delete(&id)).await??;
     tracing::info!("deleted API key for {provider}");
     Ok(())
 }
@@ -224,8 +252,10 @@ mod tests {
         let mut m = HashMap::new();
         m.insert(ProviderId::OpenAi, true);
         m.insert(ProviderId::Gemini, false);
+        m.insert(ProviderId::custom("comfy"), true);
         let v = serde_json::to_value(&m).expect("serialize");
         assert_eq!(v["open_ai"], true);
         assert_eq!(v["gemini"], false);
+        assert_eq!(v["custom:comfy"], true);
     }
 }

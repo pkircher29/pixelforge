@@ -16,9 +16,11 @@ pub const GEMINI_MODEL: &str = "gemini-3.1-flash-image";
 /// Gemini premium alternative.
 pub const GEMINI_PRO_MODEL: &str = "gemini-3-pro-image";
 
-/// Models offered per provider; the first entry is the default for `generate`.
-pub fn models(id: ProviderId) -> &'static [&'static str] {
+/// Models offered per built-in provider; the first entry is the default for `generate`.
+/// Custom providers carry their own list (`crate::custom`), so this is empty for them.
+pub fn models(id: &ProviderId) -> &'static [&'static str] {
     match id {
+        ProviderId::Custom(_) => &[],
         ProviderId::OpenAi => &[
             OPENAI_GENERATE_MODEL,
             OPENAI_EDIT_MODEL,
@@ -64,10 +66,12 @@ pub const OPENAI_PRESET_SIZES: [ImageSize; 3] = [
     ImageSize::new(1024, 1536),
 ];
 
-/// Capability matrix for one provider.
-pub fn capabilities_for(id: ProviderId) -> Capabilities {
+/// Capability matrix for one built-in provider. A custom id yields the conservative
+/// [`Capabilities::default`]; its real matrix lives in its `crate::custom::CustomProvider`.
+pub fn capabilities_for(id: &ProviderId) -> Capabilities {
     let model_list = models(id).iter().map(|m| (*m).to_owned()).collect();
     match id {
+        ProviderId::Custom(_) => Capabilities::default(),
         ProviderId::OpenAi => Capabilities {
             generate: true,
             mask_edit: true,
@@ -116,11 +120,14 @@ pub fn capabilities_for(id: ProviderId) -> Capabilities {
     }
 }
 
-/// Every provider with its matrix, in UI order.
+/// Every built-in provider with its matrix, in UI order.
 pub fn all_capabilities() -> Vec<(ProviderId, Capabilities)> {
-    ProviderId::ALL
+    ProviderId::BUILTIN
         .into_iter()
-        .map(|id| (id, capabilities_for(id)))
+        .map(|id| {
+            let caps = capabilities_for(&id);
+            (id, caps)
+        })
         .collect()
 }
 

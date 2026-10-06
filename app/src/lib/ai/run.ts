@@ -58,6 +58,10 @@ export interface AiRunRequest {
   feather: number;
   /** Re-run with a remembered selection instead of the document's current one. */
   selection?: Selection | undefined;
+  /** Do not write an AI history entry (the shootout records one entry for all providers). */
+  noHistory?: boolean | undefined;
+  /** Default true: a single result is added as a layer as soon as the job completes. */
+  autoApply?: boolean | undefined;
 }
 
 /** Everything needed to turn a result PNG into a layer, computed before submitting. */
@@ -280,16 +284,25 @@ export function runFor(jobId: string): ActiveRun | undefined {
   return runs.get(jobId);
 }
 
-/** Submit a request end to end. Resolves when the job is terminal and (n = 1) applied. */
-export async function runAi(req: AiRunRequest): Promise<ActiveRun> {
+/** An in-flight run plus a promise for its terminal job (results fetched, auto-applied). */
+export interface StartedRun extends ActiveRun {
+  done: Promise<AiJob>;
+}
+
+/**
+ * Prepare and submit a request, resolving as soon as the job is accepted (or rejected)
+ * so callers can show it; `done` settles when the job is terminal. The shootout fans
+ * out with this; `runAi` awaits `done` for the single-provider path.
+ */
+export async function startAi(req: AiRunRequest): Promise<StartedRun> {
   const open = docStore.active;
   const prepared = await prepareRun(req, open);
   const doc = open?.doc ?? null; // the live document (history entries go here)
   const { mode, emulated } = prepared.resolution;
-  const cost = estimateCost({ provider: req.provider.id, model: req.model, mode, size: req.size, quality: req.quality, n: req.n });
+  const cost = estimateCost({ provider: req.provider.id, model: req.model, mode, size: req.size, quality: req.quality, n: req.n, local: req.provider.local });
 
   let historyId: string | null = null;
-  if (doc) {
+  if (doc && !req.noHistory) {
     const entry: AiHistoryEntry = {
       id: newHistoryId(),
       ts: Date.now(),
@@ -304,8 +317,8 @@ export async function runAi(req: AiRunRequest): Promise<ActiveRun> {
       resultLayerIds: [],
       durationMs: 0,
       status: "running",
-      costUsd: cost.usd,
     };
+    if (cost) entry.costUsd = cost.usd;
     if (req.negativePrompt) entry.negativePrompt = req.negativePrompt;
     if (req.size) entry.size = req.size;
     if (req.quality) entry.quality = req.quality;
@@ -343,19 +356,40 @@ export async function runAi(req: AiRunRequest): Promise<ActiveRun> {
   const run: ActiveRun = { job, prepared, req };
   runs.set(job.id, run);
 
-  const done = await jobStore.whenDone(job.id);
-  if (doc && historyId) {
-    updateEntry(doc, historyId, {
-      status: done.state === "completed" ? "completed" : done.state === "cancelled" ? "cancelled" : "failed",
-      durationMs: jobStore.elapsedMs(done),
-      ...(done.error ? { error: { code: done.error.code, message: done.error.detail } } : {}),
-    });
-    if (open) open.version++;
-  }
-  if (done.state === "completed" && done.results && done.results.length === 1) {
-    await applyResult(done, prepared, 0, req);
-  }
-  return run;
+  const done = jobStore.whenDone(job.id).then(async (finished) => {
+    if (doc && historyId) {
+      updateEntry(doc, historyId, {
+        status: finished.state === "completed" ? "completed" : finished.state === "cancelled" ? "cancelled" : "failed",
+        durationMs: jobStore.elapsedMs(finished),
+        ...(finished.error ? { error: { code: finished.error.code, message: finished.error.detail } } : {}),
+      });
+      if (open) open.version++;
+    }
+    if (req.autoApply !== false && finished.state === "completed" && finished.results && finished.results.length === 1) {
+      await applyResult(finished, prepared, 0, req);
+    }
+    return finished;
+  });
+  return { ...run, done };
+}
+
+/** Submit a request end to end. Resolves when the job is terminal and (n = 1) applied. */
+export async function runAi(req: AiRunRequest): Promise<ActiveRun> {
+  const started = await startAi(req);
+  await started.done;
+  return runs.get(started.job.id) ?? started;
+}
+
+/** Open one result as its own document (used by "Keep as new documents"). */
+export async function openResultAsDocument(result: TakenResult, name: string): Promise<ApplyOutcome> {
+  const raster = await decodeImage(result.png);
+  const doc = createDocument({ width: raster.width, height: raster.height, noBackgroundLayer: true, name: name.slice(0, 48) });
+  const open = docStore.open(doc, null);
+  const layer = createRasterLayer(doc, { name, raster });
+  open.history.push(new AddLayerCommand(layer, undefined, "AI result"));
+  doc.activeLayerId = layer.id;
+  docStore.setActiveLayer(layer.id);
+  return { layerId: layer.id, docId: doc.id };
 }
 
 /** Add every not-yet-applied variant of a finished job as layers. */

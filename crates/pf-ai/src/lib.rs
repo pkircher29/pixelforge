@@ -26,6 +26,7 @@
 #![forbid(unsafe_code)]
 
 pub mod capabilities;
+pub mod custom;
 pub mod error;
 mod http;
 pub mod ipc;
@@ -38,11 +39,13 @@ pub mod secret;
 pub mod types;
 
 pub use capabilities::{all_capabilities, capabilities_for};
+pub use custom::{CustomKind, CustomProvider, CustomRegistry, ProbeResult};
 pub use error::{AiError, Error};
 pub use jobs::{JobConfig, JobEvent, JobEventKind, JobId, JobKind, JobManager, JobSpec, JobStatus};
 pub use keystore::{AutoKeyStore, FileStore, KeyStore, KeyringStore};
 pub use mask::{composite_back, crop_to_mask_bbox, to_openai_mask, Rect};
 pub use provider::{validate_edit, validate_generate, BoxedProvider, ImageProvider};
+pub use providers::custom::{build_custom_provider, probe as probe_custom, prompt_assist};
 pub use providers::{
     base_url_env_var, base_url_override, build_provider, build_provider_from_env,
     build_provider_with_base_url, SharedProvider,
@@ -67,7 +70,7 @@ mod tests {
 
     #[test]
     fn provider_ids_round_trip_through_serde() {
-        for id in ProviderId::ALL {
+        for id in ProviderId::BUILTIN {
             let json = serde_json::to_string(&id).expect("serialize");
             let back: ProviderId = serde_json::from_str(&json).expect("deserialize");
             assert_eq!(id, back);
@@ -76,5 +79,18 @@ mod tests {
             serde_json::to_string(&ProviderId::OpenAi).expect("serialize"),
             "\"open_ai\""
         );
+        let custom = ProviderId::custom("my-comfy");
+        let json = serde_json::to_string(&custom).expect("serialize");
+        assert_eq!(json, "\"custom:my-comfy\"");
+        let back: ProviderId = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(back, custom);
+        assert_eq!(back.custom_id(), Some("my-comfy"));
+        assert!(serde_json::from_str::<ProviderId>("\"custom:\"").is_err());
+        assert!(serde_json::from_str::<ProviderId>("\"nope\"").is_err());
+        // Custom ids work as JSON object keys (key status maps).
+        let mut m = std::collections::HashMap::new();
+        m.insert(custom.clone(), true);
+        let v = serde_json::to_value(&m).expect("map");
+        assert_eq!(v["custom:my-comfy"], true);
     }
 }

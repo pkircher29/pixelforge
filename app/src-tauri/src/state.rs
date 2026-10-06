@@ -5,7 +5,7 @@ use std::path::Path;
 use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex, OnceLock};
 
-use pf_ai::{AutoKeyStore, JobManager, KeyStore, ProviderId};
+use pf_ai::{AutoKeyStore, CustomRegistry, JobManager, KeyStore, ProviderId};
 use serde::{Deserialize, Serialize};
 
 /// User settings, persisted as `settings.json` in the app config directory by the
@@ -53,6 +53,8 @@ pub struct AppState {
     pub jobs: JobManager,
     /// API-key store, initialised on first use with the app config directory.
     pub keys: OnceLock<Arc<AutoKeyStore>>,
+    /// Custom AI provider registry (`ai-providers.json`), initialised on first use.
+    pub custom_providers: OnceLock<Arc<CustomRegistry>>,
     /// `true` once the `ai://job/<id>` event forwarder task is running.
     pub ai_forwarder_started: AtomicBool,
 }
@@ -64,6 +66,7 @@ impl Default for AppState {
             settings_loaded: AtomicBool::new(false),
             jobs: JobManager::default(),
             keys: OnceLock::new(),
+            custom_providers: OnceLock::new(),
             ai_forwarder_started: AtomicBool::new(false),
         }
     }
@@ -101,6 +104,14 @@ impl AppState {
             Arc::new(store)
         }))
     }
+
+    /// The custom provider registry, created on first call.
+    pub fn custom_registry(&self, config_dir: &Path) -> Arc<CustomRegistry> {
+        Arc::clone(
+            self.custom_providers
+                .get_or_init(|| Arc::new(CustomRegistry::new(config_dir))),
+        )
+    }
 }
 
 #[cfg(test)]
@@ -136,5 +147,8 @@ mod tests {
         let a = state.key_store(dir.path());
         let b = state.key_store(dir.path());
         assert!(Arc::ptr_eq(&a, &b));
+        let r = state.custom_registry(dir.path());
+        assert!(Arc::ptr_eq(&r, &state.custom_registry(dir.path())));
+        assert!(r.load().expect("empty registry").is_empty());
     }
 }

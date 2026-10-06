@@ -10,13 +10,17 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { decodeFrame, encodeFrame } from "$lib/io/frame";
 import type {
+  CustomKindInfo,
+  CustomProvider,
   EditParams,
   GenerateParams,
+  HubModel,
   ImageResultMeta,
   JobEvent,
   JobId,
   JobStatus,
   KeyStatus,
+  ProbeResult,
   ProviderId,
   ProviderInfo,
   ResultsHeader,
@@ -114,6 +118,50 @@ export function getSettings(): Promise<Settings> {
 
 export function setSettings(settings: Settings): Promise<Settings> {
   return invoke<Settings>("settings_set", { settings });
+}
+
+// ---------------------------------------------------------------------------
+// Custom providers (docs/ipc.md "Custom providers")
+// ---------------------------------------------------------------------------
+
+export function listCustomKinds(): Promise<CustomKindInfo[]> {
+  return invoke<CustomKindInfo[]>("ai_custom_kinds");
+}
+
+export function listCustomProviders(): Promise<CustomProvider[]> {
+  return invoke<CustomProvider[]>("ai_custom_list");
+}
+
+/** `auth` (key / token / `user:pass`) is stored in the key store, never echoed back. */
+export function addCustomProvider(provider: CustomProvider, auth?: string): Promise<CustomProvider[]> {
+  return invoke<CustomProvider[]>("ai_custom_add", { provider, auth: auth?.trim() || null });
+}
+
+export function updateCustomProvider(provider: CustomProvider, auth?: string, clearAuth = false): Promise<CustomProvider[]> {
+  return invoke<CustomProvider[]>("ai_custom_update", { provider, auth: auth?.trim() || null, clearAuth });
+}
+
+export function removeCustomProvider(id: string): Promise<CustomProvider[]> {
+  return invoke<CustomProvider[]>("ai_custom_remove", { id });
+}
+
+/** Probe the entry as given (unsaved form values are fine). */
+export function probeCustomProvider(provider: CustomProvider, auth?: string): Promise<ProbeResult> {
+  return invoke<ProbeResult>("ai_custom_probe", { provider, auth: auth?.trim() || null });
+}
+
+/** Frame for `ai_prompt_assist`: header `{ provider, text }` + optional image blob. */
+export function buildAssistFrame(provider: ProviderId, text: string, image?: Uint8Array): Uint8Array {
+  return encodeFrame({ provider, text }, image && image.byteLength > 0 ? [image] : []);
+}
+
+/** Ask an Ollama vision model to improve a prompt (optionally looking at `image`). */
+export function promptAssist(provider: ProviderId, text: string, image?: Uint8Array): Promise<string> {
+  return invoke<string>("ai_prompt_assist", buildAssistFrame(provider, text, image));
+}
+
+export function hubSearch(query: string, pipelineTag = "text-to-image", limit = 20): Promise<HubModel[]> {
+  return invoke<HubModel[]>("ai_hub_search", { query, pipelineTag, limit });
 }
 
 /** Subscribe to every job event. Await this before the first submit. */

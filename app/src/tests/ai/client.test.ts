@@ -6,19 +6,29 @@ vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn(async () => () => {}) })
 
 import { decodeFrame, encodeFrame } from "../../lib/io/frame";
 import {
+  addCustomProvider,
+  buildAssistFrame,
   buildEditFrame,
   cancelJob,
   deleteKey,
+  hubSearch,
   jobStatus,
+  listCustomKinds,
+  listCustomProviders,
   listProviders,
   parseResultFrame,
+  probeCustomProvider,
+  promptAssist,
+  removeCustomProvider,
   setKey,
   submitEdit,
   submitGenerate,
   takeResult,
   testKey,
+  updateCustomProvider,
 } from "../../lib/ai/client";
-import type { EditFrameHeader, ImageResultMeta } from "../../lib/ai/types";
+import { customIdOf, isCustomProviderId, isProviderId, providerLabel, type EditFrameHeader, type ImageResultMeta } from "../../lib/ai/types";
+import { mkCustom } from "./fixtures";
 
 const bytes = (s: string): Uint8Array => new TextEncoder().encode(s);
 
@@ -99,6 +109,55 @@ describe("command wrappers call the right Tauri commands", () => {
     expect(invoke).toHaveBeenLastCalledWith("settings_set_key", { provider: "open_ai", key: "sk-1" });
     await deleteKey("gemini");
     expect(invoke).toHaveBeenLastCalledWith("settings_delete_key", { provider: "gemini" });
+  });
+
+  it("custom provider commands (docs/ipc.md): list/add/update/remove/probe/kinds/hub search", async () => {
+    invoke.mockResolvedValue([]);
+    const c = mkCustom("comfy");
+    await listCustomProviders();
+    expect(invoke).toHaveBeenLastCalledWith("ai_custom_list");
+    await listCustomKinds();
+    expect(invoke).toHaveBeenLastCalledWith("ai_custom_kinds");
+    await addCustomProvider(c, " tok ");
+    expect(invoke).toHaveBeenLastCalledWith("ai_custom_add", { provider: c, auth: "tok" });
+    await addCustomProvider(c);
+    expect(invoke).toHaveBeenLastCalledWith("ai_custom_add", { provider: c, auth: null });
+    await updateCustomProvider(c, "", true);
+    expect(invoke).toHaveBeenLastCalledWith("ai_custom_update", { provider: c, auth: null, clearAuth: true });
+    await removeCustomProvider("comfy");
+    expect(invoke).toHaveBeenLastCalledWith("ai_custom_remove", { id: "comfy" });
+    await probeCustomProvider(c, "x");
+    expect(invoke).toHaveBeenLastCalledWith("ai_custom_probe", { provider: c, auth: "x" });
+    await hubSearch("flux");
+    expect(invoke).toHaveBeenLastCalledWith("ai_hub_search", { query: "flux", pipelineTag: "text-to-image", limit: 20 });
+    await testKey("custom:comfy");
+    expect(invoke).toHaveBeenLastCalledWith("ai_test_key", { provider: "custom:comfy" });
+  });
+
+  it("promptAssist sends a raw frame with the provider, text and optional image blob", async () => {
+    invoke.mockResolvedValueOnce("better prompt");
+    const out = await promptAssist("custom:ollama", "a fox", bytes("PNG"));
+    expect(out).toBe("better prompt");
+    const [cmd, body] = invoke.mock.calls[0] as [string, Uint8Array];
+    expect(cmd).toBe("ai_prompt_assist");
+    const { header, blobs } = decodeFrame<{ provider: string; text: string; blobs: number[] }>(body);
+    expect(header.provider).toBe("custom:ollama");
+    expect(header.text).toBe("a fox");
+    expect(blobs).toHaveLength(1);
+    expect(decodeFrame(buildAssistFrame("custom:ollama", "x")).blobs).toHaveLength(0);
+    expect(decodeFrame(buildAssistFrame("custom:ollama", "x", new Uint8Array(0))).blobs).toHaveLength(0);
+  });
+
+  it("provider id helpers", () => {
+    expect(isProviderId("open_ai")).toBe(true);
+    expect(isProviderId("custom:comfy")).toBe(true);
+    expect(isProviderId("custom:")).toBe(false);
+    expect(isProviderId("dalle")).toBe(false);
+    expect(isCustomProviderId("custom:x")).toBe(true);
+    expect(customIdOf("custom:x")).toBe("x");
+    expect(customIdOf("gemini")).toBeNull();
+    expect(providerLabel("custom:my-comfy")).toBe("my-comfy");
+    expect(providerLabel("x_ai")).toBe("Grok");
   });
 
   it("submitEdit sends a raw frame body, takeResult decodes a raw frame", async () => {

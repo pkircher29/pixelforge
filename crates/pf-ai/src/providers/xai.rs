@@ -104,7 +104,7 @@ impl XaiProvider {
             .json(body)
             .send()
             .await?;
-        let resp = http::ensure_success(self.id(), resp).await?;
+        let resp = http::ensure_success(&self.id(), resp).await?;
         let parsed: ImagesResponse = resp.json().await?;
         parsed.into_results(model, n)
     }
@@ -167,11 +167,11 @@ impl ImageProvider for XaiProvider {
     }
 
     fn capabilities(&self) -> Capabilities {
-        capabilities_for(ProviderId::XAi)
+        capabilities_for(&ProviderId::XAi)
     }
 
     async fn generate(&self, req: GenerateRequest) -> Result<Vec<ImageResult>, Error> {
-        validate_generate(self.id(), &self.capabilities(), &req)?;
+        validate_generate(&self.id(), &self.capabilities(), &req)?;
         let prompt = http::effective_prompt(&req.prompt, req.negative_prompt.as_deref());
         let model = req.model.clone().unwrap_or_else(|| XAI_MODEL.to_owned());
 
@@ -205,7 +205,7 @@ impl ImageProvider for XaiProvider {
     }
 
     async fn edit(&self, req: EditRequest) -> Result<Vec<ImageResult>, Error> {
-        validate_edit(self.id(), &self.capabilities(), &req)?;
+        validate_edit(&self.id(), &self.capabilities(), &req)?;
         let prompt = http::effective_prompt(&req.prompt, req.negative_prompt.as_deref());
         let model = req.model.clone().unwrap_or_else(|| XAI_MODEL.to_owned());
         Self::check_image(&req.image, "input image")?;
@@ -232,7 +232,7 @@ impl ImageProvider for XaiProvider {
             .header(reqwest::header::AUTHORIZATION, http::bearer(&self.auth))
             .send()
             .await?;
-        http::ensure_success(self.id(), resp).await.map(|_| ())
+        http::ensure_success(&self.id(), resp).await.map(|_| ())
     }
 }
 

@@ -35,7 +35,7 @@ pub(crate) fn bearer(auth: &AuthMethod) -> String {
 
 /// Return the response unchanged on 2xx; otherwise consume it into a typed [`Error`].
 pub(crate) async fn ensure_success(
-    provider: ProviderId,
+    provider: &ProviderId,
     resp: reqwest::Response,
 ) -> Result<reqwest::Response, Error> {
     let status = resp.status();
@@ -49,7 +49,7 @@ pub(crate) async fn ensure_success(
 
 /// Map a non-2xx status + body to the typed error (pure, so it is unit-testable).
 pub(crate) fn map_error(
-    provider: ProviderId,
+    provider: &ProviderId,
     status: u16,
     retry_after: Option<u64>,
     raw_body: &str,
@@ -65,12 +65,15 @@ pub(crate) fn map_error(
         400 | 422 => {
             if info.is_moderation() {
                 Error::Moderation {
-                    provider,
+                    provider: provider.clone(),
                     categories: info.categories,
                     message,
                 }
             } else {
-                Error::BadRequest { provider, message }
+                Error::BadRequest {
+                    provider: provider.clone(),
+                    message,
+                }
             }
         }
         _ => Error::Http { status, body },
@@ -293,14 +296,14 @@ mod tests {
     #[test]
     fn error_mapping_by_status() {
         let e = map_error(
-            ProviderId::OpenAi,
+            &ProviderId::OpenAi,
             401,
             None,
             r#"{"error":{"message":"bad key"}}"#,
         );
         assert!(matches!(e, Error::Auth(m) if m.contains("bad key")));
 
-        let e = map_error(ProviderId::XAi, 429, Some(7), "slow down");
+        let e = map_error(&ProviderId::XAi, 429, Some(7), "slow down");
         assert!(matches!(
             e,
             Error::RateLimited {
@@ -309,7 +312,7 @@ mod tests {
         ));
 
         let e = map_error(
-            ProviderId::OpenAi,
+            &ProviderId::OpenAi,
             400,
             None,
             r#"{"error":{"code":"moderation_blocked","message":"nope","moderation_details":{"moderation_stage":"input","categories":["violence"]}}}"#,
@@ -320,14 +323,14 @@ mod tests {
         }
 
         let e = map_error(
-            ProviderId::Gemini,
+            &ProviderId::Gemini,
             400,
             None,
             r#"{"error":{"code":400,"message":"imageSize invalid","status":"INVALID_ARGUMENT"}}"#,
         );
         assert!(matches!(e, Error::BadRequest { message, .. } if message.contains("imageSize")));
 
-        let e = map_error(ProviderId::Gemini, 503, None, "overloaded");
+        let e = map_error(&ProviderId::Gemini, 503, None, "overloaded");
         assert!(matches!(e, Error::Http { status: 503, .. }));
         assert!(e.is_retryable());
     }

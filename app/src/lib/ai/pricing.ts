@@ -4,7 +4,7 @@
  * edits for input + output, Gemini bills by output tier. Shown as "~$0.04".
  */
 
-import type { AiMode, ImageSize, ProviderId } from "./types";
+import { isCustomProviderId, type AiMode, type ImageSize, type ProviderId } from "./types";
 
 export interface CostEstimate {
   /** Total for `n` images. */
@@ -24,6 +24,8 @@ export interface CostQuery {
   size?: ImageSize | undefined;
   quality?: string | undefined;
   n: number;
+  /** Custom providers: runs on this machine (free) or hosted (no price table -> null). */
+  local?: boolean | undefined;
 }
 
 /** OpenAI per-image prices at 1024x1024 by quality tier (gpt-image-2 guide table). */
@@ -86,9 +88,16 @@ function geminiPerImage(model: string, size: ImageSize | undefined): { usd: numb
   return { usd: table[tier], approx: false, note: `Gemini 3.1 Flash Image at ${tier}. Image input adds about $0.001.` };
 }
 
-/** Estimate the cost of one request. */
-export function estimateCost(q: CostQuery): CostEstimate {
+/**
+ * Estimate the cost of one request. `null` when nothing sensible can be said (a hosted
+ * custom provider: Hugging Face credits, Replicate per-second billing, ...).
+ */
+export function estimateCost(q: CostQuery): CostEstimate | null {
   const n = Math.max(1, Math.floor(q.n));
+  if (isCustomProviderId(q.provider)) {
+    if (q.local) return { usd: 0, perImage: 0, approx: false, note: "Runs on your own machine: no per-image charge." };
+    return null;
+  }
   let per: { usd: number; approx: boolean; note: string };
   switch (q.provider) {
     case "open_ai":
