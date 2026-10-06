@@ -166,12 +166,13 @@
 <div class="layers">
   {#if entry && doc}
     <div class="controls">
-      <select class="select" aria-label="Blend mode" disabled={!active} value={active?.blendMode ?? "normal"} onchange={(e) => active && setProps(active.layer, { blendMode: e.currentTarget.value as BlendMode })}>
+      <!-- Blur after a pick so single-key tool shortcuts work again (Photoshop behaviour). -->
+      <select class="select" aria-label="Blend mode" disabled={!active} value={active?.blendMode ?? "normal"} onchange={(e) => { if (active) setProps(active.layer, { blendMode: e.currentTarget.value as BlendMode }); e.currentTarget.blur(); }}>
         {#each BLEND_MODES as m (m)}<option value={m}>{BLEND_MODE_LABEL[m]}</option>{/each}
       </select>
       <label class="opacity">
         <span>Opacity</span>
-        <input type="range" min="0" max="100" disabled={!active} value={Math.round((active?.opacity ?? 1) * 100)} oninput={(e) => active && setProps(active.layer, { opacity: Number(e.currentTarget.value) / 100 })} aria-label="Opacity" />
+        <input type="range" min="0" max="100" disabled={!active} value={Math.round((active?.opacity ?? 1) * 100)} oninput={(e) => active && setProps(active.layer, { opacity: Number(e.currentTarget.value) / 100 })} onchange={(e) => e.currentTarget.blur()} aria-label="Opacity" />
         <span class="val">{Math.round((active?.opacity ?? 1) * 100)}%</span>
       </label>
     </div>

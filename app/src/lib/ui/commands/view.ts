@@ -57,7 +57,8 @@ registerCommands([
   { id: "help.about", label: "About Pixelforge", menu: "Help", order: 100, run: () => openDialog<{ compositor: string }, void>(AboutDialog, { compositor: canvasHost.compositorKind || "none" }) },
   { id: "help.github", label: "GitHub repository", menu: "Help", order: 200, keywords: ["source", "issues"], run: () => (isTauri() ? openUrl(REPO) : void window.open(REPO, "_blank", "noopener")) },
   { id: "help.issues", label: "Report a problem", menu: "Help", order: 201, run: () => (isTauri() ? openUrl(`${REPO}/issues/new`) : void window.open(`${REPO}/issues/new`, "_blank", "noopener")) },
-  { id: "help.devtools", label: "Toggle developer tools", menu: "Help", order: 300, shortcut: "CmdOrCtrl+Shift+I", run: () => { if (import.meta.env.DEV) console.info("[pixelforge] devtools: press Ctrl+Shift+I / F12 in the webview"); } },
+  // No accelerator: Ctrl+Shift+I is Select ▸ Inverse; the webview's own F12 opens devtools in dev builds.
+  { id: "help.devtools", label: "Toggle developer tools", menu: "Help", order: 300, run: () => { if (import.meta.env.DEV) console.info("[pixelforge] devtools: press Ctrl+Shift+I / F12 in the webview"); } },
   { id: "window.maximize", label: "Toggle maximize", shortcut: "F11", run: () => (isTauri() ? getCurrentWindow().toggleMaximize() : undefined) },
 ]);
 

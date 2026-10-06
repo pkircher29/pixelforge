@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseAccelerator, matchesAccelerator, formatShortcut, normaliseEventKey, isTypingTarget } from "../lib/shortcuts";
+import { parseAccelerator, matchesAccelerator, formatShortcut, normaliseEventKey, isTypingTarget, installShortcuts } from "../lib/shortcuts";
 
 const ev = (key: string, mods: Partial<{ ctrlKey: boolean; metaKey: boolean; shiftKey: boolean; altKey: boolean; code: string }> = {}) => ({
   key,
@@ -79,5 +79,80 @@ describe("isTypingTarget", () => {
     expect(isTypingTarget(ta)).toBe(true);
     expect(isTypingTarget(div)).toBe(false);
     expect(isTypingTarget(null)).toBe(false);
+  });
+});
+
+describe("installShortcuts", () => {
+  function setup() {
+    const ran: string[] = [];
+    const uninstall = installShortcuts({
+      commands: () => [
+        { shortcut: "CmdOrCtrl+E", run: () => void ran.push("merge") },
+        { shortcut: "CmdOrCtrl+D", run: () => void ran.push("deselect") },
+      ],
+      toolKey: (e) => {
+        if (e.key === "b") ran.push("tool:b");
+        return e.key === "b";
+      },
+      toolEvent: () => false,
+      modalOpen: () => false,
+      escape: () => void ran.push("escape"),
+    });
+    return { ran, uninstall };
+  }
+
+  it("lets Ctrl chords through from a <select> / range slider but not plain keys", () => {
+    const { ran, uninstall } = setup();
+    const select = document.createElement("select");
+    const range = document.createElement("input");
+    range.type = "range";
+    document.body.append(select, range);
+    try {
+      select.dispatchEvent(new KeyboardEvent("keydown", { key: "e", code: "KeyE", ctrlKey: true, bubbles: true }));
+      range.dispatchEvent(new KeyboardEvent("keydown", { key: "d", code: "KeyD", ctrlKey: true, bubbles: true }));
+      // Plain letters navigate the <select>'s options: they must not switch tools.
+      select.dispatchEvent(new KeyboardEvent("keydown", { key: "b", code: "KeyB", bubbles: true }));
+      expect(ran).toEqual(["merge", "deselect"]);
+    } finally {
+      uninstall();
+      select.remove();
+      range.remove();
+    }
+  });
+
+  it("falls through a disabled command to an enabled one with the same accelerator", () => {
+    const ran: string[] = [];
+    const uninstall = installShortcuts({
+      commands: () => [
+        { shortcut: "CmdOrCtrl+Shift+G", enabled: () => false, run: () => void ran.push("ungroup") },
+        { shortcut: "CmdOrCtrl+Shift+G", run: () => void ran.push("generate") },
+      ],
+      toolKey: () => {
+        ran.push("tool");
+        return true;
+      },
+      toolEvent: () => false,
+      modalOpen: () => false,
+      escape: () => {},
+    });
+    try {
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "G", code: "KeyG", ctrlKey: true, shiftKey: true, bubbles: true }));
+      expect(ran).toEqual(["generate"]);
+    } finally {
+      uninstall();
+    }
+  });
+
+  it("still swallows chords inside a text field", () => {
+    const { ran, uninstall } = setup();
+    const text = document.createElement("input");
+    document.body.append(text);
+    try {
+      text.dispatchEvent(new KeyboardEvent("keydown", { key: "e", code: "KeyE", ctrlKey: true, bubbles: true }));
+      expect(ran).toEqual([]);
+    } finally {
+      uninstall();
+      text.remove();
+    }
   });
 });

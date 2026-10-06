@@ -139,7 +139,11 @@ void main() {
     if (u_showGrid) {
       vec2 f = fract(d);
       float lw = 1.0 / u_zoom;
-      if (f.x < lw || f.y < lw) color = mix(color, vec3(0.5), 0.35);
+      if (f.x < lw || f.y < lw) {
+        // Contrast against the pixel underneath (a mid-grey line vanishes on mid-grey).
+        float luma = dot(color, vec3(0.299, 0.587, 0.114));
+        color = mix(color, luma > 0.5 ? vec3(0.0) : vec3(1.0), 0.35);
+      }
     }
   } else {
     vec2 q = max(-d, d - u_docSize);

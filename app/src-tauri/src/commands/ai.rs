@@ -22,8 +22,8 @@ use std::time::Duration;
 
 use pf_ai::ipc::{decode_edit_body, encode_results, GenerateParams};
 use pf_ai::{
-    build_provider, capabilities_for, AuthMethod, Capabilities, JobEvent, JobId, JobKind, JobSpec,
-    JobStatus, KeyStore, ProviderId,
+    build_provider_from_env, capabilities_for, AuthMethod, Capabilities, JobEvent, JobId, JobKind,
+    JobSpec, JobStatus, KeyStore, ProviderId,
 };
 use serde::Serialize;
 use tauri::ipc::{InvokeBody, Request, Response};
@@ -150,7 +150,8 @@ async fn submit(
 ) -> CommandResult<JobId> {
     let store = key_store(app, state)?;
     let key = load_key(store, provider).await?;
-    let provider = build_provider(provider, AuthMethod::ApiKey(key))?;
+    // `PF_AI_BASE_URL_*` (dev: scripts/fake-ai-server.mjs) redirects the provider.
+    let provider = build_provider_from_env(provider, AuthMethod::ApiKey(key))?;
     ensure_forwarder(app, state);
     let id = state.jobs.submit(JobSpec {
         provider,
@@ -265,7 +266,7 @@ pub async fn ai_test_key(
 ) -> CommandResult<()> {
     let store = key_store(&app, &state)?;
     let key = load_key(store, provider).await?;
-    let p = build_provider(provider, AuthMethod::ApiKey(key))?;
+    let p = build_provider_from_env(provider, AuthMethod::ApiKey(key))?;
     p.test_key().await?;
     Ok(())
 }

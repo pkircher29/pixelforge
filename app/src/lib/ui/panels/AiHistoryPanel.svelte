@@ -22,10 +22,13 @@
   let notice = $state<string | null>(null);
 
   const version = $derived(docStore.active?.version ?? -1);
+  // History entries are plain objects mutated in place (`updateEntry`); a keyed `{#each}`
+  // over the same object references would not notice `status` flipping from "running" to
+  // "completed", so hand the template fresh shallow copies on every document version.
   const entries = $derived.by((): AiHistoryEntry[] => {
     void version;
     const doc = docStore.doc;
-    return doc ? [...getHistory(doc)].reverse() : [];
+    return doc ? getHistory(doc).map((e) => ({ ...e })).reverse() : [];
   });
 
   function when(ts: number): string {

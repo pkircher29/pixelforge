@@ -26,6 +26,38 @@ pub fn build_provider(id: ProviderId, auth: AuthMethod) -> Result<SharedProvider
     })
 }
 
+/// Name of the environment variable that overrides the provider's base URL
+/// (`PF_AI_BASE_URL_OPENAI`, `PF_AI_BASE_URL_XAI`, `PF_AI_BASE_URL_GEMINI`).
+///
+/// Development aid: point a provider at `scripts/fake-ai-server.mjs` (or a proxy)
+/// without touching the key store. Empty values are ignored.
+pub fn base_url_env_var(id: ProviderId) -> &'static str {
+    match id {
+        ProviderId::OpenAi => "PF_AI_BASE_URL_OPENAI",
+        ProviderId::XAi => "PF_AI_BASE_URL_XAI",
+        ProviderId::Gemini => "PF_AI_BASE_URL_GEMINI",
+    }
+}
+
+/// The base URL override for `id` from the environment, if any (trimmed, non-empty).
+pub fn base_url_override(id: ProviderId) -> Option<String> {
+    std::env::var(base_url_env_var(id))
+        .ok()
+        .map(|s| s.trim().to_owned())
+        .filter(|s| !s.is_empty())
+}
+
+/// [`build_provider`], honouring the `PF_AI_BASE_URL_*` environment override.
+pub fn build_provider_from_env(id: ProviderId, auth: AuthMethod) -> Result<SharedProvider, Error> {
+    match base_url_override(id) {
+        Some(url) => {
+            tracing::info!(provider = ?id, %url, "using base URL override from environment");
+            build_provider_with_base_url(id, auth, &url)
+        }
+        None => build_provider(id, auth),
+    }
+}
+
 /// Like [`build_provider`] but pointed at a custom base URL (tests, proxies).
 pub fn build_provider_with_base_url(
     id: ProviderId,
@@ -50,6 +82,21 @@ mod tests {
             let p = build_provider(id, AuthMethod::ApiKey(SecretString::new("k"))).expect("builds");
             assert_eq!(p.id(), id);
             assert!(p.capabilities().generate);
+        }
+    }
+
+    #[test]
+    fn env_var_names_are_distinct_and_from_env_builds() {
+        let names: Vec<&str> = ProviderId::ALL.into_iter().map(base_url_env_var).collect();
+        assert_eq!(names.len(), 3);
+        assert!(names.iter().all(|n| n.starts_with("PF_AI_BASE_URL_")));
+        assert_ne!(names[0], names[1]);
+        assert_ne!(names[1], names[2]);
+        // Without the variable set the override is None and the factory still builds.
+        for id in ProviderId::ALL {
+            let p = build_provider_from_env(id, AuthMethod::ApiKey(SecretString::new("k")))
+                .expect("builds");
+            assert_eq!(p.id(), id);
         }
     }
 }

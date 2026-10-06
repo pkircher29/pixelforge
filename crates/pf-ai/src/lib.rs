@@ -43,7 +43,10 @@ pub use jobs::{JobConfig, JobEvent, JobEventKind, JobId, JobKind, JobManager, Jo
 pub use keystore::{AutoKeyStore, FileStore, KeyStore, KeyringStore};
 pub use mask::{composite_back, crop_to_mask_bbox, to_openai_mask, Rect};
 pub use provider::{validate_edit, validate_generate, BoxedProvider, ImageProvider};
-pub use providers::{build_provider, build_provider_with_base_url, SharedProvider};
+pub use providers::{
+    base_url_env_var, base_url_override, build_provider, build_provider_from_env,
+    build_provider_with_base_url, SharedProvider,
+};
 pub use secret::SecretString;
 pub use types::{
     AuthMethod, Capabilities, EditMode, EditRequest, GenerateRequest, ImageBytes, ImageResult,

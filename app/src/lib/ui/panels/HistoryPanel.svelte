@@ -9,6 +9,16 @@
     return { entries: h.entries.slice(), index: h.index, evicted: h.evictedCount, bytes: h.bytes, name: entry.doc.name };
   });
 
+  let list = $state<HTMLDivElement | null>(null);
+
+  // Keep the current step in view as commands are pushed (new steps append at the bottom).
+  $effect(() => {
+    const el = list;
+    const idx = view?.index;
+    if (!el || idx === undefined) return;
+    queueMicrotask(() => el.querySelector<HTMLElement>(".step.current")?.scrollIntoView({ block: "nearest" }));
+  });
+
   function jump(i: number) {
     if (!entry) return;
     entry.history.jumpTo(i);
@@ -23,7 +33,7 @@
 
 <div class="history">
   {#if view && entry}
-    <div class="list">
+    <div class="list" bind:this={list}>
       {#if view.evicted > 0}
         <div class="evicted">{view.evicted} older step{view.evicted === 1 ? "" : "s"} forgotten to stay under the memory budget</div>
       {/if}

@@ -220,7 +220,12 @@ export function installShortcuts(h: ShortcutHandlers): () => void {
   const onDown = (e: KeyboardEvent): void => {
     if (e.defaultPrevented) return;
     if (h.modalOpen()) return;
-    const typing = isTypingTarget(e.target);
+    // A <select> or range slider only "types" plain keys (arrow / letter navigation):
+    // Ctrl/Cmd chords must still reach the app, otherwise picking a blend mode leaves
+    // every shortcut dead (and Ctrl+G falls through to the webview's Find bar).
+    const target = e.target;
+    const widget = target instanceof HTMLSelectElement || (target instanceof HTMLInputElement && target.type === "range");
+    const typing = isTypingTarget(target) && !(widget && (e.ctrlKey || e.metaKey));
     if (typing) {
       if (e.key === "Escape") {
         (e.target as HTMLElement).blur();
@@ -228,15 +233,20 @@ export function installShortcuts(h: ShortcutHandlers): () => void {
       return;
     }
     // Commands first (they may include Ctrl+Z etc. that the webview would otherwise eat).
+    // A disabled match swallows the key but lets a later enabled command with the same
+    // accelerator run (modules register in isolation; collisions degrade gracefully).
+    let matched = false;
     for (const c of h.commands()) {
       if (!c.shortcut) continue;
       const a = parsed(c.shortcut);
       if (!a || !matchesAccelerator(a, e, IS_MAC)) continue;
       e.preventDefault();
-      if (c.enabled && !c.enabled()) return;
+      matched = true;
+      if (c.enabled && !c.enabled()) continue;
       void c.run();
       return;
     }
+    if (matched) return;
     if (h.toolEvent(e, "down")) {
       e.preventDefault();
       return;

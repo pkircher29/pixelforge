@@ -32,7 +32,9 @@ registerCommands([
     label: "Generate with AI…",
     menu: "AI",
     order: 100,
-    shortcut: "CmdOrCtrl+Shift+G",
+    // Ctrl+Shift+G is Photoshop's Ungroup (layer.ungroup owns it); Ctrl+Alt+G is a
+    // common OS-level hotkey (e.g. Google Drive for desktop), so add Shift as well.
+    shortcut: "CmdOrCtrl+Shift+Alt+G",
     icon: Sparkles,
     keywords: ["image", "prompt", "text to image"],
     run: () => aiUi.focusPrompt("generate"),
