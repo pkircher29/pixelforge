@@ -2,47 +2,107 @@
  * Tool registry: toolbar order, fly-out groups and key lookup.
  *
  * `TOOL_GROUPS` is the Photoshop CC single-column toolbar (PLAN-v2 §2). Every slot lists
- * its members in fly-out order; members whose tool class doesn't exist yet still render
- * (disabled) so the column is complete today and Wave 6 only has to ship the classes.
+ * its members in fly-out order; members whose tool class doesn't exist (the "skip" ones:
+ * Artboard, Perspective Crop, Slice, Note, Content-Aware Move, Mixer Brush, Art History
+ * Brush, Curvature Pen) still render disabled so the column is complete.
+ *
+ * `HIDDEN_TOOLS` are activatable but not shown in the toolbar (Transform Selection).
  */
 import type { Tool } from "./types";
 import { MoveTool } from "./move";
 import { MarqueeTool } from "./marquee";
 import { LassoTool } from "./lasso";
+import { MagneticLassoTool } from "./magnetic-lasso";
+import { QuickSelectionTool } from "./quick-select";
 import { WandTool } from "./wand";
 import { CropTool } from "./crop";
-import { EyedropperTool } from "./eyedropper";
+import { EyedropperTool, ColorSamplerTool, RulerTool } from "./eyedropper";
+import { SpotHealingTool, HealingBrushTool, PatchTool, RedEyeTool } from "./healing";
 import { BrushTool } from "./brush";
-import { BucketTool } from "./bucket";
+import { ColorReplacementTool } from "./color-replacement";
+import { CloneStampTool, PatternStampTool, HistoryBrushTool } from "./stamp";
+import { EraserTool, BackgroundEraserTool, MagicEraserTool } from "./erasers";
 import { GradientTool } from "./gradient";
-import { TextTool } from "./text";
-import { ZoomTool, HandTool } from "./navigate";
+import { BucketTool } from "./bucket";
+import { BlurTool, SharpenTool, SmudgeTool, DodgeBurnTool, SpongeTool } from "./retouch";
+import { PenToolImpl, FreeformPenTool, AnchorEditTool } from "./pen";
+import { TypeTool } from "./type";
+import { PathSelectionTool } from "./path-select";
+import { ShapeTool } from "./shapes";
+import { ZoomTool, HandTool, RotateViewTool } from "./navigate";
+import { TransformSelectionTool } from "./transform-selection";
 import { parseAccelerator, matchesAccelerator, IS_MAC } from "$lib/shortcuts";
 import { setGroupResolver } from "$lib/stores/tool.svelte";
 
 export type { Tool, ToolContext, ToolEvent, ToolOption, ToolPreset, SelectionMode, IconComponent } from "./types";
-export { TextTool, CropTool };
+export { TypeTool, CropTool, MoveTool, RulerTool, ColorSamplerTool, RotateViewTool, TransformSelectionTool };
+export { typeSession } from "./type-session.svelte";
+export { editTextLayer } from "./type";
+export { brushStore } from "./brush-store.svelte";
 
+/** Toolbar tools in PS slot order (fly-out order within a slot). */
 export const TOOLS: readonly Tool[] = [
   new MoveTool(),
   new MarqueeTool("rect"),
   new MarqueeTool("ellipse"),
+  new MarqueeTool("row"),
+  new MarqueeTool("column"),
   new LassoTool(false),
   new LassoTool(true),
+  new MagneticLassoTool(),
+  new QuickSelectionTool(),
   new WandTool(),
   new CropTool(),
   new EyedropperTool(),
-  new BrushTool("paint"),
-  new BrushTool("erase"),
-  new BucketTool(),
+  new ColorSamplerTool(),
+  new RulerTool(),
+  new SpotHealingTool(),
+  new HealingBrushTool(),
+  new PatchTool(),
+  new RedEyeTool(),
+  new BrushTool("brush"),
+  new BrushTool("pencil"),
+  new ColorReplacementTool(),
+  new CloneStampTool(),
+  new PatternStampTool(),
+  new HistoryBrushTool(),
+  new EraserTool(),
+  new BackgroundEraserTool(),
+  new MagicEraserTool(),
   new GradientTool(),
-  new BrushTool("clone"),
-  new TextTool(),
-  new ZoomTool(),
+  new BucketTool(),
+  new BlurTool(),
+  new SharpenTool(),
+  new SmudgeTool(),
+  new DodgeBurnTool("dodge"),
+  new DodgeBurnTool("burn"),
+  new SpongeTool(),
+  new PenToolImpl(),
+  new FreeformPenTool(),
+  new AnchorEditTool("add"),
+  new AnchorEditTool("delete"),
+  new AnchorEditTool("convert"),
+  new TypeTool("h"),
+  new TypeTool("v"),
+  new TypeTool("mask-h"),
+  new TypeTool("mask-v"),
+  new PathSelectionTool(false),
+  new PathSelectionTool(true),
+  new ShapeTool("rect"),
+  new ShapeTool("rounded"),
+  new ShapeTool("ellipse"),
+  new ShapeTool("polygon"),
+  new ShapeTool("line"),
+  new ShapeTool("custom"),
   new HandTool(),
+  new RotateViewTool(),
+  new ZoomTool(),
 ];
 
-const byId = new Map(TOOLS.map((t) => [t.id, t]));
+/** Tools reachable by id but absent from the toolbar. */
+export const HIDDEN_TOOLS: readonly Tool[] = [new TransformSelectionTool()];
+
+const byId = new Map([...TOOLS, ...HIDDEN_TOOLS].map((t) => [t.id, t]));
 
 export function getTool(id: string): Tool | undefined {
   return byId.get(id);
@@ -278,4 +338,9 @@ export function toolForKey(
   if (matches.length === 1) return matches[0]!;
   const i = matches.findIndex((t) => t.id === currentId);
   return matches[(i + 1) % matches.length]!;
+}
+
+/** True for the Type tool family (the canvas lets clicks through to them while editing text). */
+export function isTypeToolId(id: string): boolean {
+  return id === "text" || id === "type-v" || id === "type-mask-h" || id === "type-mask-v";
 }

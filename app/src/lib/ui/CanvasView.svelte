@@ -12,7 +12,9 @@
   import { toolStore } from "$lib/stores/tool.svelte";
   import { ui } from "$lib/stores/ui.svelte";
   import { settings, CHECKER_PX, CHECKER_RGB } from "$lib/stores/settings.svelte";
-  import { TextTool, type ToolEvent } from "$lib/tools";
+  import { type ToolEvent } from "$lib/tools";
+  import TypeEditor from "$lib/tools/ui/TypeEditor.svelte";
+  import { typeSession } from "$lib/tools/type-session.svelte";
   import { canvasHost, type CanvasImpl } from "./canvas/host.svelte";
   import { paintRuler } from "./rulers";
 
@@ -29,7 +31,6 @@
   let overlay = $state<HTMLCanvasElement | null>(null);
   let rulerH = $state<HTMLCanvasElement | null>(null);
   let rulerV = $state<HTMLCanvasElement | null>(null);
-  let textInput = $state<HTMLInputElement | null>(null);
   let cursor = $state("default");
   let cssW = $state(0);
   let cssH = $state(0);
@@ -285,7 +286,6 @@
   function onPointerDown(e: PointerEvent): void {
     if (!active || !host) return;
     host.focus();
-    if (ui.textEdit) return; // the inline editor owns input until committed
     host.setPointerCapture(e.pointerId);
     if (e.button === 1 || (e.button === 0 && toolStore.tempToolId === "hand" && canvasHost.selectedTool.id !== "hand")) {
       panning = { x: e.clientX, y: e.clientY };
@@ -372,42 +372,8 @@
     e.preventDefault();
   }
 
-  // ------------------------------------------------------------------ text editor
-
-  const textPos = $derived.by(() => {
-    const t = ui.textEdit;
-    if (!t || !active) return null;
-    void entry.version;
-    const s = entry.viewport.docToScreen({ x: t.docX, y: t.docY });
-    const size = toolStore.option("text", "size", 48) * entry.viewport.zoom;
-    return { x: s.x, y: s.y, size };
-  });
-
-  $effect(() => {
-    if (textPos && textInput) textInput.focus();
-  });
-
-  function commitText(): void {
-    const t = ui.textEdit;
-    if (!t) return;
-    const value = t.value;
-    ui.textEdit = null;
-    const tool = canvasHost.selectedTool;
-    const ctx = canvasHost.context(tool);
-    if (!(tool instanceof TextTool) || !ctx || !value.trim()) return;
-    tool.commit(ctx, value, t.docX, t.docY);
-  }
-
-  function onTextKey(e: KeyboardEvent): void {
-    e.stopPropagation();
-    if (e.key === "Enter") {
-      e.preventDefault();
-      commitText();
-    } else if (e.key === "Escape") {
-      e.preventDefault();
-      ui.textEdit = null;
-    }
-  }
+  // Type tool editing: the hidden editor (tools-v2) lives in this view while a session is active.
+  const typing = $derived(active && typeSession.active && !!ui.textEdit);
 </script>
 
 <div class="view" class:hidden={!active} class:rulers>
@@ -438,23 +404,8 @@
       <div class="frame" aria-hidden="true" style:left="{frame.x}px" style:top="{frame.y}px" style:width="{frame.w}px" style:height="{frame.h}px"></div>
     {/if}
     <canvas class="overlay" bind:this={overlay} aria-hidden="true"></canvas>
-    {#if textPos && ui.textEdit}
-      <input
-        class="text-edit"
-        type="text"
-        bind:this={textInput}
-        bind:value={ui.textEdit.value}
-        onkeydown={onTextKey}
-        onblur={commitText}
-        style:left="{textPos.x}px"
-        style:top="{textPos.y}px"
-        style:font-size="{Math.max(8, textPos.size)}px"
-        style:font-family={toolStore.option("text", "family", "Segoe UI")}
-        style:font-weight={toolStore.option("text", "bold", false) ? 700 : 400}
-        style:font-style={toolStore.option("text", "italic", false) ? "italic" : "normal"}
-        placeholder="Type…"
-        spellcheck="false"
-      />
+    {#if typing}
+      <TypeEditor {entry} />
     {/if}
     {#if import.meta.env.DEV && stats && active}
       <span class="stats" aria-hidden="true">{stats.passes}p {stats.uploads}u</span>
@@ -521,18 +472,6 @@
     box-shadow:
       0 0 0 1px var(--ps-border-dark),
       0 2px 10px rgba(0, 0, 0, 0.55);
-  }
-  .text-edit {
-    position: absolute;
-    transform: translateY(-80%);
-    min-width: 120px;
-    padding: 0 4px;
-    background: rgba(0, 0, 0, 0.45);
-    border: 1px dashed var(--ps-accent);
-    border-radius: 2px;
-    color: #fff;
-    outline: none;
-    line-height: 1.2;
   }
   .stats {
     position: absolute;

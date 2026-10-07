@@ -48,7 +48,15 @@ export type ToolOption =
   | { kind: "text"; key: string; label: string; default: string; placeholder?: string; width?: number }
   | { kind: "color"; key: "fg" | "bg"; label: string }
   | { kind: "button"; key: string; label: string; primary?: boolean; action: (ctx: ToolContext) => void }
-  | { kind: "separator"; key: string };
+  | { kind: "separator"; key: string }
+  /**
+   * Custom options-bar control rendered by `lib/tools/ui/CustomOption.svelte` (tools-v2):
+   * `renderer` picks the component ("brush-picker", "gradient-picker", "shape-picker",
+   * "font-picker", "fill-picker", "pattern-picker", "measure-readout", "icon-select",
+   * "align-buttons"). `default` is the stored option value (JSON string for structured
+   * values); `props` are passed through to the renderer.
+   */
+  | { kind: "custom"; key: string; renderer: string; label?: string; default?: OptionValue; props?: Record<string, unknown> };
 
 export interface ToolContext {
   readonly entry: OpenDoc;

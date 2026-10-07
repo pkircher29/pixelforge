@@ -199,7 +199,7 @@ describe("tool registry", () => {
   it("groups fly-out tools into shared slots", () => {
     const slots = toolbarSlots();
     const marquee = slots.find((s) => s.id === "marquee")!;
-    expect(marquee.tools.map((t) => t.id)).toEqual(["marquee-rect", "marquee-ellipse"]);
+    expect(marquee.tools.map((t) => t.id)).toEqual(["marquee-rect", "marquee-ellipse", "marquee-row", "marquee-column"]);
     expect(slots.find((s) => s.id === "gradient")!.tools.map((t) => t.id)).toEqual(["gradient", "bucket"]);
     expect(slots.filter((s) => s.tools.length > 0).length).toBeLessThan(TOOLS.length);
   });
@@ -209,9 +209,10 @@ describe("tool registry", () => {
     expect(toolForKey(k("v"), "brush")?.id).toBe("move");
     expect(toolForKey(k("m"), "move")?.id).toBe("marquee-rect");
     expect(toolForKey(k("m"), "marquee-rect")?.id).toBe("marquee-ellipse");
-    expect(toolForKey(k("m"), "marquee-ellipse")?.id).toBe("marquee-rect");
-    expect(toolForKey(k("g"), "move")?.id).toBe("bucket");
-    expect(toolForKey(k("G", true), "move")?.id).toBe("gradient");
+    expect(toolForKey(k("m"), "marquee-column")?.id).toBe("marquee-rect");
+    // PS: G selects the Gradient tool first, pressing again cycles to the Paint Bucket.
+    expect(toolForKey(k("g"), "move")?.id).toBe("gradient");
+    expect(toolForKey(k("g"), "gradient")?.id).toBe("bucket");
     expect(toolForKey({ ...k("v"), ctrlKey: true }, "move")).toBeNull();
     expect(toolForKey(k("q"), "move")).toBeNull();
   });

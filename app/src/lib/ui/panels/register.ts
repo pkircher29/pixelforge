@@ -10,6 +10,11 @@ import "./Channels.commands";
 import "./Paths.commands";
 // panels-v2: Color, Swatches, Navigator, Info, History (+ View menu, Color Picker).
 import "./register-panels-v2";
+import BrushSettingsPanel from "./BrushSettingsPanel.svelte";
+import BrushesPanel from "./BrushesPanel.svelte";
+import CharacterPanel from "./CharacterPanel.svelte";
+import ParagraphPanel from "./ParagraphPanel.svelte";
+import "$lib/tools/register";
 
 /** Panel ≡ items that proxy to registered commands (resolved lazily so order of registration doesn't matter). */
 function proxy(id: string): CommandDef {
@@ -43,3 +48,9 @@ registerPanel({ id: "properties", title: "Properties", dock: "right", order: 20,
 registerPanel({ id: "layers", title: "Layers", dock: "right", order: 10, group: "layers", component: LayersPanel, icon: "layers", preferredSize: 360, menu: layersMenu });
 registerPanel({ id: "channels", title: "Channels", dock: "right", order: 11, group: "layers", component: ChannelsPanel, icon: "channels", preferredSize: 360, menu: channelsMenu });
 registerPanel({ id: "paths", title: "Paths", dock: "right", order: 12, group: "layers", component: PathsPanel, icon: "paths", preferredSize: 360, menu: pathsMenu });
+
+// tools-v2: Brush Settings / Brushes, Character / Paragraph (+ Type menu, Stroke/Fill Path).
+registerPanel({ id: "brush-settings", title: "Brush Settings", dock: "right", order: 60, group: "brush", component: BrushSettingsPanel, icon: "brush", preferredSize: 300 });
+registerPanel({ id: "brushes", title: "Brushes", dock: "right", order: 61, group: "brush", component: BrushesPanel, icon: "brush-size", preferredSize: 300 });
+registerPanel({ id: "character", title: "Character", dock: "right", order: 70, group: "type", component: CharacterPanel, icon: "type-h", preferredSize: 240 });
+registerPanel({ id: "paragraph", title: "Paragraph", dock: "right", order: 71, group: "type", component: ParagraphPanel, icon: "type", preferredSize: 160 });

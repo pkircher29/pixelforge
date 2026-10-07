@@ -25,17 +25,17 @@ describe("toolbar groups (PLAN-v2 §2)", () => {
     }
   });
 
-  it("placeholders are listed but have no live tool", () => {
+  it("placeholders (PLAN-v2 skips) are listed but have no live tool", () => {
     const healing = toolbarSlots().find((s) => s.id === "healing")!;
     expect(healing.members.map((m) => m.id)).toEqual(["healing-spot", "healing-brush", "patch", "content-aware-move", "red-eye"]);
-    expect(healing.tools).toHaveLength(0);
-    expect(healing.members.every((m) => m.tool === null)).toBe(true);
+    expect(healing.tools.map((t) => t.id)).toEqual(["healing-spot", "healing-brush", "patch", "red-eye"]);
+    expect(healing.members.find((m) => m.id === "content-aware-move")!.tool).toBeNull();
   });
 
   it("fly-out order follows PS: Gradient before Paint Bucket, rect marquee before ellipse", () => {
     const slots = toolbarSlots();
     expect(slots.find((s) => s.id === "gradient")!.tools.map((t) => t.id)).toEqual(["gradient", "bucket"]);
-    expect(slots.find((s) => s.id === "marquee")!.tools.map((t) => t.id)).toEqual(["marquee-rect", "marquee-ellipse"]);
+    expect(slots.find((s) => s.id === "marquee")!.tools.map((t) => t.id)).toEqual(["marquee-rect", "marquee-ellipse", "marquee-row", "marquee-column"]);
     expect(slots.find((s) => s.id === "lasso")!.members.map((m) => m.id)).toEqual(["lasso", "lasso-polygon", "lasso-magnetic"]);
   });
 

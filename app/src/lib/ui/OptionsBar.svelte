@@ -13,6 +13,7 @@
   import PsSelect from "./controls/PsSelect.svelte";
   import Segmented from "./controls/Segmented.svelte";
   import Popover from "./controls/Popover.svelte";
+  import CustomOption from "$lib/tools/ui/CustomOption.svelte";
 
   const tool = $derived(canvasHost.selectedTool);
   let presetBtn = $state<HTMLButtonElement | null>(null);
@@ -104,6 +105,8 @@
           <input type="color" value={rgbaToHex(c)} oninput={(e) => { const v = hexToRgba(e.currentTarget.value); if (v) (o.key === "fg" ? toolStore.setFg(v) : toolStore.setBg(v)); }} aria-label={o.label} />
         </span>
       </label>
+    {:else if o.kind === "custom"}
+      <CustomOption option={o} {tool} />
     {:else if o.kind === "button"}
       <button type="button" class="btn sm" class:primary={o.primary} onclick={() => runButton(o)}>{o.label}</button>
     {:else}
