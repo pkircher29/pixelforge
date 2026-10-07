@@ -10,6 +10,8 @@ import { brushStore } from "./brush-store.svelte";
 import { resolvePaintTarget, type PaintTarget } from "./paint-target";
 import { CompositeSampler } from "./util";
 import { sampleColor } from "./eyedropper";
+import { tipById } from "./brush-tips";
+import { brushOutline } from "./brush-outline";
 
 export const BRUSH_PICKER_OPTION: ToolOption = { kind: "custom", key: "brush", renderer: "brush-picker", label: "Brush" };
 export const OPACITY_OPTION: ToolOption = { kind: "number", key: "opacity", label: "Opacity", min: 1, max: 100, step: 1, default: 100, unit: "%" };
@@ -257,16 +259,26 @@ export abstract class BrushBasedTool implements Tool {
       g.stroke();
     }
     g.translate(center.x, center.y);
-    g.rotate((-s.angle * Math.PI) / 180 + ctx.viewport.rotation);
+    const tip = tipById(s.tip);
+    const custom = tip.kind === "custom";
+    g.rotate(custom ? ctx.viewport.rotation : (-s.angle * Math.PI) / 180 + ctx.viewport.rotation);
     const rr = Math.max(1.5, r);
     const ry = Math.max(1, rr * (s.roundness / 100));
     g.lineWidth = 1;
     g.beginPath();
-    g.ellipse(0, 0, rr, ry, 0, 0, Math.PI * 2);
+    if (custom) {
+      for (const [x, y, x2, y2] of brushOutline(tip, s.size * zoom, s.angle, s.roundness / 100, s.flipX, s.flipY)) {
+        g.moveTo(x, y); g.lineTo(x2, y2);
+      }
+      g.lineWidth = 3;
+    } else g.ellipse(0, 0, rr, ry, 0, 0, Math.PI * 2);
     g.strokeStyle = "rgba(0,0,0,0.65)";
     g.stroke();
-    g.beginPath();
-    g.ellipse(0, 0, Math.max(1, rr - 1), Math.max(0.5, ry - 1), 0, 0, Math.PI * 2);
+    if (!custom) {
+      g.beginPath();
+      g.ellipse(0, 0, Math.max(1, rr - 1), Math.max(0.5, ry - 1), 0, 0, Math.PI * 2);
+    }
+    g.lineWidth = 1;
     g.strokeStyle = "rgba(255,255,255,0.9)";
     g.stroke();
     if (r < 4) {

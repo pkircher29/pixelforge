@@ -30,6 +30,13 @@ Implemented on `feat/v03-oauth-polish`:
   docks scroll. Browser checks cover expand, divider shrinking/growing, window resize,
   reload and collapse/reopen. Screenshot: `docs/screenshots/navigator-min-height.png`.
   This also fixes tooltip focusout during removal of a focused panel control.
+- Polish item 3: custom brush cursors trace the tip alpha with marching squares using
+  paint-engine size, angle, roundness and flip transforms. Bounded per-tip caches and
+  a capped sampling resolution keep high-zoom outlines bounded. Tests cover contours
+  at image edges, holes/islands, rotation/roundness, reuse and large-size scaling.
+  Live browser verification shows the Triangle tip outline at 200 px with no errors;
+  screenshot: `docs/screenshots/brush-outline.png`. All 666 frontend tests, Svelte check,
+  and production frontend build pass. Native/cross-OS verification remains open.
 - Polish item 4: shared `Swatch.svelte` and `ColorSwatchInput.svelte` show checkerboards
   under alpha in Properties, toolbar, Color/Swatches/Character, shape fill pickers,
   gradient previews, and color dialogs. The Color Picker exposes opacity and preserves
