@@ -84,6 +84,10 @@
     if (flyout && e.key === "Escape") flyout = null;
   }
 
+  /** A member's own key (Rotate View = R inside the Hand slot), else the slot's. */
+  function memberKey(m: ToolSlotMember, slot: ToolbarSlot): string {
+    return m.tool?.shortcut || slot.key;
+  }
   function tip(m: ToolSlotMember, key: string): string {
     return key ? `${m.name} (${key})` : m.name;
   }
@@ -100,7 +104,7 @@
 
 <svelte:window onpointerdown={onWindowDown} onkeydown={onWindowKey} />
 
-<aside class="toolbar" class:double aria-label="Tools" bind:this={bar}>
+<aside class="toolbar" class:double class:flyopen={!!flyout} aria-label="Tools" bind:this={bar}>
   <div class="grip" aria-hidden="true"><Icon name="grip" size={12} /></div>
   <div class="tools">
     {#each slots as slot (slot.id)}
@@ -113,7 +117,7 @@
           class:active
           class:group={slot.members.length > 1}
           class:placeholder={!m.tool}
-          data-tip={tip(m, slot.key)}
+          data-tip={tip(m, memberKey(m, slot))}
           aria-label={m.name}
           aria-pressed={active}
           disabled={!m.tool && slot.tools.length === 0}
@@ -138,7 +142,7 @@
             <span class="fchk">{#if on}<Icon name="check" size={12} />{/if}</span>
             <span class="fic"><Icon name={fm.glyph ?? toolGlyph(fm.id, fm.tool)} size={16} /></span>
             <span class="fname">{fm.name}</span>
-            <span class="fkey">{slot.key}</span>
+            <span class="fkey">{memberKey(fm, slot)}</span>
           </button>
         {/each}
       </div>
@@ -244,6 +248,10 @@
     border: 2.5px solid transparent;
     border-right-color: currentColor;
     border-bottom-color: currentColor;
+  }
+  /* PS hides the tool tooltip while a fly-out is open. */
+  .toolbar.flyopen :global([data-tip]::after) {
+    display: none;
   }
   .flyout {
     position: absolute;

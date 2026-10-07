@@ -99,10 +99,10 @@
       </label>
     {:else if o.kind === "color"}
       {@const c = o.key === "fg" ? toolStore.fg : toolStore.bg}
-      <label class="opt">
-        <span class="lbl">{o.label}:</span>
+      <label class="opt" title={o.label || "Set the text color"}>
+        {#if o.label}<span class="lbl">{o.label}:</span>{/if}
         <span class="swatch" style:background={rgbaToHex(c)}>
-          <input type="color" value={rgbaToHex(c)} oninput={(e) => { const v = hexToRgba(e.currentTarget.value); if (v) (o.key === "fg" ? toolStore.setFg(v) : toolStore.setBg(v)); }} aria-label={o.label} />
+          <input type="color" value={rgbaToHex(c)} oninput={(e) => { const v = hexToRgba(e.currentTarget.value); if (v) (o.key === "fg" ? toolStore.setFg(v) : toolStore.setBg(v)); }} aria-label={o.label || "Color"} />
         </span>
       </label>
     {:else if o.kind === "custom"}

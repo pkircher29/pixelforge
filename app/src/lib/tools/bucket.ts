@@ -19,7 +19,7 @@ export class BucketTool implements Tool {
     { kind: "toggle", key: "contiguous", label: "Contiguous", default: true },
     { kind: "toggle", key: "sampleMerged", label: "Sample all layers", default: false },
     { kind: "number", key: "opacity", label: "Opacity", min: 1, max: 100, step: 1, default: 100, unit: "%" },
-    { kind: "color", key: "fg", label: "Colour" },
+    { kind: "color", key: "fg", label: "Color" },
   ];
 
   onPointerDown(e: ToolEvent, ctx: ToolContext): void {

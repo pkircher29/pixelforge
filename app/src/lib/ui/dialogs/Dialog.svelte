@@ -86,7 +86,7 @@
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div class="backdrop" class:dim onpointerdown={(e) => e.target === e.currentTarget && oncancel()} onkeydown={onkeydown}>
-  <div class="panel" role="dialog" aria-modal="true" aria-label={title} tabindex="-1" bind:this={panel} style:width="{width}px" style:transform="translate({dx}px, {dy}px)">
+  <div class="panel" role="dialog" aria-modal="true" aria-label={title} tabindex="-1" bind:this={panel} style:width="{width}px" style:left="{dx}px" style:top="{dy}px">
     <!-- svelte-ignore a11y_no_static_element_interactions -->
     <header onpointerdown={startDrag}>
       <h2>{title}</h2>
@@ -112,6 +112,9 @@
     background: rgba(0, 0, 0, 0.35);
   }
   .panel {
+    /* Dragged with left/top, not transform: a transform would become the containing
+       block of position:fixed dropdowns (PsSelect) and clip them inside the body. */
+    position: relative;
     max-width: calc(100vw - 32px);
     max-height: calc(100vh - 32px);
     display: flex;

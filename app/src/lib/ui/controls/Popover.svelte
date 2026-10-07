@@ -70,7 +70,8 @@
 <style>
   .pop {
     position: fixed;
-    z-index: 700;
+    /* Above dialogs (950) and the AI dialogs (1000): dropdowns open from inside them. */
+    z-index: 1050;
     padding: 3px;
   }
 </style>
