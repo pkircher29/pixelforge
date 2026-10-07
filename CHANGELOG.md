@@ -5,6 +5,60 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2026-10-07
+
+Photoshop-fidelity overhaul: the UI, tools and layer system now behave like Photoshop CC,
+plus custom / local AI providers and the multi-model shootout.
+
+### Added
+- **Photoshop CC look**: medium-dark theme tokens, custom icon set, single-column
+  toolbar with 20 grouped slots and fly-outs (right-click / long-press), PS tool keys
+  (letter = group's tool, Shift+letter cycles), per-tool options bar with presets,
+  tabbed panel groups with ≡ menus, collapse-to-icons, Essentials workspace + reset,
+  rulers, status-bar popover, Preferences (Interface, Transparency & Gamut, Cursors, ...),
+  optional light theme.
+- **Layer system**: layer masks, clipping masks, Fill opacity, transparency / pixel /
+  position / all locks (enforced), linking, color labels, adjustment layers, fill layers
+  (solid / gradient / pattern), shape layers, editable type layers, group pass-through,
+  layer styles (Drop / Inner Shadow, Outer / Inner Glow, Bevel & Emboss, Stroke, Color /
+  Gradient Overlay) with a PS-layout Layer Style dialog and presets; alpha channels,
+  Quick Mask, paths (work path, selection <-> path, fill / stroke path), history
+  snapshots; `.pfproj` format 2 (reads format 1).
+- **Panels**: PS-exact Layers, Channels, Paths, Properties (context-sensitive), Color
+  (hue cube) + Color Picker, Swatches, Navigator, Info (color samplers, ruler), History,
+  Brush Settings, Brushes, Character, Paragraph.
+- **Tools**: single row / column marquee, polygonal / magnetic lasso, Quick Selection,
+  crop straighten, color sampler, ruler, Spot Healing / Healing / Patch / Red Eye, Pencil,
+  Color Replacement, Pattern Stamp, History Brush, Background / Magic Eraser, Blur /
+  Sharpen / Smudge, Dodge / Burn / Sponge, Pen family, Path / Direct Selection, vertical
+  type and type masks, six shape tools with ~24 custom shapes, Rotate View; brush engine
+  with custom sampled tips, scattering, dynamics and ~30 presets; Gradient Editor with 5
+  gradient types.
+- **Custom & local AI providers** (Edit ▸ AI Providers…): OpenAI-compatible, Hugging Face
+  (router or Inference Endpoint), ComfyUI (bundled workflows or your own), Stable
+  Diffusion WebUI / Forge, Replicate, and Ollama as an honest "Improve prompt" helper
+  (Ollama has no image-generation API). Test connection, fetch models, capability probe.
+- **AI shootout** (Ctrl+Shift+Alt+M): one prompt to every enabled provider in generate,
+  mask or instruct mode; streaming gallery with the original, keep as layers / new
+  documents / keep & re-roll the rest; recorded as one AI History entry.
+- Help ▸ Open Sample Document; `scripts/fake-local-ai.mjs` fakes every custom kind.
+
+### Fixed (integration QA)
+- Layers-panel thumbnails default to Layer Bounds; Navigator thumbnail reads the GPU
+  composite (was blank and froze the UI for ~2 s on styled documents); CPU composites
+  share the compositor's layer-style cache (Info / eyedropper / wand ~2 s -> <1 ms).
+- Free Transform works on shape and type layers and fits the content bounds.
+- Quick Mask, channel views and clip textures were blank when the document width was not
+  a multiple of 4 (single-channel texture row alignment).
+- Dropdowns inside dialogs no longer open clipped inside the dialog; dialogs select their
+  first field; Window ▸ Workspace ▸ Reset Essentials was shadowed by a duplicate command.
+- Menus in Photoshop order and naming (File, Image ▸ Image Rotation, Window panels A–Z),
+  blend modes in PS's grouped order, US spelling.
+- Ctrl+2..6 switch channels (Ctrl+2 no longer zooms); Eraser paints the background color
+  on the Background layer; Straighten crops to the largest clean rectangle; type layer
+  names follow their text; cancelling a new fill layer removes it; an open pen path is
+  never committed into another document; toolbar color swatches open the PS Color
+  Picker; Paths ≡ Fill / Stroke Path open their dialogs; shootout gallery updates live.
 ## [0.1.0] - 2026-10-06
 
 First usable release: a Photoshop 7-style editor with chainable AI on one document.
