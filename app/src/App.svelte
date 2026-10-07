@@ -13,6 +13,7 @@
   import ContextMenu from "./lib/ui/ContextMenu.svelte";
   import Toast from "./lib/ui/Toast.svelte";
   import TooltipLayer from "./lib/ui/TooltipLayer.svelte";
+  import { historyUi } from "./lib/ui/panels/History.store.svelte";
   import Welcome from "./lib/ui/Welcome.svelte";
   import DialogHost from "./lib/ui/dialogs/DialogHost.svelte";
   import ContactSheet from "./lib/ui/icons/ContactSheet.svelte";
@@ -116,6 +117,11 @@
   $effect(() => {
     const mb = settings.value.historyBudgetMb;
     for (const d of docStore.docs) d.history.budgetBytes = mb * 1048576;
+  });
+  $effect(() => {
+    if (settings.loaded) historyUi.hydrate();
+    const nonLinear = historyUi.options.nonLinear;
+    for (const d of docStore.docs) d.history.nonLinear = nonLinear;
   });
 </script>
 

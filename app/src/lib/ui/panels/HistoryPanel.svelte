@@ -41,6 +41,7 @@
       source: toolStore.historySource,
       opened: e.path !== null,
       evicted: h.evictedCount,
+      nonLinear: historyUi.options.nonLinear,
     });
   });
   const selected = $derived(historyUi.selected);

@@ -30,6 +30,20 @@ Implemented on `feat/v03-oauth-polish`:
   docks scroll. Browser checks cover expand, divider shrinking/growing, window resize,
   reload and collapse/reopen. Screenshot: `docs/screenshots/navigator-min-height.png`.
   This also fixes tooltip focusout during removal of a focused panel control.
+- Polish item 5: `History.dropAfter(index)` permanently truncates states. Delete State
+  uses it in linear mode; the persisted Allow Non-Linear History option retains later
+  states when branching and deletes individual rows without changing later results.
+  Branches use reversible command paths and remain under the history memory budget.
+  Tests cover already-applied paint, layer deletion, repeated branch switching and
+  independent snapshot/History Brush sources. Browser screenshots:
+  `docs/screenshots/history-options.png`, `docs/screenshots/history-nonlinear.png`.
+
+Windows native verification (2026-10-07): rebuilt the debug executable and exercised
+items 1, 2 and 5 through the real WebView: permanent deletion, retained branches,
+single-state deletion, Navigator minimum height/zoom visibility and edge-aware tooltip.
+No page errors; screenshot `docs/screenshots/polish-native.png`. Frontend suite: 653
+passing tests, plus a passing branch-eviction regression added afterward; Svelte check
+has no errors or warnings. Cross-OS and live-provider release gates remain open.
 
 The remaining Wave 8–11 work and cross-OS/live-provider release gates below remain open.
 See `docs/oauth-setup.md` for configuration and verification boundaries.

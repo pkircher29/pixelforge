@@ -607,7 +607,7 @@ export interface HistoryEntry {
 export interface HistorySnapshot {
   readonly id: string;
   name: string;
-  /** `History.index` when the snapshot was taken (adjusted on eviction). */
+  /** Source `History.index`, adjusted on eviction/deletion; -1 if that state is gone. */
   historyIndex: number;
   /** Bytes held by the snapshot's rasters. */
   readonly bytes: number;

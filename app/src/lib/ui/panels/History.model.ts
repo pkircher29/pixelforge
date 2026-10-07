@@ -15,6 +15,7 @@ export interface HistoryInput {
   /** Document opened from a file (first state reads "Open") or created ("New"). */
   opened: boolean;
   evicted: number;
+  nonLinear?: boolean;
 }
 
 export interface SnapshotRow {
@@ -74,7 +75,7 @@ export function buildHistoryRows(input: HistoryInput): HistoryRows {
       index,
       label: e.label,
       current: index === input.index,
-      undone: index > input.index,
+      undone: !input.nonLinear && index > input.index,
       isSource: src.kind === "state" && src.index === index,
       icon: iconForLabel(e.label),
       key: String(e.seq),
