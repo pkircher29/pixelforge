@@ -164,6 +164,11 @@ export abstract class BrushBasedTool implements Tool {
     if (rect) ctx.touch({ layerId: t.dirtyId, rect });
   }
 
+  onPointerLeave(ctx: ToolContext): void {
+    this.hover = null;
+    ctx.invalidateOverlay();
+  }
+
   onPointerUp(e: ToolEvent, ctx: ToolContext): void {
     const s = this.stroke;
     const t = this.target;

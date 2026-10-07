@@ -344,6 +344,10 @@
 
   function onPointerLeave(): void {
     ui.cursorDoc = null;
+    if (!active) return;
+    const tool = canvasHost.activeTool;
+    const ctx = canvasHost.context(tool);
+    if (ctx) tool.onPointerLeave?.(ctx);
   }
 
   function onWheel(e: WheelEvent): void {

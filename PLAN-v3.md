@@ -202,9 +202,11 @@ boundary-crossing stroke and cancellation while storage stays tiled, comparing a
 and premultiplied color to account for RGBA8 GPU rounding. The Windows native build
 passes; an isolated native window paints a stroke and restores exact canvas screenshot
 pixels through undo and redo without page errors (`docs/screenshots/tiled-brush-native.png`).
-The comparison moves the brush cursor outside the captured region: moving directly
-into the toolbar can leave its overlay at the previous canvas position, a remaining
-cursor cleanup issue. Legacy healing coverage readback still allocates a full float array;
+Pointer leave now clears brush hover feedback through an optional tool lifecycle hook.
+Browser checks confirm the outline disappears on leave, stays absent when brush size
+changes outside the canvas, and returns on reentry. The rebuilt Windows app passes
+the paint/undo/redo screenshot check with the pointer moved into the toolbar, where
+the stale outline previously remained. Legacy healing coverage readback still allocates a full float array;
 this is not completion of the application memory gate.
 Legacy pixel writers, remaining bulk operations, sparse GPU allocation, workers, non-destructive
 cropping and the full 1.5 GB benchmark gate remain open.
