@@ -214,3 +214,23 @@ export function overlayChannel(display: Raster, channel: Raster, color: RGBA, op
     d[i + 3] = ao * 255;
   }
 }
+
+/** Cached combined tint, separate from image pixels and project export. */
+export class AlphaOverlayCache {
+  private key = "";
+  private sources: Raster[] = [];
+  private raster: Raster | null = null;
+  invalidate(): void { this.key = ""; }
+  get(doc: Document, ids: readonly string[] = []): Raster | null {
+    const visible = doc.alphaChannels.filter(c => ids.includes(c.id));
+    if (!visible.length) { this.raster = null; this.sources = []; this.key = ""; return null; }
+    const key = JSON.stringify([doc.id, doc.width, doc.height, visible.map(c => [c.id, c.color, c.opacity])]);
+    if (key !== this.key || visible.some((c, i) => c.mask !== this.sources[i])) {
+      this.raster = new Raster(doc.width, doc.height);
+      for (const c of visible) overlayChannel(this.raster, c.mask, c.color, c.opacity, true);
+      this.sources = visible.map(c => c.mask);
+      this.key = key;
+    }
+    return this.raster;
+  }
+}

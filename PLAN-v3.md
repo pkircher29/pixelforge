@@ -24,7 +24,14 @@ Implemented on `feat/v03-oauth-polish`:
   instead of accidentally restoring RGB. Model/CPU tests and real WebGL display-pixel
   checks cover all three pairs and the empty view; 675 frontend tests pass. Browser
   Channels eye interaction passes without errors; screenshot:
-  `docs/screenshots/two-channel-view.png`. Alpha overlays and native checks remain open.
+  `docs/screenshots/two-channel-view.png`.
+  Alpha eyes now tint the color view; selecting an alpha alone still shows grayscale.
+  Overlays use each channel's color/opacity, with cached combined tint separate from
+  document pixels. CPU Canvas and GL display checks agree, including color changes
+  and painting invalidation. Channel shortcuts synchronize eye states. Browser flow
+  verifies grayscale → RGB tint → hidden tint → grayscale without errors; screenshot:
+  `docs/screenshots/alpha-overlay.png`. All 677 frontend tests, Svelte check and frontend
+  build pass. Native/cross-OS verification remains open.
 - Polish item 12: font permission requests start directly from the picker gesture;
   native `fonts_list` uses font-kit on a blocking worker to enumerate installed families.
   Successful discovery lists installed families instead of merging uninstalled fallback

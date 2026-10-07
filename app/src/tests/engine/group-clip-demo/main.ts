@@ -1,4 +1,5 @@
 import { BlendMode, GlCompositor, Raster, Rect, Viewport, addLayer, compositeToRaster, createDocument, createRasterLayer, groupLayers, rgba } from "../../../lib/engine";
+import { CanvasCompositor } from "../../../lib/engine/composite/CanvasCompositor";
 
 const result = document.querySelector<HTMLPreElement>("#result")!;
 const comp = new GlCompositor(document.querySelector<HTMLCanvasElement>("#canvas")!);
@@ -41,6 +42,27 @@ try {
     if (expected.some((value, i) => Math.abs(value - pixel[i]!) > 1)) throw new Error(`${channel}: unexpected display pixel ${pixel}`);
     checks.push(`${channel} channel display: ${pixel.slice(0, 3)}`);
   }
+  result.textContent = `PASS\n${checks.join("\n")}`;
+  const alpha = { id: "overlay-test", name: "Overlay", mask: Raster.filled(32, 24, rgba(0, 0, 0)), color: rgba(255, 0, 0), opacity: 0.5 };
+  colorDoc.alphaChannels.push(alpha);
+  function checkOverlay(label: string, expected: number[]) {
+    comp.render(colorDoc, view, { alphaOverlayIds: [alpha.id], showPixelGrid: false, showSelection: false });
+    const pixel = new Uint8Array(4); gl.readPixels(160, 120, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixel);
+    if (expected.some((value, i) => Math.abs(value - pixel[i]!) > 1)) throw new Error(`${label}: ${pixel}`);
+    checks.push(`${label}: ${pixel.slice(0, 3)}`);
+  }
+  checkOverlay("alpha tint", [178, 75, 100]);
+  alpha.color = rgba(0, 0, 255); checkOverlay("alpha color change", [50, 75, 228]);
+  alpha.mask.fill(rgba(255, 255, 255)); comp.markDirty(`@channel:${alpha.id}`);
+  checkOverlay("alpha paint invalidation", [100, 150, 200]);
+  const canvas2d = document.createElement("canvas"); canvas2d.width = 320; canvas2d.height = 240;
+  const cpuDisplay = new CanvasCompositor(canvas2d);
+  alpha.mask.fill(rgba(0, 0, 0));
+  cpuDisplay.render(colorDoc, view, { alphaOverlayIds: [alpha.id], showPixelGrid: false, showSelection: false });
+  const cpuPixel = canvas2d.getContext("2d")!.getImageData(160, 120, 1, 1).data;
+  if ([50, 75, 228].some((value, i) => Math.abs(value - cpuPixel[i]!) > 1)) throw new Error(`Canvas alpha tint: ${cpuPixel}`);
+  checks.push(`Canvas alpha tint: ${cpuPixel.slice(0, 3)}`);
+  cpuDisplay.dispose();
   result.textContent = `PASS\n${checks.join("\n")}`;
 } catch (e) { result.textContent = `FAIL: ${e}`; throw e; }
 finally { comp.dispose(); }

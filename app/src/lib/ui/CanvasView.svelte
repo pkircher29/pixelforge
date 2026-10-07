@@ -179,6 +179,7 @@
         checkerSize: checker,
         activeLayerId: doc.activeLayerId,
         viewChannel,
+        alphaOverlayIds: ui.alphaOverlays,
       });
       if (sizeChanged || vpChanged || entry.version !== lastVersion) ui.lastRenderMs = performance.now() - t0;
       lastVersion = entry.version;

@@ -42,7 +42,7 @@ import { StyleCache, bindDocStyleCache, layerVisualRect, maskActive } from "../l
 import { opById } from "../ops/registry";
 import { buildOpFragmentSource } from "../ops/glsl";
 import type { GlslPass, UniformValue } from "../ops/types";
-import { parseViewChannel } from "../channels";
+import { AlphaOverlayCache, parseViewChannel } from "../channels";
 import { BlendMode, type AdjustmentLayer, type Document, type ICompositor, type Layer, type LayerId, type RenderOptions, type RenderStats } from "../types";
 import type { Viewport } from "../viewport";
 import { DirtyTracker } from "./dirty";
@@ -188,6 +188,9 @@ export class GlCompositor implements ICompositor {
   private channelTex: WebGLTexture | null = null;
   private channelRaster: Raster | null = null;
   private channelKey = "";
+  private readonly alphaOverlays = new AlphaOverlayCache();
+  private overlayTex: WebGLTexture | null = null;
+  private overlayRaster: Raster | null = null;
   private qmTex: WebGLTexture | null = null;
   private qmRaster: Raster | null = null;
   private qmDirty = true;
@@ -249,6 +252,7 @@ export class GlCompositor implements ICompositor {
     gl.uniform1i(this.presentU.u_selection, 1);
     gl.uniform1i(this.presentU.u_channel, 2);
     gl.uniform1i(this.presentU.u_qm, 3);
+    gl.uniform1i(this.presentU.u_alphaOverlay, 4);
     gl.disable(gl.DEPTH_TEST);
     gl.disable(gl.BLEND);
     gl.disable(gl.DITHER);
@@ -272,6 +276,9 @@ export class GlCompositor implements ICompositor {
     this.channelRaster = null;
     this.channelKey = "";
     this.qmTex = null;
+    this.overlayTex = null;
+    this.overlayRaster = null;
+    this.alphaOverlays.invalidate();
     this.qmRaster = null;
     this.qmDirty = true;
     this.docW = 0;
@@ -320,6 +327,7 @@ export class GlCompositor implements ICompositor {
   }
 
   invalidateAll(): void {
+    this.alphaOverlays.invalidate();
     for (const id of this.layers.keys()) this.dirty.mark(id);
     this.styles.clear();
     this.lastSelection = null;
@@ -341,7 +349,11 @@ export class GlCompositor implements ICompositor {
     if (this.channelTex) gl.deleteTexture(this.channelTex);
     this.channelTex = null;
     if (this.qmTex) gl.deleteTexture(this.qmTex);
+    if (this.overlayTex) gl.deleteTexture(this.overlayTex);
     this.qmTex = null;
+    this.overlayTex = null;
+    this.overlayRaster = null;
+    this.alphaOverlays.invalidate();
     if (this.blendSwitch) gl.deleteProgram(this.blendSwitch.prog);
     for (const p of this.blendPerMode.values()) gl.deleteProgram(p.prog);
     this.blendPerMode.clear();
@@ -401,7 +413,11 @@ export class GlCompositor implements ICompositor {
     this.channelTex = null;
     this.channelKey = "";
     if (this.qmTex) gl.deleteTexture(this.qmTex);
+    if (this.overlayTex) gl.deleteTexture(this.overlayTex);
     this.qmTex = null;
+    this.overlayTex = null;
+    this.overlayRaster = null;
+    this.alphaOverlays.invalidate();
     this.qmDirty = true;
     return true;
   }
@@ -738,6 +754,16 @@ export class GlCompositor implements ICompositor {
   }
 
   private syncChannelView(doc: Document, opts: RenderOptions): void {
+    if ((opts.alphaOverlayIds ?? []).some(id => this.channelDirty.has(id))) {
+      this.alphaOverlays.invalidate();
+      for (const id of opts.alphaOverlayIds ?? []) this.channelDirty.delete(id);
+    }
+    const overlay = this.alphaOverlays.get(doc, opts.alphaOverlayIds);
+    if (overlay && overlay !== this.overlayRaster) {
+      if (!this.overlayTex) this.overlayTex = createTexture(this.gl, doc.width, doc.height, this.gl.RGBA8, this.gl.RGBA, overlay.data);
+      else this.uploadFull(this.overlayTex, overlay, true);
+    }
+    this.overlayRaster = overlay;
     const gl = this.gl;
     const view = opts.viewChannel ?? "rgb";
     const parsed = parseViewChannel(view);
@@ -1120,6 +1146,9 @@ export class GlCompositor implements ICompositor {
     gl.bindTexture(gl.TEXTURE_2D, this.channelTex ?? this.selTex);
     gl.activeTexture(gl.TEXTURE3);
     gl.bindTexture(gl.TEXTURE_2D, this.qmTex ?? this.selTex);
+    gl.activeTexture(gl.TEXTURE4);
+    gl.bindTexture(gl.TEXTURE_2D, this.overlayTex ?? this.selTex);
+    gl.uniform1i(u.u_hasAlphaOverlay, this.overlayRaster ? 1 : 0);
 
     viewport.inverseMatrix(this.mat, dpr);
     gl.uniformMatrix3fv(u.u_screenToDoc, false, this.mat);

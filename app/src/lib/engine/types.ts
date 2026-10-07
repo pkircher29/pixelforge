@@ -669,6 +669,8 @@ export interface RenderOptions {
   forceFull?: boolean;
   /** Channel view (Channels panel). Default `"rgb"`. */
   viewChannel?: ViewChannel;
+  /** Saved alpha channels shown as colored overlays over the channel view. */
+  alphaOverlayIds?: readonly string[];
   /** Overlay the document's quick mask when active. Default true. */
   showQuickMask?: boolean;
 }

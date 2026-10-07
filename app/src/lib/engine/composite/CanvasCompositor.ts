@@ -9,10 +9,11 @@
 import { Rect } from "../rect";
 import { Raster } from "../raster";
 import type { Selection } from "../selection";
-import { compositeToRaster } from "../document";
+import { compositeToRaster, blendRasterInto } from "../document";
 import { StyleCache, bindDocStyleCache, layerVisualRect } from "../layer-source";
 import { effectExtent } from "../ops/effects";
-import { channelViewRaster, overlayQuickMask } from "../channels";
+import { AlphaOverlayCache, channelViewRaster, overlayQuickMask } from "../channels";
+import { BlendMode } from "../types";
 import type { Document, ICompositor, Layer, LayerId, RenderOptions, RenderStats } from "../types";
 import type { Viewport } from "../viewport";
 import { computeSelectionEdge } from "./ants";
@@ -62,6 +63,8 @@ export class CanvasCompositor implements ICompositor {
   private lastView = "rgb";
   private lastQm = false;
   private displayDirty = true;
+  private readonly alphaOverlays = new AlphaOverlayCache();
+  private lastOverlay: Raster | null = null;
 
   private lastSelection: Selection | null = null;
   private edge: Int32Array = new Int32Array(0);
@@ -85,6 +88,7 @@ export class CanvasCompositor implements ICompositor {
 
   markDirty(layerId: LayerId, rect?: Rect): void {
     if (layerId.startsWith("@")) {
+      this.alphaOverlays.invalidate();
       this.displayDirty = true;
       return;
     }
@@ -93,6 +97,7 @@ export class CanvasCompositor implements ICompositor {
   }
 
   invalidateAll(): void {
+    this.alphaOverlays.invalidate();
     this.forceFullNext = true;
     this.lastSelection = null;
     this.styles.clear();
@@ -189,7 +194,10 @@ export class CanvasCompositor implements ICompositor {
 
     const view = opts.viewChannel ?? "rgb";
     const qmOn = (opts.showQuickMask ?? true) && doc.quickMask.active && !!doc.quickMask.raster;
-    const postProcess = view !== "rgb" || qmOn;
+    const overlay = this.alphaOverlays.get(doc, opts.alphaOverlayIds);
+    if (overlay !== this.lastOverlay) this.displayDirty = true;
+    this.lastOverlay = overlay;
+    const postProcess = view !== "rgb" || qmOn || !!overlay;
     if (view !== this.lastView || qmOn !== this.lastQm) this.displayDirty = true;
     this.lastView = view;
     this.lastQm = qmOn;
@@ -207,6 +215,7 @@ export class CanvasCompositor implements ICompositor {
     }
     if (postProcess && this.displayDirty) {
       let display = channelViewRaster(doc, composite, view, opts.activeLayerId ?? doc.activeLayerId) ?? composite.clone();
+      if (overlay) blendRasterInto(display, overlay, { x: 0, y: 0 }, 1, BlendMode.Normal, null, display.bounds(), null);
       if (qmOn) overlayQuickMask(display, doc.quickMask);
       if (display === composite) display = composite.clone();
       offCtx.putImageData(display.toImageData(), 0, 0);
