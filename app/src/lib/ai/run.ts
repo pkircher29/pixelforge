@@ -38,9 +38,10 @@ import {
 import { withoutDiffOverlays } from "./overlay";
 import { coverageToLumaRaster, decodeImage, encodePng, thumbnailDataUrl } from "./png";
 import { estimateCost } from "./pricing";
+import { validateSampling, type SamplingOptions } from "./sampling";
 import type { AiMode, ImageSize, ProviderInfo } from "./types";
 
-export interface AiRunRequest {
+export interface AiRunRequest extends SamplingOptions {
   provider: ProviderInfo;
   model: string;
   prompt: string;
@@ -298,6 +299,7 @@ export interface StartedRun extends ActiveRun {
  * out with this; `runAi` awaits `done` for the single-provider path.
  */
 export async function startAi(req: AiRunRequest): Promise<StartedRun> {
+  validateSampling(req.provider, req);
   const open = docStore.active;
   const prepared = await prepareRun(req, open);
   if (req.generativeFill && (prepared.resolution.mode !== "mask" || req.n !== 3 || req.provider.capabilities.maxVariants < 3)) {
@@ -328,6 +330,8 @@ export async function startAi(req: AiRunRequest): Promise<StartedRun> {
     if (req.negativePrompt) entry.negativePrompt = req.negativePrompt;
     if (req.size) entry.size = req.size;
     if (req.quality) entry.quality = req.quality;
+    if (req.seed !== undefined) entry.seed = req.seed;
+    if (req.steps !== undefined) entry.steps = req.steps;
     if (req.transparent) entry.transparent = true;
     if (req.refs.length) entry.refs = req.refs.length;
     if (prepared.cropRect) entry.maskRect = prepared.cropRect;
@@ -347,6 +351,8 @@ export async function startAi(req: AiRunRequest): Promise<StartedRun> {
     ...(req.negativePrompt ? { negativePrompt: req.negativePrompt } : {}),
     ...(req.size ? { size: req.size } : {}),
     ...(req.quality ? { quality: req.quality } : {}),
+    ...(req.seed !== undefined ? { seed: req.seed } : {}),
+    ...(req.steps !== undefined ? { steps: req.steps } : {}),
     ...(req.transparent ? { transparent: true } : {}),
     ...(req.timeoutSecs ? { timeoutSecs: req.timeoutSecs } : {}),
   };

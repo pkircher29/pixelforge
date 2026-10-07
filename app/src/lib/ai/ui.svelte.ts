@@ -9,6 +9,7 @@ import { ui } from "$lib/stores/ui.svelte";
 import { listProviders, hasTauri } from "./client";
 import { toFriendlyError } from "./errors";
 import type { AiRunRequest } from "./run";
+import { supportsSampling, type SamplingOptions } from "./sampling";
 import { canGenerate, isReady, type AiMode, type ImageSize, type ProviderId, type ProviderInfo } from "./types";
 
 export interface RefImage {
@@ -54,6 +55,15 @@ class AiUiState {
   expansion = $state.raw<{ docId: string; selection: Selection } | null>(null);
   removal = $state.raw<{ docId: string; selection: Selection } | null>(null);
   showAdvanced = $state(false);
+  samplingByProvider = $state<Partial<Record<ProviderId, SamplingOptions>>>({});
+
+  get sampling(): SamplingOptions {
+    return supportsSampling(this.provider) ? this.samplingByProvider[this.providerId] ?? {} : {};
+  }
+
+  setSampling(field: "seed" | "steps", value: number | undefined): void {
+    this.samplingByProvider[this.providerId] = { ...this.sampling, [field]: value };
+  }
 
   /** Bumped by commands that want the prompt focused. */
   focusRequest = $state(0);

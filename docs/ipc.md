@@ -235,7 +235,9 @@ type JobEvent = { job: JobId; provider: ProviderId } & (
 type GenerateParams = {
   provider: ProviderId; prompt: string; negativePrompt?: string; size?: ImageSize;
   n?: number /* default 1 */; model?: string; quality?: string; transparent?: boolean;
-  seed?: number /* ignored by all three providers today */; timeoutSecs?: number /* 10..3600 */;
+  seed?: number /* integer 0..2147483647, supported custom providers only */;
+  steps?: number /* integer 1..150, supported custom providers only */;
+  timeoutSecs?: number /* 10..3600 */;
 };
 
 type EditParams = GenerateParams & {

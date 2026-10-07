@@ -215,7 +215,38 @@ fn empty_object() -> Value {
     Value::Object(serde_json::Map::new())
 }
 
+/// Per-job sampling overrides. Absent values retain the saved provider defaults.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct SamplingOptions {
+    pub seed: Option<u64>,
+    pub steps: Option<u32>,
+}
+
+impl SamplingOptions {
+    pub fn is_empty(self) -> bool {
+        self.seed.is_none() && self.steps.is_none()
+    }
+}
+
 impl CustomProvider {
+    /// Build a job-local configuration without changing the provider registry.
+    pub fn with_sampling(&self, sampling: SamplingOptions) -> Result<Self, Error> {
+        if !sampling.is_empty() && self.kind == CustomKind::Ollama {
+            return Err(Error::InvalidRequest("This provider does not support image sampling controls".into()));
+        }
+        if sampling.seed.is_some_and(|v| v > 2_147_483_647)
+            || sampling.steps.is_some_and(|v| !(1..=150).contains(&v))
+        {
+            return Err(Error::InvalidRequest("Seed must be 0–2147483647 and steps must be 1–150".into()));
+        }
+        let mut cfg = self.clone();
+        if sampling.is_empty() { return Ok(cfg); }
+        if !cfg.extra.is_object() { cfg.extra = empty_object(); }
+        if let Some(seed) = sampling.seed { cfg.extra["seed"] = Value::from(seed); }
+        if let Some(steps) = sampling.steps { cfg.extra["steps"] = Value::from(steps); }
+        Ok(cfg)
+    }
+
     /// A new entry with the kind's defaults.
     pub fn new(id: impl Into<String>, name: impl Into<String>, kind: CustomKind) -> Self {
         Self {

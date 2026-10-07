@@ -24,6 +24,7 @@
   import { estimateCost, formatUsd } from "$lib/ai/pricing";
   import ProviderPicker from "$lib/ai/ProviderPicker.svelte";
   import PromptLibrary from "$lib/ai/PromptLibrary.svelte";
+  import { supportsSampling } from "$lib/ai/sampling";
   import { applyAll, applyOne, resolveForDoc, resultPreviews, runAi, runFor, type AiRunRequest } from "$lib/ai/run";
   import { runOnAll, shootoutProviders } from "$lib/ai/shootout";
   import Icon from "$lib/ui/icons/Icon.svelte";
@@ -283,6 +284,7 @@
       n: variantCount,
       generativeFill: aiUi.generativeFill,
       quality: aiUi.quality || undefined,
+      ...aiUi.sampling,
       transparent: aiUi.transparent && provider.capabilities.transparentBg,
       refs: aiUi.refs.map((r) => r.raster),
       timeoutSecs: aiUi.timeoutSecs !== 180 ? aiUi.timeoutSecs : undefined,
@@ -491,6 +493,15 @@
     </button>
     {#if aiUi.showAdvanced}
       <div class="secbody">
+        {#if supportsSampling(provider)}
+          <label class="frow">Seed:
+            <input class="input" type="number" aria-label="Seed" min="0" max="2147483647" step="1" placeholder="Provider default" value={aiUi.sampling.seed ?? ""} oninput={(e) => aiUi.setSampling("seed", e.currentTarget.value === "" ? undefined : e.currentTarget.valueAsNumber)} />
+          </label>
+          <label class="frow">Steps:
+            <input class="input" type="number" aria-label="Sampling steps" min="1" max="150" step="1" placeholder="Provider default" value={aiUi.sampling.steps ?? ""} oninput={(e) => aiUi.setSampling("steps", e.currentTarget.value === "" ? undefined : e.currentTarget.valueAsNumber)} />
+          </label>
+          <p class="hint">Blank uses this provider's saved defaults. Model support varies; a fixed seed does not guarantee identical images.</p>
+        {/if}
         <div class="frow">
           <ScrubbyNumber label="Timeout" value={aiUi.timeoutSecs} min={10} max={3600} step={10} unit="s" width={40} onchange={(v) => (aiUi.timeoutSecs = Math.round(v))} />
           <ScrubbyNumber label="Edge feather" value={aiUi.feather} min={0} max={64} unit="px" width={32} onchange={(v) => (aiUi.feather = Math.round(v))} />

@@ -29,7 +29,7 @@ vi.mock("../../lib/ai/png", async () => {
   };
 });
 
-import { encodeFrame } from "../../lib/io/frame";
+import { encodeFrame, decodeFrame } from "../../lib/io/frame";
 import { Rect, Selection, findLayer } from "../../lib/engine";
 import { docStore } from "../../lib/stores/doc.svelte";
 import { jobStore } from "../../lib/ai/jobs.svelte";
@@ -145,6 +145,24 @@ beforeEach(() => {
 afterEach(() => jobStore.dispose());
 
 describe("runAi end to end (mocked IPC)", () => {
+  it.each(["generate", "instruct"] as const)("sends sampling overrides through %s and retains them in history", async (forcedMode) => {
+    const open = docStore.create({ width: 16, height: 16, background: "white" });
+    const provider: ProviderInfo = { ...grok, id: "custom:sd", kind: "a1111" };
+    await runAi(request({ provider, forcedMode, seed: 0, steps: 27 }));
+    const call = invoke.mock.calls.find(([cmd]) => cmd === (forcedMode === "generate" ? "ai_submit_generate" : "ai_submit_edit"))!;
+    const sent = forcedMode === "generate" ? (call[1] as { params: unknown }).params : decodeFrame(call[1] as Uint8Array).header;
+    expect(sent).toMatchObject({ seed: 0, steps: 27 });
+    expect(getHistory(open.doc)[0]).toMatchObject({ seed: 0, steps: 27 });
+  });
+
+  it("rejects unsupported or invalid sampling before IPC or history changes", async () => {
+    const open = docStore.create({ width: 16, height: 16, background: "white" });
+    await expect(runAi(request({ seed: 4 }))).rejects.toThrow("does not support");
+    await expect(runAi(request({ provider: { ...grok, kind: "a1111", id: "custom:sd" }, steps: 1.5 }))).rejects.toThrow("whole number");
+    expect(invoke).not.toHaveBeenCalled();
+    expect(getHistory(open.doc)).toEqual([]);
+  });
+
   it("generate: adds a layer and finishes the history entry as completed with a thumbnail", async () => {
     const open = docStore.create({ width: 16, height: 16, background: "white" });
     // A document with pixels and no selection resolves to an instruct edit; force generate.

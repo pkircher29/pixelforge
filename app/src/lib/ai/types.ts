@@ -270,6 +270,7 @@ export interface GenerateParams {
   quality?: string;
   transparent?: boolean;
   seed?: number;
+  steps?: number;
   /** 10..3600, clamped by Rust. */
   timeoutSecs?: number;
 }

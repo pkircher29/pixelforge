@@ -65,6 +65,7 @@
       provider, model, prompt: aiUi.prompt.trim(), n: 3, refs: [], newDocument: false,
       forcedMode: "mask" as const, generativeFill: true, feather: expanding ? 0 : 2,
       selection: entry.doc.selection.clone(),
+      ...aiUi.sampling,
     };
     aiUi.lastRun = req;
     try {
