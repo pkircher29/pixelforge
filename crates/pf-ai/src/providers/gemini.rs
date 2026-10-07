@@ -64,6 +64,7 @@ pub struct GeminiProvider {
     auth: AuthMethod,
     base_url: String,
     size_field: GeminiSizeField,
+    quota_project: Option<String>,
 }
 
 impl GeminiProvider {
@@ -74,6 +75,7 @@ impl GeminiProvider {
             auth,
             base_url: DEFAULT_BASE_URL.to_owned(),
             size_field: GeminiSizeField::from_env(),
+            quota_project: None,
         })
     }
 
@@ -87,6 +89,25 @@ impl GeminiProvider {
     pub fn with_client(mut self, client: reqwest::Client) -> Self {
         self.client = client;
         self
+    }
+
+    /// Google Cloud project charged for OAuth API requests.
+    pub fn with_quota_project(mut self, project: &str) -> Self {
+        self.quota_project = Some(project.to_owned());
+        self
+    }
+
+    fn authenticate(&self, request: reqwest::RequestBuilder) -> reqwest::RequestBuilder {
+        match &self.auth {
+            AuthMethod::ApiKey(key) => request.header(API_KEY_HEADER, key.expose()),
+            AuthMethod::OAuth { access, .. } => {
+                let request = request.bearer_auth(access.expose());
+                match &self.quota_project {
+                    Some(project) => request.header("x-goog-user-project", project),
+                    None => request,
+                }
+            }
+        }
     }
 
     /// Choose where the size config goes (see module docs).
@@ -174,9 +195,7 @@ impl GeminiProvider {
         let mut results = Vec::with_capacity(usize::from(n));
         for _ in 0..n.max(1) {
             let resp = self
-                .client
-                .post(self.generate_url(model))
-                .header(API_KEY_HEADER, self.auth.token().expose())
+                .authenticate(self.client.post(self.generate_url(model)))
                 .json(&body)
                 .send()
                 .await?;
@@ -247,10 +266,8 @@ impl ImageProvider for GeminiProvider {
 
     async fn test_key(&self) -> Result<(), Error> {
         let resp = self
-            .client
-            .get(format!("{}/v1beta/models", self.base_url))
+            .authenticate(self.client.get(format!("{}/v1beta/models", self.base_url)))
             .query(&[("pageSize", "1")])
-            .header(API_KEY_HEADER, self.auth.token().expose())
             .send()
             .await?;
         http::ensure_success(&self.id(), resp).await.map(|_| ())

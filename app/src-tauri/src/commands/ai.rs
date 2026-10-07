@@ -132,7 +132,7 @@ pub fn provider_rows(
                 _ => default_model.clone(),
             };
             let row = auth.get(&id).cloned().unwrap_or_default();
-            let on_plan = row.active == AuthMode::Subscription;
+            let on_plan = row.active != AuthMode::ApiKey;
             let account = row.account.map(|(email, plan)| AccountInfo { email, plan });
             ProviderInfo {
                 // ChatGPT on the plan rewrites prompts (text Responses are allowed).

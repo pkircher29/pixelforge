@@ -30,7 +30,7 @@
   import ScrubbyNumber from "$lib/ui/controls/ScrubbyNumber.svelte";
   import { aiSections, modeTooltip, progressFraction } from "./ai-panel-ui.svelte";
   import { aiUi, type SizeOption } from "$lib/ai/ui.svelte";
-  import { isReady, notReadyNote, onSubscription, type AiMode, type ImageSize, type ProviderId } from "$lib/ai/types";
+  import { isReady, notReadyNote, onOAuth, onSubscription, type AiMode, type ImageSize, type ProviderId } from "$lib/ai/types";
 
   let promptEl = $state<HTMLTextAreaElement | null>(null);
   let dropEl = $state<HTMLDivElement | null>(null);
@@ -486,7 +486,7 @@
     {/if}
   </div>
   {#if provider && !isReady(provider) && hasTauri()}
-    <button type="button" class="textbtn keylink" onclick={() => openApiKeysDialog({ select: provider.id })}>{onSubscription(provider) ? `Sign in to ${provider.name} (${notReadyNote(provider)})…` : `Add a ${provider.name} key…`}</button>
+    <button type="button" class="textbtn keylink" onclick={() => openApiKeysDialog({ select: provider.id })}>{onOAuth(provider) ? `Sign in to ${provider.name} (${notReadyNote(provider)})…` : `Add a ${provider.name} key…`}</button>
   {/if}
 
   {#if notice}

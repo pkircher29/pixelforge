@@ -409,7 +409,7 @@ user name `oauth:<provider>` (`oauth:open_ai`, `oauth:x_ai`) and never cross IPC
 refreshed (serialised) 120 s before expiry and once after a 401.
 
 ```ts
-type AuthMode = 'api_key' | 'subscription';
+type AuthMode = 'api_key' | 'subscription' | 'oauth'; // oauth = Gemini API, separately billed
 // ProviderInfo gains:
 //   authModes: AuthMode[]        // ['api_key'] or ['api_key','subscription'] (open_ai, x_ai)
 //   authActive: AuthMode         // what requests use; settings.json aiAuth.<provider>.mode
@@ -431,14 +431,15 @@ type OAuthEvent = { provider: ProviderId; state: 'waiting' | 'signed_in' | 'sign
 
 | command | args | returns |
 |---|---|---|
-| `ai_oauth_start` | `{ provider }` | `OAuthStart`. Opens the system browser (`tauri-plugin-opener`), emits `waiting`, finishes in the background and emits `signed_in` (switching `aiAuth.<provider>.mode` to `subscription`) or `error`. Listen to `ai://oauth` **before** calling. `ai_oauth_unavailable` for Gemini and for Grok without a client ID. |
+| `ai_oauth_start` | `{ provider }` | `OAuthStart`. Opens the browser and finishes via `signed_in` (mode `oauth` for Gemini, `subscription` otherwise) or `error`. Listen to `ai://oauth` **before** calling. Unavailable when Google desktop configuration or an xAI-issued client ID is missing. |
 | `ai_oauth_cancel` | `{ provider }` | `boolean` (a sign-in was pending) |
 | `ai_oauth_status` | `{ provider }` | `OAuthStatus` (no network) |
 | `ai_oauth_sign_out` | `{ provider }` | `OAuthStatus`; revokes the refresh token at the documented `revocation_endpoint` (best effort) and deletes the record; emits `signed_out` |
 | `ai_oauth_check_images` | `{ provider, live?: boolean }` | `ImageAccess`. Without `live`: the documented verdict, no request (OpenAI: not eligible, per "Preview limitations"; xAI: `unknown`). `live: true` sends one small image request with the plan token, which **uses one image of the plan if allowed**; the verdict is stored and gates subscription image requests (OpenAI). |
-| `ai_auth_configure` | `{ provider, mode?: AuthMode, fallbackToKey?: boolean, xaiClientId?: string }` | `OAuthStatus`. `fallbackToKey` (default off) re-sends with the stored API key **only** on `ai_plan_limit`. `xaiClientId: ""` clears it. |
+| `ai_auth_configure` | `{ provider, mode?: AuthMode, fallbackToKey?: boolean, xaiClientId?: string, google?: { clientId: string, clientSecret: string, project: string } }` | `OAuthStatus`. Google fields apply only to Gemini; sign out/cancel before changing them. The secret is credential-store-only, never returned over IPC. `fallbackToKey` (default off) applies only to subscription limits. `xaiClientId: ""` clears it. |
 
-Event `ai://oauth`: `OAuthEvent`. A user cancel arrives as `state: 'error', code: 'ai_oauth_cancelled'`.
+Event `ai://oauth`: `OAuthEvent`. Cancellation removes the pending attempt; the UI resets locally.
+Stale completion events from cancelled or superseded attempts are suppressed.
 
 In subscription mode `ai_submit_*` use the plan token: ChatGPT images go through the Responses API
 `image_generation` tool (`store: false`, `stream: true`; native mask via `input_image_mask`) **only** after

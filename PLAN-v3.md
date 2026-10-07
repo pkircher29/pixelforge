@@ -10,6 +10,20 @@
 
 ---
 
+## Continuation status (2026-10-06)
+
+Implemented on `feat/v03-oauth-polish`:
+- Google OAuth for Gemini using a registered Desktop app, loopback PKCE, protected
+  token/client-secret storage, refresh/revocation, and an explicit Cloud quota project.
+  This is separately billed API access, not Google AI Pro / Ultra plan usage.
+- Existing ChatGPT and Grok sign-in paths retained. ChatGPT plan image restrictions
+  and the requirement for an xAI-issued Pixelforge client ID still apply.
+- Polish item 13: Ctrl+F opens Search, Ctrl+K remains an alias, Last Filter uses Ctrl+Alt+F.
+- Polish item 14: `npm run build:release` builds frontend assets before the native app.
+
+The remaining Wave 8–11 work and cross-OS/live-provider release gates below remain open.
+See `docs/oauth-setup.md` for configuration and verification boundaries.
+
 ## 0. Decisions (do not re-litigate)
 
 | Topic | Decision |

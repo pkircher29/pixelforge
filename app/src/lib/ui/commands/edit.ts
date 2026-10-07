@@ -373,7 +373,7 @@ registerCommands([
   { id: "edit.pasteInto", label: "Paste Into", menu: "Edit/Paste Special", order: 405, shortcut: "CmdOrCtrl+Alt+Shift+V", keywords: ["mask"], enabled: () => !!docStore.doc && !docStore.doc.selection.isEmpty, run: () => paste("into") },
   { id: "edit.clear", label: "Clear", menu: "Edit", order: 406, shortcut: "Delete", keywords: ["erase", "delete pixels"], enabled: hasDoc, run: clearSelection },
 
-  { id: "edit.search", label: "Search", menu: "Edit", order: 500, keywords: ["find", "command palette"], run: () => { ui.paletteOpen = true; } },
+  { id: "edit.search", label: "Search", menu: "Edit", order: 500, shortcut: "CmdOrCtrl+F", keywords: ["find", "command palette"], run: () => { ui.paletteOpen = true; } },
 
   { id: "edit.fill", label: "Fill…", menu: "Edit", order: 600, shortcut: "Shift+F5", keywords: ["foreground", "pattern", "history"], enabled: hasDoc, run: fillDialog },
   { id: "edit.stroke", label: "Stroke…", menu: "Edit", order: 601, keywords: ["outline", "border"], enabled: hasDoc, run: strokeDialog },

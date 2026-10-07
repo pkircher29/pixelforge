@@ -203,6 +203,7 @@ export interface AuthConfigure {
   fallbackToKey?: boolean;
   /** xAI only: the client ID xAI issued to Pixelforge ("" clears it). */
   xaiClientId?: string;
+  google?: { clientId: string; clientSecret: string; project: string };
 }
 
 export function authConfigure(provider: ProviderId, cfg: AuthConfigure): Promise<OAuthStatus> {

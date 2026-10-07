@@ -1,5 +1,5 @@
 /**
- * Remembers the last applied op + params for "Last Filter" (Ctrl+F).
+ * Remembers the last applied op + params for "Last Filter" (Ctrl+Alt+F).
  */
 
 import type { OpDef, ParamValues } from "./types";

@@ -17,6 +17,7 @@
   import Segmented from "$lib/ui/controls/Segmented.svelte";
   import {
     type AuthMode,
+    onOAuth,
     PROVIDER_CONSOLE_URL,
     PROVIDER_IDS,
     PROVIDER_LABEL,
@@ -144,14 +145,28 @@
     result = null;
     draft = null;
     xaiClientId = "";
-    if (id !== "gemini") {
-      void oauthStore.ensureListening();
-      void oauthStore.refresh(id);
-    }
+    googleClientId = "";
+    googleClientSecret = "";
+    googleProject = "";
+    void oauthStore.ensureListening();
+    void oauthStore.refresh(id);
   }
 
   // ---- subscription sign-in
   let xaiClientId = $state("");
+  let googleClientId = $state("");
+  let googleClientSecret = $state("");
+  let googleProject = $state("");
+  async function saveGoogleConfig(): Promise<void> {
+    const saved = await oauthStore.configure("gemini", {
+      google: {
+        clientId: googleClientId.trim(),
+        clientSecret: googleClientSecret.trim(),
+        project: googleProject.trim(),
+      },
+    });
+    if (saved) { googleClientId = ""; googleClientSecret = ""; googleProject = ""; }
+  }
   let copied = $state(false);
   async function setMode(id: BuiltinProviderId, mode: AuthMode): Promise<void> {
     result = null;
@@ -410,9 +425,9 @@
         {#each PROVIDER_IDS as id (id)}
           {@const info = providersStore.byId(id)}
           <button type="button" class="row" class:on={selection?.kind === "builtin" && selection.id === id} onclick={() => selectBuiltin(id)}>
-            <span class="dot" class:ok={info?.authActive === "subscription" ? !!info.account : statusDot(id)}></span>
+            <span class="dot" class:ok={info && onOAuth(info) ? !!info.account : statusDot(id)}></span>
             <span class="rname">{PROVIDER_LABEL[id]}</span>
-            <span class="rsub">{info?.authActive === "subscription" ? "subscription" : PROVIDER_VENDOR[id]}</span>
+            <span class="rsub">{info?.authActive === "oauth" ? "OAuth" : info?.authActive === "subscription" ? "subscription" : PROVIDER_VENDOR[id]}</span>
           </button>
         {/each}
         <div class="group">Custom &amp; local</div>
@@ -451,12 +466,10 @@
           <div class="ftitle">{PROVIDER_LABEL[id]} <span class="muted">· {PROVIDER_VENDOR[id]}</span>
             {#if mode === "api_key"}<button type="button" class="link" onclick={() => open(PROVIDER_CONSOLE_URL[id])}>Get a key ↗</button>{/if}
           </div>
-          {#if id !== "gemini"}
             <div class="authrow">
               <span class="muted">Authentication</span>
               <Segmented ariaLabel="Authentication" value={mode} items={authItems(id)} disabled={oauthStore.busy[id] === "config"} onchange={(v) => void setMode(id, v as AuthMode)} />
             </div>
-          {/if}
           {#if mode === "subscription" && id === "open_ai"}
             <div class="sub" data-testid="siwc-panel">
               {#if view === "signed_in"}
@@ -535,10 +548,35 @@
                 </span>
               </label>
             </div>
+          {:else if mode === "oauth" && id === "gemini"}
+            <div class="sub" data-testid="gemini-oauth-panel">
+              <p class="hint">Sign in with Google to use the Gemini API. Requests are billed to your Google Cloud project; Google AI Pro / Ultra subscriptions do not cover API usage.
+                <button type="button" class="link" onclick={() => open("https://ai.google.dev/gemini-api/docs/oauth")}>Setup instructions ↗</button>
+              </p>
+              {#if view === "signed_in"}
+                <p class="acct"><span class="dot ok"></span>Google account connected for Gemini API access.</p>
+                <button type="button" class="btn" disabled={!!oauthStore.busy[id]} onclick={() => void oauthStore.signOut(id)}>Sign out</button>
+              {:else if view === "waiting"}
+                <p class="waiting"><span class="spin"></span>Finish signing in in your browser.</p>
+                <div class="actions">
+                  <button type="button" class="btn" onclick={() => void oauthStore.cancel(id)}>Cancel</button>
+                  {#if fl.start?.authUrl}<button type="button" class="link" onclick={() => open(fl.start?.authUrl ?? "")}>Open sign-in page ↗</button>{/if}
+                </div>
+              {:else}
+                {#if st?.unavailableReason}<p class="hint">{st.unavailableReason}</p>{/if}
+                <button type="button" class="siwc" disabled={!st?.available} onclick={() => void oauthStore.start(id)}>Sign in with Google</button>
+                <details open={!st?.available}>
+                  <summary>Google Desktop app configuration</summary>
+                  <p class="hint">Create a Desktop app OAuth client and enable the Generative Language API. The client secret is saved in the credential store.</p>
+                  <label class="field"><span>Google client ID</span><input type="text" bind:value={googleClientId} autocomplete="off" spellcheck="false" /></label>
+                  <label class="field"><span>Google client secret</span><input type="password" bind:value={googleClientSecret} autocomplete="off" /></label>
+                  <label class="field"><span>Google Cloud project ID</span><input type="text" bind:value={googleProject} autocomplete="off" spellcheck="false" /></label>
+                  <button type="button" class="btn" disabled={!googleClientId.trim() || !googleClientSecret.trim() || !googleProject.trim() || !!oauthStore.busy[id]} onclick={() => void saveGoogleConfig()}>Save Google configuration</button>
+                </details>
+              {/if}
+              {#if fl.error}<p class="result bad">{fl.error}</p>{/if}
+            </div>
           {:else}
-          {#if id === "gemini"}
-            <p class="hint">Subscription sign-in isn't available for Gemini: Google AI Pro / Ultra benefits apply only inside Google AI Studio, and the Gemini API is billed separately. <button type="button" class="link" onclick={() => open("https://ai.google.dev/gemini-api/docs/google-ai-plans")}>Google's plan terms ↗</button></p>
-          {/if}
           <label class="field">
             <span>API key</span>
             <span class="inrow">
