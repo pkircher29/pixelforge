@@ -96,9 +96,11 @@ const LS_KEY = "pixelforge.settings.v1";
 class SettingsStore {
   value = $state<Settings>({ ...DEFAULT_SETTINGS });
   loaded = $state(false);
+  loadError = $state<string | null>(null);
   private saving: Promise<void> | null = null;
 
   async load(): Promise<Settings> {
+    this.loadError = null;
     try {
       if (isTauri()) {
         const s = await invoke<Settings>("settings_get");
@@ -108,6 +110,7 @@ class SettingsStore {
         if (raw) this.value = { ...DEFAULT_SETTINGS, ...(JSON.parse(raw) as Partial<Settings>) };
       }
     } catch (e) {
+      this.loadError = "Could not load saved settings. Restart the app to try again.";
       console.warn("[pixelforge] settings_get failed", e);
     }
     this.loaded = true;
@@ -119,7 +122,7 @@ class SettingsStore {
   }
 
   /** Patch and persist. Returns once stored. */
-  async set(patch: Partial<Settings>): Promise<void> {
+  async set(patch: Partial<Settings>, { throwOnError = false }: { throwOnError?: boolean } = {}): Promise<void> {
     this.value = { ...this.value, ...patch };
     const snapshot = $state.snapshot(this.value) as Settings;
     const run = async (): Promise<void> => {
@@ -132,10 +135,11 @@ class SettingsStore {
         }
       } catch (e) {
         console.warn("[pixelforge] settings_set failed", e);
+        if (throwOnError) throw e;
       }
     };
     // Serialise writes so a fast slider can't interleave.
-    this.saving = (this.saving ?? Promise.resolve()).then(run);
+    this.saving = (this.saving ?? Promise.resolve()).catch(() => {}).then(run);
     await this.saving;
   }
 }

@@ -23,6 +23,7 @@
   import { decodeImage, thumbnailDataUrl } from "$lib/ai/png";
   import { estimateCost, formatUsd } from "$lib/ai/pricing";
   import ProviderPicker from "$lib/ai/ProviderPicker.svelte";
+  import PromptLibrary from "$lib/ai/PromptLibrary.svelte";
   import { applyAll, applyOne, resolveForDoc, resultPreviews, runAi, runFor, type AiRunRequest } from "$lib/ai/run";
   import { runOnAll, shootoutProviders } from "$lib/ai/shootout";
   import Icon from "$lib/ui/icons/Icon.svelte";
@@ -414,6 +415,7 @@
         {#if aiUi.showNegative}
           <textarea bind:value={aiUi.negativePrompt} class="input prompt small" rows="2" placeholder="Things to leave out (folded into the prompt)" aria-label="Negative prompt"></textarea>
         {/if}
+        <PromptLibrary />
       </div>
     {/if}
   </section>
