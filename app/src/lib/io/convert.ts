@@ -44,6 +44,11 @@ import { withoutDiffOverlays } from "$lib/ai/overlay";
 import type { Frame, FrameHeader } from "./frame";
 
 /** Manifest format written by this version. */
+/** Clamp to 0..1 and drop f32 noise from the Rust side (0.55 → 0.550000011920929 → 0.55). */
+function unit(v: number): number {
+  return Math.round(Math.max(0, Math.min(1, v)) * 1e4) / 1e4;
+}
+
 export const PFPROJ_FORMAT = 2;
 
 /** `color-dodge` (engine) ↔ `color_dodge` (pfproj / IPC). */
@@ -140,7 +145,7 @@ export function documentFromOpenFrame(frame: Frame<OpenHeader>, name: string): D
   for (const { e, i } of ordered) {
     const common = {
       name: e.name || (e.isGroup ? "Group" : "Layer"),
-      opacity: Math.max(0, Math.min(1, e.opacity ?? 1)),
+      opacity: unit(e.opacity ?? 1),
       visible: e.visible ?? true,
       blendMode: blendFromFile(e.blendMode),
     };
@@ -422,11 +427,11 @@ export function documentFromProjectFrame(frame: Frame<ProjectHeader>): Document 
     const common = {
       id: e.id,
       name: e.name ?? "Layer",
-      opacity: Math.max(0, Math.min(1, e.opacity ?? 1)),
+      opacity: unit(e.opacity ?? 1),
       visible: e.visible ?? true,
       locked: e.locked ?? false,
       blendMode: blendFromFile(e.blend_mode),
-      fillOpacity: typeof e.fill_opacity === "number" ? Math.max(0, Math.min(1, e.fill_opacity)) : 1,
+      fillOpacity: typeof e.fill_opacity === "number" ? unit(e.fill_opacity) : 1,
       maskEnabled: e.mask_enabled !== false,
       maskLinked: e.mask_linked !== false,
       clipToBelow: e.clip_to_below === true,
