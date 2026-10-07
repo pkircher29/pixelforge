@@ -5,8 +5,8 @@
 import { Raster } from "../raster";
 
 /**
- * Defringe: replace the colour of every edge pixel (alpha > 0 and within `px` of a
- * transparent pixel) with the colour of the nearest pixel that is at least as far
+ * Defringe: replace the color of every edge pixel (alpha > 0 and within `px` of a
+ * transparent pixel) with the color of the nearest pixel that is at least as far
  * inside, approximated by the alpha-weighted average of fully-opaque neighbours within
  * `px`. Alpha is untouched. Returns a new raster.
  */
@@ -77,8 +77,8 @@ export function defringe(src: Raster, px: number): Raster {
 }
 
 /**
- * Remove Black / White Matte: undo the colour contamination of semi-transparent pixels
- * that were composited against black or white. For matte colour `m` and stored colour
+ * Remove Black / White Matte: undo the color contamination of semi-transparent pixels
+ * that were composited against black or white. For matte color `m` and stored color
  * `c` with alpha `a`: `c' = (c - m * (1 - a)) / a`, clamped. Fully opaque / transparent
  * pixels are untouched. Returns a new raster.
  */

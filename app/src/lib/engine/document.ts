@@ -74,7 +74,7 @@ export function newId(prefix = "l"): string {
 /** Maximum canvas edge in v1 (PLAN.md). */
 export const MAX_CANVAS_SIZE = 8192;
 
-/** PS quick-mask defaults: red at 50 %, colour indicates masked areas. */
+/** PS quick-mask defaults: red at 50 %, color indicates masked areas. */
 export function defaultQuickMask(): QuickMask {
   return { active: false, raster: null, color: { r: 255, g: 0, b: 0, a: 255 }, opacity: 0.5, maskedAreas: true };
 }
@@ -877,7 +877,7 @@ function docMaskAt(mask: Raster, offset: Point, x: number, y: number): number {
 
 /**
  * Apply an adjustment layer to `out` inside `rect`: run the op on the composite so far
- * (with the op's margin), then lerp the colour towards the result by `opacity × mask ×
+ * (with the op's margin), then lerp the color towards the result by `opacity × mask ×
  * clip` with the layer's blend mode. Alpha is never changed.
  */
 export function applyAdjustmentInto(doc: Document, out: Raster, layer: AdjustmentLayer, rect: Rect, clip: Uint8Array | null): void {
@@ -964,7 +964,7 @@ function lerpInto(out: Raster, src: Raster, rect: Rect, t: number, mask: Raster 
       let k = t;
       if (mask) k *= docMaskAt(mask, maskOffset, x, y) / 255;
       if (k <= 0) continue;
-      // Lerp in premultiplied space so alpha and colour stay consistent.
+      // Lerp in premultiplied space so alpha and color stay consistent.
       const aa = d[i + 3]! / 255;
       const ba = s[i + 3]! / 255;
       const ao = aa + (ba - aa) * k;

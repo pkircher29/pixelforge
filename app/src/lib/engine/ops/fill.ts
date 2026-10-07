@@ -1,5 +1,5 @@
 /**
- * Fill rasterization: solid colours, Photoshop-style gradients (linear / radial / angle
+ * Fill rasterization: solid colors, Photoshop-style gradients (linear / radial / angle
  * / reflected / diamond) and tiled patterns. Used by fill layers, shape fills, gradient
  * overlays and gradient strokes. Pure CPU.
  */

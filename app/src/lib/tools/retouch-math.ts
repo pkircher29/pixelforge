@@ -1,6 +1,6 @@
 /**
  * Pure pixel math for the retouch tools: dodge / burn / sponge (tonal range weights),
- * colour replacement, background erasing, local blur / unsharp. All functions work on
+ * color replacement, background erasing, local blur / unsharp. All functions work on
  * a raster region and return a new raster of that region (the brush engine lerps it in
  * by coverage).
  */
@@ -25,7 +25,7 @@ export function rangeWeight(range: ToneRange, l: number): number {
   }
 }
 
-/** Dodge (lighten) or burn (darken) one colour by `exposure` 0..1 in a tonal range. */
+/** Dodge (lighten) or burn (darken) one color by `exposure` 0..1 in a tonal range. */
 export function dodgeBurn(c: RGBA, mode: "dodge" | "burn", range: ToneRange, exposure: number, protectTones: boolean, out: RGBA = { r: 0, g: 0, b: 0, a: 0 }): RGBA {
   const l = lum(c.r, c.g, c.b);
   const w = rangeWeight(range, l) * exposure;
@@ -61,7 +61,7 @@ export function dodgeBurn(c: RGBA, mode: "dodge" | "burn", range: ToneRange, exp
   return out;
 }
 
-/** Sponge: saturate / desaturate by `amount` 0..1 (vibrance protects already-saturated colours). */
+/** Sponge: saturate / desaturate by `amount` 0..1 (vibrance protects already-saturated colors). */
 export function sponge(c: RGBA, mode: "saturate" | "desaturate", amount: number, vibrance: boolean, out: RGBA = { r: 0, g: 0, b: 0, a: 0 }): RGBA {
   const g = lum(c.r, c.g, c.b) * 255;
   let k: number;
@@ -121,9 +121,9 @@ export function hslToRgb(h: number, s: number, l: number): [number, number, numb
 export type ReplaceMode = "hue" | "saturation" | "color" | "luminosity";
 
 /**
- * Colour Replacement: pixels within `tolerance` (0..100 → 0..255 max-channel distance)
- * of `sampled` take the foreground's hue / saturation / colour (keeping luminosity) or
- * luminosity. Returns the replacement colour with a soft weight in `out.a` (0..255).
+ * Color Replacement: pixels within `tolerance` (0..100 → 0..255 max-channel distance)
+ * of `sampled` take the foreground's hue / saturation / color (keeping luminosity) or
+ * luminosity. Returns the replacement color with a soft weight in `out.a` (0..255).
  */
 export function replaceColor(c: RGBA, sampled: RGBA, fg: RGBA, mode: ReplaceMode, tolerance: number, antialias: boolean, out: RGBA = { r: 0, g: 0, b: 0, a: 0 }): RGBA {
   const tol = (tolerance / 100) * 255;
@@ -162,7 +162,7 @@ export function replaceColor(c: RGBA, sampled: RGBA, fg: RGBA, mode: ReplaceMode
 
 /**
  * Background Eraser weight: how much of a pixel to erase (0..1) given the sampled
- * background colour, `tolerance` (0..100) and an optional protected foreground colour.
+ * background color, `tolerance` (0..100) and an optional protected foreground color.
  */
 export function backgroundEraseWeight(r: number, g: number, b: number, sampled: RGBA, tolerance: number, protectFg: RGBA | null): number {
   const tol = (tolerance / 100) * 255;
@@ -253,7 +253,7 @@ export function sharpenRegion(src: Raster, rect: Rect, radius: number, amount: n
   return out;
 }
 
-/** Apply a per-pixel colour function over a region of `src`. */
+/** Apply a per-pixel color function over a region of `src`. */
 export function mapRegion(src: Raster, rect: Rect, fn: (c: RGBA, out: RGBA) => RGBA): Raster {
   const out = src.crop(rect);
   const d = out.data;

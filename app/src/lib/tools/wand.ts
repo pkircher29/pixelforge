@@ -1,4 +1,4 @@
-/** Magic Wand (W): select similar colours by tolerance. */
+/** Magic Wand (W): select similar colors by tolerance. */
 import { WandSparkles } from "@lucide/svelte";
 import { Selection, SetSelectionCommand, activeLayer, compositeToRaster } from "$lib/engine";
 import type { SelectionMode, Tool, ToolContext, ToolEvent, ToolOption } from "./types";
@@ -12,7 +12,7 @@ export class WandTool implements Tool {
   readonly group = "quickselect";
   readonly groupOrder = 1;
   readonly cursor = "crosshair";
-  readonly hint = "Click a colour to select it. Shift adds, Alt subtracts.";
+  readonly hint = "Click a color to select it. Shift adds, Alt subtracts.";
   readonly options: readonly ToolOption[] = [
     {
       kind: "select",

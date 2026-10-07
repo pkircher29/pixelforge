@@ -2,7 +2,7 @@
   /**
    * Photoshop's picker cube: a square (two fields) beside a vertical strip (the third
    * field), in any of the six H/S/B/R/G/B modes. Drag either to pick; the circle marker
-   * flips to black over light colours. Pure geometry lives in `color-model.ts`.
+   * flips to black over light colors. Pure geometry lives in `color-model.ts`.
    */
   import { cubeColor, cubePosition, luma, paintCube, paintStrip, rgbToHsb, type CubeMode, type CubePos, type HSB, type RGB } from "./color-model";
 

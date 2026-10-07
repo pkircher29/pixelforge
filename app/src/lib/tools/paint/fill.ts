@@ -1,5 +1,5 @@
 /**
- * Fill helpers: paint a colour through a coverage mask, and linear / radial gradients.
+ * Fill helpers: paint a color through a coverage mask, and linear / radial gradients.
  * All functions write into a layer raster in place and return the raster-space rect
  * touched (null when nothing changed). Callers wrap them in a PaintCommand.
  */
@@ -51,7 +51,7 @@ export function clearThroughMask(raster: Raster, mask: Selection, offset: Point)
 export type GradientType = "linear" | "radial";
 
 /**
- * Gradient from `a` (colour `c0`) to `b` (colour `c1`), both in raster space. When
+ * Gradient from `a` (color `c0`) to `b` (color `c1`), both in raster space. When
  * `clip` is given (doc-space selection, non-empty) only selected pixels are written.
  */
 export function renderGradient(

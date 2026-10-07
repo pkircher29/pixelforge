@@ -1,6 +1,6 @@
 /**
  * Quick Selection growth: flood from brush-covered seed pixels through neighbours
- * whose Lab colour is close to the seed colour and that are not separated by a strong
+ * whose Lab color is close to the seed color and that are not separated by a strong
  * edge. Pure, unit-tested on synthetic images.
  */
 import type { Raster } from "$lib/engine";
@@ -117,7 +117,7 @@ export function growRegion(lab: Float32Array, w: number, h: number, edge: EdgeMa
   return added;
 }
 
-/** Remove from `region` the pixels reachable from `seeds` that are similar to the seed colour. */
+/** Remove from `region` the pixels reachable from `seeds` that are similar to the seed color. */
 export function shrinkRegion(lab: Float32Array, w: number, h: number, seeds: readonly number[], region: Uint8Array, opts: GrowOptions = {}): number {
   const tmp = new Uint8Array(w * h);
   growRegion(lab, w, h, null, seeds, tmp, { ...opts, tolerance: opts.tolerance ?? 10 });

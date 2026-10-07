@@ -18,7 +18,7 @@ export class EraserTool extends BrushBasedTool {
       shortcut: "e",
       group: "eraser",
       groupOrder: 0,
-      hint: "Drag to erase to transparency (to the background colour on a Background / mask). [ ] change size.",
+      hint: "Drag to erase to transparency (to the background color on a Background / mask). [ ] change size.",
       label: "Eraser",
       options: [
         BRUSH_PICKER_OPTION,
@@ -87,7 +87,7 @@ export class BackgroundEraserTool extends BrushBasedTool {
       shortcut: "e",
       group: "eraser",
       groupOrder: 1,
-      hint: "Drag: colours similar to the one under the brush centre are erased. Protect Foreground keeps the FG colour.",
+      hint: "Drag: colors similar to the one under the brush center are erased. Protect Foreground keeps the FG color.",
       label: "Background Eraser",
       options: [
         BRUSH_PICKER_OPTION,
@@ -198,7 +198,7 @@ function keepConnected(region: Raster, original: Raster, cx: number, cy: number)
   for (let i = 0; i < w * h; i++) if (!seen[i]) rd[i * 4 + 3] = od[i * 4 + 3]!;
 }
 
-/** Magic Eraser: click to erase similar colours to transparency (wand + clear). */
+/** Magic Eraser: click to erase similar colors to transparency (wand + clear). */
 export class MagicEraserTool implements Tool {
   readonly id = "magic-eraser";
   readonly name = "Magic Eraser";
@@ -207,7 +207,7 @@ export class MagicEraserTool implements Tool {
   readonly group = "eraser";
   readonly groupOrder = 2;
   readonly cursor = "crosshair";
-  readonly hint = "Click a colour to erase all similar pixels to transparency.";
+  readonly hint = "Click a color to erase all similar pixels to transparency.";
   readonly options: readonly ToolOption[] = [
     { kind: "number", key: "tolerance", label: "Tolerance", min: 0, max: 255, step: 1, default: 32 },
     { kind: "toggle", key: "antialias", label: "Anti-alias", default: true },

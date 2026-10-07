@@ -66,7 +66,7 @@ function paintable(): { doc: Document; layer: RasterLayer } | null {
   return { doc, layer: l };
 }
 
-/** Fill the selection (or whole layer) with a colour. */
+/** Fill the selection (or whole layer) with a color. */
 export function fillWith(color: RGBA, label: string): void {
   const p = paintable();
   if (!p) return;

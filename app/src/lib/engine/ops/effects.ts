@@ -6,7 +6,7 @@
  * every side, with the PS render order
  *
  *   drop shadow → outer glow → fill (× fillOpacity) → inner shadow → inner glow →
- *   bevel & emboss → colour overlay → gradient overlay → stroke
+ *   bevel & emboss → color overlay → gradient overlay → stroke
  *
  * Shadows / glows / strokes are built from the shape's coverage (alpha) with the
  * distance transform (spread / choke / expand) and a Gaussian blur (`size`); bevel &
@@ -170,7 +170,7 @@ function softExpand(cov: Float32Array, w: number, h: number, size: number, sprea
 const px = new Float32Array(4);
 
 /**
- * Blend a constant colour (or per-pixel colour buffer, straight 0..1 RGB) with coverage
+ * Blend a constant color (or per-pixel color buffer, straight 0..1 RGB) with coverage
  * `cov` over the premultiplied float buffer `dst` using `mode` at `opacity`.
  */
 function blendInto(
@@ -206,7 +206,7 @@ function blendInto(
   }
 }
 
-/** Per-pixel gradient colour (straight RGB 0..1) + alpha buffers over `bounds`. */
+/** Per-pixel gradient color (straight RGB 0..1) + alpha buffers over `bounds`. */
 function gradientBuffers(
   w: number,
   h: number,

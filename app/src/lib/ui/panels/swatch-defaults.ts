@@ -1,10 +1,10 @@
 /**
- * Photoshop's default swatch set (pure data), 121 colours. The flat "Default" grid follows the
+ * Photoshop's default swatch set (pure data), 121 colors. The flat "Default" grid follows the
  * classic `Default.aco` order: the 12 RGB/CMYK primaries (PS's exact values), White /
  * Neutral Gray / Black, then the five hue families (Pastel, Light, Pure, Dark, Darker ×
  * PS's 16 hue names), a 16-step gray ramp and the cool / warm brown ramps. Family values are derived from HSB with
  * PS's tint/shade ratios, so they read like the originals but are not byte-exact.
- * PS CC 2020's folders (Pastel, Light, Pure, Dark, Darker, Grayscale) group the same colours.
+ * PS CC 2020's folders (Pastel, Light, Pure, Dark, Darker, Grayscale) group the same colors.
  */
 import { hsbToRgb, type RGB } from "./color-model";
 

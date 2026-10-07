@@ -1,5 +1,5 @@
 /**
- * Gradient editor model (PS semantics): colour stops with midpoints below the bar,
+ * Gradient editor model (PS semantics): color stops with midpoints below the bar,
  * opacity stops with midpoints above it. Pure; converted to the engine `Gradient`
  * (flat RGBA stops) for rendering.
  */
@@ -66,7 +66,7 @@ export function resolveColor(c: RGBA | "fg" | "bg", fg: RGBA, bg: RGBA): RGBA {
   return c === "fg" ? fg : c === "bg" ? bg : c;
 }
 
-/** Colour at `t` (0..1), alpha not applied. */
+/** Color at `t` (0..1), alpha not applied. */
 export function evalColor(g: GradientDef, t: number, fg: RGBA = BLACK, bg: RGBA = WHITE): RGBA {
   const stops = sortedColor(g);
   if (stops.length === 0) return { r: 0, g: 0, b: 0, a: 255 };
@@ -204,7 +204,7 @@ export function setOpacityMidpoint(g: GradientDef, index: number, mid: number): 
   return def;
 }
 
-/** Index order of colour stops after sorting (stable ids for the editor UI). */
+/** Index order of color stops after sorting (stable ids for the editor UI). */
 export function sortStops(g: GradientDef): GradientDef {
   const def = cloneGradientDef(g);
   def.colorStops.sort((a, b) => a.pos - b.pos);

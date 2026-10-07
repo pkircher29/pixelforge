@@ -51,7 +51,7 @@ export function drawStrokePreview(canvas: HTMLCanvasElement, settings: BrushSett
   if (!g) return;
   const r = strokePreviewRaster({ ...settings, size: settings.size * dpr }, w, h, opts.seed);
   const img = r.toImageData();
-  // Tint: the raster is black; recolour with the requested CSS colour.
+  // Tint: the raster is black; recolour with the requested CSS color.
   const c = parseCss(opts.color ?? "#e6e6e6");
   const d = img.data;
   for (let i = 0; i < d.length; i += 4) {

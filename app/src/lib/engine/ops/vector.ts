@@ -273,7 +273,7 @@ export function pathToSelection(path: Path, w: number, h: number, opts: { feathe
   return opts.feather && opts.feather > 0 ? s.feather(opts.feather) : s;
 }
 
-/** Paint a coverage buffer with a solid colour or a gradient (laid out over `bounds`) into a raster. */
+/** Paint a coverage buffer with a solid color or a gradient (laid out over `bounds`) into a raster. */
 export function coverageToRaster(cov: Uint8Array, w: number, h: number, fill: SolidFill | GradientFill | RGBA, bounds?: Rect): Raster {
   const out = new Raster(w, h);
   const d = out.data;
@@ -527,7 +527,7 @@ export function strokePathCoverage(path: Path, width: number, w: number, h: numb
   return polygonsCoverage(polys, w, h, { rule: "nonzero", aa: opts.aa ?? true });
 }
 
-/** Stroke a path into a new `w x h` raster with a colour or gradient. */
+/** Stroke a path into a new `w x h` raster with a color or gradient. */
 export function strokePathToRaster(path: Path, width: number, color: RGBA | SolidFill | GradientFill, opts: StrokeOptions, w: number, h: number): Raster {
   const cov = strokePathCoverage(path, width, w, h, opts);
   return coverageToRaster(cov, w, h, color);

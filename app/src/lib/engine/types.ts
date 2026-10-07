@@ -36,7 +36,7 @@ export interface Size {
   h: number;
 }
 
-/** A colour with 0..255 integer channels and straight alpha. */
+/** A color with 0..255 integer channels and straight alpha. */
 export interface RGBA {
   r: number;
   g: number;
@@ -60,7 +60,7 @@ export interface IRaster {
   bounds(): Rect;
   /** Deep copy. */
   clone(): IRaster;
-  /** Fill the whole raster (or `rect`) with one colour. */
+  /** Fill the whole raster (or `rect`) with one color. */
   fill(rgba: RGBA, rect?: Rect): void;
   /** Read a pixel; out-of-range reads return transparent black. */
   getPixel(x: number, y: number, out?: RGBA): RGBA;
@@ -222,7 +222,7 @@ export interface SolidFill {
   color: RGBA;
 }
 
-/** One colour stop; `pos` 0..1. */
+/** One color stop; `pos` 0..1. */
 export interface GradientStop {
   pos: number;
   color: RGBA;
@@ -462,7 +462,7 @@ export interface StrokeEffect extends EffectBase {
 /**
  * Photoshop Layer Style subset. Missing / `enabled: false` effects are skipped. Render
  * order (PS): drop shadow → outer glow → fill (at `fillOpacity`) → inner shadow → inner
- * glow → bevel & emboss → colour overlay → gradient overlay → stroke.
+ * glow → bevel & emboss → color overlay → gradient overlay → stroke.
  */
 export interface LayerEffects {
   dropShadow?: DropShadowEffect;
@@ -504,7 +504,7 @@ export interface AlphaChannel {
   id: string;
   name: string;
   mask: Raster;
-  /** Overlay colour shown when the channel is viewed together with the composite. */
+  /** Overlay color shown when the channel is viewed together with the composite. */
   color: RGBA;
   /** Overlay opacity 0..1. */
   opacity: number;

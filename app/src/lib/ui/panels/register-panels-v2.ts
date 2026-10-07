@@ -43,7 +43,7 @@ function proxy(id: string, label?: string): CommandDef {
 registerCommand({
   id: "color.pick",
   label: "Color Picker…",
-  keywords: ["foreground", "colour", "hex", "hsb"],
+  keywords: ["foreground", "color", "hex", "hsb"],
   run: async () => {
     const c = await openColorPicker(toolStore.fg, { title: "Color Picker (Foreground Color)" });
     if (c) toolStore.setFg(c);
@@ -52,7 +52,7 @@ registerCommand({
 registerCommand({
   id: "color.pickBackground",
   label: "Color Picker (Background)…",
-  keywords: ["background", "colour"],
+  keywords: ["background", "color"],
   run: async () => {
     const c = await openColorPicker(toolStore.bg, { title: "Color Picker (Background Color)" });
     if (c) toolStore.setBg(c);

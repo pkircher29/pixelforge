@@ -1,6 +1,6 @@
 /**
  * PNG <-> `Raster` in the webview, using canvas APIs (no dependency on other agents'
- * commands). Note: canvas round-trips go through premultiplied alpha, so colour values
+ * commands). Note: canvas round-trips go through premultiplied alpha, so color values
  * of semi-transparent pixels can shift by a few units. Opaque pixels are exact.
  */
 

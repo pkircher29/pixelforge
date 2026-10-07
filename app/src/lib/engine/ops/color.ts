@@ -1,5 +1,5 @@
 /**
- * Colour-space helpers shared by Hue/Saturation and Color Balance, in TS and GLSL.
+ * Color-space helpers shared by Hue/Saturation and Color Balance, in TS and GLSL.
  * HSL per the CSS Color spec; hue is 0..1.
  */
 

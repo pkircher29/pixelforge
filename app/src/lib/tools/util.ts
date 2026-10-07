@@ -74,7 +74,7 @@ export function drawHandle(g: CanvasRenderingContext2D, x: number, y: number, si
 export class CompositeSampler {
   private scratch: Raster | null = null;
 
-  /** Composite colour at a doc pixel (RGBA 0..255). */
+  /** Composite color at a doc pixel (RGBA 0..255). */
   sample(doc: Document, x: number, y: number): { r: number; g: number; b: number; a: number } {
     const px = Math.floor(x);
     const py = Math.floor(y);

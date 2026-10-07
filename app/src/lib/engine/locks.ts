@@ -68,7 +68,7 @@ export function assertEditable(layer: Layer, op: LayerEditOp): void {
 
 /**
  * Enforce "Lock transparent pixels": every pixel of `after` keeps the alpha it had in
- * `before` (colour from `after` where `before` had any alpha). Both rasters must be the
+ * `before` (color from `after` where `before` had any alpha). Both rasters must be the
  * same size; returns a new raster.
  */
 export function applyTransparencyLock(before: Raster, after: Raster): Raster {

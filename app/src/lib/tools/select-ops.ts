@@ -97,7 +97,7 @@ function matches(d: Uint8ClampedArray, p: number, q: number, tol: number): boole
 }
 
 /**
- * Grow: add 4-connected neighbours whose colour is within `tolerance` of the adjacent
+ * Grow: add 4-connected neighbours whose color is within `tolerance` of the adjacent
  * selected pixel (wand chaining from the selection boundary). `raster` is doc-sized.
  */
 export function growSelection(sel: Selection, raster: Raster, tolerance: number): Selection {
@@ -127,13 +127,13 @@ export function growSelection(sel: Selection, raster: Raster, tolerance: number)
   return out;
 }
 
-/** Similar: every pixel in the image within `tolerance` of any selected colour (quantised palette). */
+/** Similar: every pixel in the image within `tolerance` of any selected color (quantised palette). */
 export function similarSelection(sel: Selection, raster: Raster, tolerance: number): Selection {
   const w = sel.width;
   const h = sel.height;
   const d = raster.data;
   const m = sel.mask;
-  // Palette of selected colours quantised to 16 levels per channel.
+  // Palette of selected colors quantised to 16 levels per channel.
   const seen = new Set<number>();
   const palette: number[] = [];
   for (let i = 0; i < m.length; i++) {

@@ -93,7 +93,7 @@
         <input class="input num" type="number" min="0" max="200" bind:value={fuzziness} disabled={preset !== "sampled"} />
       </label>
       <!-- svelte-ignore a11y_no_static_element_interactions -->
-      <div class="pv" onpointerdown={pick} title="Click to sample a colour (Shift adds, Alt subtracts)">
+      <div class="pv" onpointerdown={pick} title="Click to sample a color (Shift adds, Alt subtracts)">
         <canvas bind:this={canvas}></canvas>
       </div>
       <div class="row">

@@ -1,5 +1,5 @@
 /**
- * Add Noise: seeded per-pixel hash noise (uniform or Gaussian), colour or monochrome.
+ * Add Noise: seeded per-pixel hash noise (uniform or Gaussian), color or monochrome.
  * Amount 100 % = ±1.0 uniform / sigma 0.5 Gaussian in 0..1 channel units.
  */
 

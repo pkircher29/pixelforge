@@ -81,7 +81,7 @@ function clampNum(v: number, lo: number, hi: number, fallback: number): number {
   return Number.isFinite(v) ? Math.max(lo, Math.min(hi, v)) : fallback;
 }
 
-/** Solid colour for the solid contents kinds, or null for pattern / history. */
+/** Solid color for the solid contents kinds, or null for pattern / history. */
 export function fillSolidColor(contents: FillContents, fg: RGBA, bg: RGBA, color: RGBA): RGBA | null {
   switch (contents) {
     case "foreground":
@@ -117,7 +117,7 @@ export function patternSource(p: Raster): (docX: number, docY: number) => RGBA {
 /**
  * Composite a source over `target` (raster space, layer at `offset`) inside `area`
  * (raster space), weighted by `coverage(docX, docY)` 0..1. `source(docX, docY)` gives the
- * fill colour. Blend `mode` and `opacity` 0..1; `preserve` keeps each pixel's alpha (PS
+ * fill color. Blend `mode` and `opacity` 0..1; `preserve` keeps each pixel's alpha (PS
  * "Preserve Transparency": empty pixels stay empty). Returns the touched rect or null.
  */
 export function fillPixels(

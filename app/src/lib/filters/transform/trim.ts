@@ -9,7 +9,7 @@ export type TrimBasis = "transparent" | "top-left" | "bottom-right";
 
 export interface TrimOptions {
   basis?: TrimBasis;
-  /** Per-channel tolerance 0..255 when matching the edge colour. Default 0. */
+  /** Per-channel tolerance 0..255 when matching the edge color. Default 0. */
   tolerance?: number;
   top?: boolean;
   bottom?: boolean;

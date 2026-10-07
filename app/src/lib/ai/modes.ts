@@ -133,7 +133,7 @@ export function fitToSize(raster: Raster, w: number, h: number): Raster {
 
 /**
  * Keep only the pixels of `patch` that lie under `coverage` (both `w x h`): the output
- * alpha is `patch.alpha * coverage / 255`, colour is untouched. Compositing the result
+ * alpha is `patch.alpha * coverage / 255`, color is untouched. Compositing the result
  * over the original with normal "over" yields `base * (1 - m) + patch * m`, which is
  * what `pf_ai::mask::composite_back` computes — except this keeps the blend on its
  * own layer instead of flattening it.

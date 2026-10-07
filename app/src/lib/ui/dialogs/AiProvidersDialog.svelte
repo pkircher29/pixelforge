@@ -3,7 +3,7 @@
    * Settings > AI Providers: left list (built-ins with key status, custom entries, "+ Add"
    * menu), right form per selection. Replaces the v0.1 ApiKeysDialog. Mounted on
    * `document.body` by `$lib/ai/dialogs`. Flat, dense markup (11px / 22px rows) on the
-   * app.css tokens so the Wave 6 Photoshop restyle only has to remap colours.
+   * app.css tokens so the Wave 6 Photoshop restyle only has to remap colors.
    */
   import { onMount } from "svelte";
   import { openUrl } from "@tauri-apps/plugin-opener";

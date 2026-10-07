@@ -1,5 +1,5 @@
 /**
- * Quick Selection (W): paint to grow a selection from the brushed pixels by Lab colour
+ * Quick Selection (W): paint to grow a selection from the brushed pixels by Lab color
  * similarity with an edge-aware stop. Shift/Add mode grows, Alt/Subtract shrinks.
  */
 import { Brush } from "@lucide/svelte";

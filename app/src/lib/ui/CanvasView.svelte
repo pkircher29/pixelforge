@@ -78,7 +78,7 @@
   }
 
   // Mount compositor + resize observer once the elements exist. Re-created when the
-  // transparency-grid colours or theme change (compositor colours are fixed at creation).
+  // transparency-grid colors or theme change (compositor colors are fixed at creation).
   $effect(() => {
     const el = canvas;
     const container = host;
@@ -141,7 +141,7 @@
 
   function checkerSizePx(dpr: number): number {
     const px = CHECKER_PX[settings.value.checkerSize] ?? 8;
-    // "None": one giant cell → the light colour only.
+    // "None": one giant cell → the light color only.
     return px === 0 ? 1e6 : Math.round(px * dpr);
   }
 

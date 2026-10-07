@@ -1,5 +1,5 @@
 /**
- * Info panel readouts (pure): colour modes for the two eyedropper readouts, cursor
+ * Info panel readouts (pure): color modes for the two eyedropper readouts, cursor
  * coordinates in the ruler unit, selection / transform sizes, document size line.
  * Tested in `tests/panels/info.test.ts`.
  */
@@ -23,7 +23,7 @@ export interface ReadoutLine {
   v: string;
 }
 
-/** The lines of one colour readout; `null` colour → blank values (cursor off-canvas). */
+/** The lines of one color readout; `null` color → blank values (cursor off-canvas). */
 export function colorReadout(mode: InfoColorMode, c: RGBA | null): ReadoutLine[] {
   const blank = (keys: string[]): ReadoutLine[] => keys.map((k) => ({ k, v: "" }));
   switch (mode) {

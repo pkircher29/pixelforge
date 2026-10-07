@@ -1,5 +1,5 @@
 /**
- * Pixelate (Mosaic): every `cell x cell` block becomes its average colour. Cells are
+ * Pixelate (Mosaic): every `cell x cell` block becomes its average color. Cells are
  * anchored at the raster origin. GPU: two separable averaging passes.
  */
 
@@ -82,7 +82,7 @@ export const pixelate: OpDef = {
   },
 };
 
-/** Convenience for tests: average colour of a block of a raster (straight alpha, rounded). */
+/** Convenience for tests: average color of a block of a raster (straight alpha, rounded). */
 export function blockAverage(src: Raster, x0: number, y0: number, size: number): [number, number, number, number] {
   let r = 0;
   let g = 0;

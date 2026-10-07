@@ -51,7 +51,7 @@ export function buildBlendSingle(mode: BlendMode): string {
  * - `u_mode`, `u_opacity`
  * - `u_lerp`: pass-through group with opacity / mask — `out = mix(prev, src, opacity × mask)`
  * - `u_adjust`: adjustment layer — `src` holds the op result (straight RGB, doc-sized);
- *   the colour is lerped towards `blend(prev, src)` by `opacity × mask × clip`, alpha is
+ *   the color is lerped towards `blend(prev, src)` by `opacity × mask × clip`, alpha is
  *   kept
  *
  * `mode` selects a single-mode specialisation or the `switch` dispatcher (`"all"`).

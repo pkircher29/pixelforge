@@ -1,4 +1,4 @@
-/** Color Replacement (B): keeps luminosity, replaces hue / saturation with the foreground colour. */
+/** Color Replacement (B): keeps luminosity, replaces hue / saturation with the foreground color. */
 import { Palette } from "@lucide/svelte";
 import type { RGBA } from "$lib/engine";
 import type { ToolContext, ToolEvent } from "./types";
@@ -18,7 +18,7 @@ export class ColorReplacementTool extends BrushBasedTool {
       shortcut: "b",
       group: "brush",
       groupOrder: 2,
-      hint: "Drag over a colour: it is replaced with the foreground colour, keeping the shading. Alt-click samples.",
+      hint: "Drag over a color: it is replaced with the foreground color, keeping the shading. Alt-click samples.",
       label: "Color Replacement",
       options: [
         BRUSH_PICKER_OPTION,
@@ -77,7 +77,7 @@ export class ColorReplacementTool extends BrushBasedTool {
       computeTarget: (before, rect) =>
         mapRegion(before, rect, (c, out) => {
           const r = replaceColor(c, tool.sampled ?? fg, fg, mode, tol, aa, out);
-          // `a` carries the match weight: unmatched pixels keep the snapshot (weight 0 → same colour).
+          // `a` carries the match weight: unmatched pixels keep the snapshot (weight 0 → same color).
           r.a = c.a;
           return r;
         }),

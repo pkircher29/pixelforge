@@ -97,8 +97,8 @@
         <label class="chip" class:on={bg === "white"}><input type="radio" bind:group={bg} value="white" /> White</label>
         <label class="chip" class:on={bg === "transparent"}><input type="radio" bind:group={bg} value="transparent" /> Transparent</label>
         <label class="chip" class:on={bg === "color"}>
-          <input type="radio" bind:group={bg} value="color" /> Colour
-          <input type="color" class="swatch" bind:value={color} aria-label="Background colour" />
+          <input type="radio" bind:group={bg} value="color" /> Color
+          <input type="color" class="swatch" bind:value={color} aria-label="Background color" />
         </label>
       </span>
     </div>

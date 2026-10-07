@@ -81,7 +81,7 @@ export class SmudgeTool extends BrushBasedTool {
       shortcut: "",
       group: "blur",
       groupOrder: 2,
-      hint: "Drag to smear colour. Finger Painting starts the stroke with the foreground colour.",
+      hint: "Drag to smear color. Finger Painting starts the stroke with the foreground color.",
       label: "Smudge Tool",
       options: [BRUSH_PICKER_OPTION, STRENGTH_OPTION, SAMPLE_OPTION, { kind: "toggle", key: "fingerPainting", label: "Finger Painting", default: false }],
     });

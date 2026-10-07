@@ -12,7 +12,7 @@
  * - `erase`   alpha → 0 (eraser)
  * - `source`  copy pixels from `sourceAt(x, y)` (clone / pattern / history stamps)
  * - `target`  a lazily computed per-rect "target" raster derived from the snapshot
- *             (blur, sharpen, dodge, burn, sponge, colour replacement, background eraser)
+ *             (blur, sharpen, dodge, burn, sponge, color replacement, background eraser)
  * - `smudge`  sequential finger-painting (handled per dab, not from the snapshot)
  *
  * Pure parts (dab placement, smoothing, dab masks) are exported for tests.
@@ -609,7 +609,7 @@ export class BrushStroke {
     return this.targetCache;
   }
 
-  /** Smudge: pick up colour under the finger and drag it along. */
+  /** Smudge: pick up color under the finger and drag it along. */
   private smudge(d: Dab, m: DabMask, x0: number, y0: number, rect: Rect): void {
     const blend = this.opts.blend as Extract<StrokeBlend, { mode: "smudge" }>;
     const n = m.n;
@@ -618,7 +618,7 @@ export class BrushStroke {
     const sel = this.opts.selection && !this.opts.selection.isEmpty ? this.opts.selection : null;
     const off = this.opts.offset;
     if (!this.finger || this.fingerN !== n) {
-      // Initialise the finger from the pixels under the first dab (or the fg colour).
+      // Initialise the finger from the pixels under the first dab (or the fg color).
       this.finger = new Float32Array(n * n * 4);
       this.fingerN = n;
       const f = this.finger;
@@ -700,7 +700,7 @@ export class BrushStroke {
   }
 }
 
-/** Luminance 0..255 used when painting masks with a colour. */
+/** Luminance 0..255 used when painting masks with a color. */
 export function maskGray(c: RGBA): RGBA {
   const v = Math.round(0.299 * c.r + 0.587 * c.g + 0.114 * c.b);
   return { r: v, g: v, b: v, a: 255 };

@@ -1,4 +1,4 @@
-/** Brush (B) and Pencil — colour painting through the brush engine. */
+/** Brush (B) and Pencil — color painting through the brush engine. */
 import { Brush, Pencil } from "@lucide/svelte";
 import type { ToolContext, ToolEvent, ToolOption } from "./types";
 import type { StrokeBlend } from "./brush-engine";
@@ -31,8 +31,8 @@ export class BrushTool extends BrushBasedTool {
       group: "brush",
       groupOrder: pencil ? 1 : 0,
       hint: pencil
-        ? "Drag to draw hard-edged lines. Shift-click draws a straight line from the last point; Alt-click samples a colour."
-        : "Drag to paint. Shift-click paints a straight line from the last point; Alt-click samples a colour. [ ] size, { } hardness, 1-0 opacity.",
+        ? "Drag to draw hard-edged lines. Shift-click draws a straight line from the last point; Alt-click samples a color."
+        : "Drag to paint. Shift-click paints a straight line from the last point; Alt-click samples a color. [ ] size, { } hardness, 1-0 opacity.",
       label: pencil ? "Pencil" : "Brush Tool",
       aliased: pencil,
       ...(pencil ? { fixedHardness: 100 } : {}),
@@ -48,13 +48,13 @@ export class BrushTool extends BrushBasedTool {
     if (mode === "clear" && !target.isMask) return { mode: "erase" };
     let color = ctx.fg();
     if (this.pencil && ctx.opt<boolean>("autoErase")) {
-      // Auto Erase: starting on the foreground colour paints the background colour.
+      // Auto Erase: starting on the foreground color paints the background color.
       const p = target.raster.getPixel(Math.floor(e.x - target.offset.x), Math.floor(e.y - target.offset.y));
       if (p.a > 0 && colorDistance(color, p.r, p.g, p.b) < 8) color = ctx.bg();
     }
     if (mode === "behind" && !target.isMask) {
       // Behind: only paints where the layer is transparent → encode as a source blend that
-      // returns the colour scaled by (1 - existing alpha).
+      // returns the color scaled by (1 - existing alpha).
       const before = target.raster.clone();
       const c = BrushBasedTool.maskColor(target, color);
       return {

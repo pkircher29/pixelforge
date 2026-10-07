@@ -1,6 +1,6 @@
 <script lang="ts">
   /**
-   * Character panel (PS): font family / style, size, leading, tracking, colour, faux
+   * Character panel (PS): font family / style, size, leading, tracking, color, faux
    * bold / italic, All Caps. Bound to the live type session, else the active text layer,
    * else the Type tool defaults. Underline / small caps / baseline shift need engine
    * TextSpec support and are shown disabled.
@@ -45,7 +45,7 @@
   <div class="row">
     <span class="lbl">Color:</span>
     <span class="swatch" style:background={rgbaToHex(s.color)}>
-      <input type="color" value={rgbaToHex(s.color)} aria-label="Text colour" oninput={(e) => { const c = hexToRgba(e.currentTarget.value); if (c) applyTypePatch({ color: c }); }} />
+      <input type="color" value={rgbaToHex(s.color)} aria-label="Text color" oninput={(e) => { const c = hexToRgba(e.currentTarget.value); if (c) applyTypePatch({ color: c }); }} />
     </span>
   </div>
   <div class="toggles" role="group" aria-label="Type style">

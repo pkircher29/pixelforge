@@ -11,7 +11,7 @@ import type { BlitOptions, IRaster, ResampleMethod, RGBA } from "./types";
 
 const TRANSPARENT: RGBA = { r: 0, g: 0, b: 0, a: 0 };
 
-/** Construct an RGBA colour literal. */
+/** Construct an RGBA color literal. */
 export function rgba(r: number, g: number, b: number, a = 255): RGBA {
   return { r, g, b, a };
 }
@@ -52,7 +52,7 @@ export class Raster implements IRaster {
     }
   }
 
-  /** Raster filled with one colour. */
+  /** Raster filled with one color. */
   static filled(width: number, height: number, color: RGBA): Raster {
     const r = new Raster(width, height);
     r.fill(color);

@@ -99,7 +99,7 @@
           <span class="cap new-cap">new</span>
           <span class="cap cur-cap">current</span>
           {#if !isWebSafe(color)}
-            <button type="button" class="cube-warn" title="Not a web-safe colour. Click to snap to the nearest web-safe colour." onclick={() => setRgb(snapWebSafe(color))}>
+            <button type="button" class="cube-warn" title="Not a web-safe color. Click to snap to the nearest web-safe color." onclick={() => setRgb(snapWebSafe(color))}>
               <span class="cube-ico"></span>
               <span class="cube-sw" style:background={rgbToHex(snapWebSafe(color))}></span>
             </button>

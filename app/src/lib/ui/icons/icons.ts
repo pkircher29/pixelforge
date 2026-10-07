@@ -3,7 +3,7 @@
  *
  * Every glyph is a list of parts on a 16×16 grid. A part is stroked with `currentColor`
  * (1.25 px, round joins) unless `f` (fill with currentColor) or `k` (knock-out: fill with
- * the surface colour, `--icon-knockout`) is set. `da` = dash pattern, `w` = stroke width
+ * the surface color, `--icon-knockout`) is set. `da` = dash pattern, `w` = stroke width
  * override, `o` = opacity. Lines sit on half-pixel coordinates so they stay crisp at 1×.
  *
  * Names: tool ids from PLAN-v2 §2 (every flyout member), toolbar extras, options-bar,
@@ -14,7 +14,7 @@ export interface IconPart {
   d: string;
   /** Fill with currentColor (no stroke unless `s` is also set). */
   f?: boolean;
-  /** Fill with the surface colour (knock-out) and stroke. */
+  /** Fill with the surface color (knock-out) and stroke. */
   k?: boolean;
   /** Also stroke a filled part. */
   s?: boolean;

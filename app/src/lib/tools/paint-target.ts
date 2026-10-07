@@ -30,7 +30,7 @@ export interface PaintTarget {
   offset: Point;
   /** Id passed to `ctx.touch` / `markDirty`. */
   dirtyId: string;
-  /** True for gray channel rasters (masks): colours are converted to luminance. */
+  /** True for gray channel rasters (masks): colors are converted to luminance. */
   isMask: boolean;
   /** Snapshot for undo. */
   capture(): { rect: Rect; pixels: Raster };

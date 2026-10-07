@@ -1,7 +1,7 @@
 <script lang="ts">
   /**
    * Shape Fill / Stroke picker (PS): a swatch showing none / solid / gradient; the popover
-   * switches between the three and offers a colour input or the gradient presets + editor.
+   * switches between the three and offers a color input or the gradient presets + editor.
    */
   import Popover from "$lib/ui/controls/Popover.svelte";
   import Icon from "$lib/ui/icons/Icon.svelte";
@@ -74,8 +74,8 @@
           {#each RECENT as hex (hex)}
             <button type="button" class="chip" style:background={hex} aria-label={hex} onclick={() => setSolid(hex)}></button>
           {/each}
-          <label class="chip picker" style:background={rgbaToHex(fill.color)} title="Pick a colour">
-            <input type="color" value={rgbaToHex(fill.color)} oninput={(e) => setSolid(e.currentTarget.value)} aria-label="Colour" />
+          <label class="chip picker" style:background={rgbaToHex(fill.color)} title="Pick a color">
+            <input type="color" value={rgbaToHex(fill.color)} oninput={(e) => setSolid(e.currentTarget.value)} aria-label="Color" />
             <Icon name="color" size={12} />
           </label>
         </div>

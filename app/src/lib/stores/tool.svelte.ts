@@ -1,5 +1,5 @@
 /**
- * Tool store: active tool, per-tool options (persisted), foreground/background colours,
+ * Tool store: active tool, per-tool options (persisted), foreground/background colors,
  * fly-out group memory (last-used tool per group becomes the group's face), Quick Mask
  * and screen mode.
  *
@@ -23,7 +23,7 @@ const LS_KEY = "pixelforge.tools.v1";
 export type OptionValue = number | string | boolean;
 export type ScreenMode = "standard" | "fullscreen-menu" | "fullscreen";
 
-/** One Color Sampler marker (document pixel + last sampled composite colour). */
+/** One Color Sampler marker (document pixel + last sampled composite color). */
 export interface ColorSampler {
   id: number;
   x: number;

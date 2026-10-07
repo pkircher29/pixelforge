@@ -1,7 +1,7 @@
 /**
  * Tool contract. A tool is a plain class; the canvas view feeds it pointer events in
  * document space and gives it a `ToolContext` to reach the active document, history,
- * viewport, colours and options. Tools keep their own transient drag state.
+ * viewport, colors and options. Tools keep their own transient drag state.
  */
 import type { Component } from "svelte";
 import type { Command, Document, History, ICompositor, LayerId, RGBA, Rect, Viewport } from "$lib/engine";

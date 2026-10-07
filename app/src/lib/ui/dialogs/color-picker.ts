@@ -1,6 +1,6 @@
 /**
- * `openColorPicker(initial)` — the Photoshop Color Picker as a promise, for every colour
- * swatch control in the app (toolbar fg/bg, Color panel, Layer Style colour wells,
+ * `openColorPicker(initial)` — the Photoshop Color Picker as a promise, for every color
+ * swatch control in the app (toolbar fg/bg, Color panel, Layer Style color wells,
  * Fill / Stroke dialogs…). Resolves `null` on Cancel.
  */
 import type { RGBA } from "$lib/engine";

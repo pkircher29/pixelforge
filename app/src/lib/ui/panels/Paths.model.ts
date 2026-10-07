@@ -25,13 +25,13 @@ function blitOnto(layer: PixelLayer, src: Raster): Raster {
   return out;
 }
 
-/** Fill Path with the foreground colour onto `layer`. */
+/** Fill Path with the foreground color onto `layer`. */
 export function fillPathCommand(doc: Document, layer: PixelLayer, path: Path, color: RGBA): Command {
   const fill = fillPathToRaster(path, color, doc.width, doc.height, { aa: true });
   return ReplaceLayerPixelsCommand.whole("Fill Path", layer, blitOnto(layer, fill));
 }
 
-/** Stroke Path with the brush (size / colour from the tool store). */
+/** Stroke Path with the brush (size / color from the tool store). */
 export function strokePathCommand(doc: Document, layer: PixelLayer, path: Path, width: number, color: RGBA): Command {
   const stroke = strokePathToRaster(path, Math.max(1, width), color, { cap: "round", join: "round", aa: true }, doc.width, doc.height);
   return ReplaceLayerPixelsCommand.whole("Stroke Path", layer, blitOnto(layer, stroke));

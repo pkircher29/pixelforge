@@ -1,4 +1,4 @@
-/** Paint Bucket (G): flood-fill similar colours, or fill the selection when one exists. */
+/** Paint Bucket (G): flood-fill similar colors, or fill the selection when one exists. */
 import { PaintBucket } from "@lucide/svelte";
 import { PaintCommand, Rect, Selection, compositeToRaster } from "$lib/engine";
 import type { Tool, ToolContext, ToolEvent, ToolOption } from "./types";
@@ -13,7 +13,7 @@ export class BucketTool implements Tool {
   readonly group = "gradient";
   readonly groupOrder = 1;
   readonly cursor = "crosshair";
-  readonly hint = "Click to fill similar colours with the foreground colour. With a selection, the selection is filled.";
+  readonly hint = "Click to fill similar colors with the foreground color. With a selection, the selection is filled.";
   readonly options: readonly ToolOption[] = [
     { kind: "number", key: "tolerance", label: "Tolerance", min: 0, max: 255, step: 1, default: 32 },
     { kind: "toggle", key: "contiguous", label: "Contiguous", default: true },

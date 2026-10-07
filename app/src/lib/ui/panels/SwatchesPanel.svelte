@@ -50,7 +50,7 @@
   function deleteCurrent(): void {
     const hit = swatchStore.all.find((s) => rgbToHex(s.color) === fgHex);
     if (hit) swatchStore.remove(hit.id);
-    else toast.info("No swatch matches the foreground colour.");
+    else toast.info("No swatch matches the foreground color.");
   }
   function menuFor(e: MouseEvent, s: Swatch): void {
     e.preventDefault();

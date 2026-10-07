@@ -1,8 +1,8 @@
 <script lang="ts">
   /**
    * Gradient Editor (PS layout): presets grid, Name + New, Smoothness, gradient bar with
-   * opacity stops above / colour stops below (click empty area = add, drag = move, drag off
-   * = delete, Alt-drag = duplicate, double-click colour stop = colour picker), midpoint
+   * opacity stops above / color stops below (click empty area = add, drag = move, drag off
+   * = delete, Alt-drag = duplicate, double-click color stop = color picker), midpoint
    * diamonds, Stops group (Opacity / Color / Location %), Load / Save JSON.
    */
   import Dialog from "./Dialog.svelte";
@@ -245,9 +245,9 @@
         </div>
         <canvas class="bar" bind:this={bar}></canvas>
         <!-- svelte-ignore a11y_no_static_element_interactions -->
-        <div class="lane bottom" onpointerdown={(e) => addAt("color", e)} title="Click to add a colour stop">
+        <div class="lane bottom" onpointerdown={(e) => addAt("color", e)} title="Click to add a color stop">
           {#each def.colorStops as s, i (i)}
-            <button type="button" class="stop col" class:on={sel?.kind === "color" && sel.index === i} style:left="{s.pos * 100}%" style:--c={stopHex(s.color)} aria-label="Colour stop" onpointerdown={(e) => startDrag("color", i, e)} ondblclick={() => colorInput?.click()}></button>
+            <button type="button" class="stop col" class:on={sel?.kind === "color" && sel.index === i} style:left="{s.pos * 100}%" style:--c={stopHex(s.color)} aria-label="Color stop" onpointerdown={(e) => startDrag("color", i, e)} ondblclick={() => colorInput?.click()}></button>
           {/each}
           {#if sel?.kind === "color"}
             {@const order = sortedIdx(def.colorStops)}
@@ -255,7 +255,7 @@
             {#if k >= 0 && k < order.length - 1}
               {@const a = def.colorStops[sel.index]!}
               {@const b = def.colorStops[order[k + 1]!]!}
-              <button type="button" class="mid" style:left="{(a.pos + (b.pos - a.pos) * a.mid) * 100}%" aria-label="Colour midpoint" onpointerdown={(e) => startMid("color", sel!.index, e)}></button>
+              <button type="button" class="mid" style:left="{(a.pos + (b.pos - a.pos) * a.mid) * 100}%" aria-label="Color midpoint" onpointerdown={(e) => startMid("color", sel!.index, e)}></button>
             {/if}
           {/if}
         </div>
@@ -275,10 +275,10 @@
         <div class="srow">
           <span class="lab">Color:</span>
           <span class="swatch" class:dis={!selColor} style:background={selColor ? stopHex(selColor.color) : "transparent"}>
-            <input bind:this={colorInput} type="color" disabled={!selColor} value={selColor ? stopHex(selColor.color) : "#000000"} oninput={(e) => setColorHex(e.currentTarget.value)} aria-label="Stop colour" />
+            <input bind:this={colorInput} type="color" disabled={!selColor} value={selColor ? stopHex(selColor.color) : "#000000"} oninput={(e) => setColorHex(e.currentTarget.value)} aria-label="Stop color" />
           </span>
-          <button type="button" class="btn sm" disabled={!selColor} onclick={() => sel && (def = setColorStop(def, sel.index, "fg"))} title="Use the foreground colour">FG</button>
-          <button type="button" class="btn sm" disabled={!selColor} onclick={() => sel && (def = setColorStop(def, sel.index, "bg"))} title="Use the background colour">BG</button>
+          <button type="button" class="btn sm" disabled={!selColor} onclick={() => sel && (def = setColorStop(def, sel.index, "fg"))} title="Use the foreground color">FG</button>
+          <button type="button" class="btn sm" disabled={!selColor} onclick={() => sel && (def = setColorStop(def, sel.index, "bg"))} title="Use the background color">BG</button>
           <span class="lab sp">Location:</span>
           <input class="input num" type="number" min="0" max="100" disabled={!selColor} value={selColor ? Math.round(selPos * 100) : ""} onchange={(e) => setLocation(Number(e.currentTarget.value))} />
           <span class="lab">%</span>
@@ -387,7 +387,7 @@
     padding: 0;
     cursor: ew-resize;
   }
-  /* Colour stops: house shape pointing up at the bar, filled with the stop colour. */
+  /* Color stops: house shape pointing up at the bar, filled with the stop color. */
   .stop.col {
     top: 1px;
     background: var(--c);

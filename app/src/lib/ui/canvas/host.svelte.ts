@@ -133,7 +133,7 @@ class CanvasHost {
     return tool.onKey(e, ctx, phase);
   }
 
-  /** Single-key tool shortcuts and X / D colour keys. */
+  /** Single-key tool shortcuts and X / D color keys. */
   handleToolKey(e: KeyboardEvent): boolean {
     if (e.ctrlKey || e.metaKey || e.altKey) return false;
     if (!e.shiftKey && (e.key === "x" || e.key === "X")) {

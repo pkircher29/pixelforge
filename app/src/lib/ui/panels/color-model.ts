@@ -1,5 +1,5 @@
 /**
- * Colour model (pure): RGB ↔ HSB ↔ hex, CMYK approximation, grayscale, web-safe
+ * Color model (pure): RGB ↔ HSB ↔ hex, CMYK approximation, grayscale, web-safe
  * snapping, and the "cube" geometry shared by the Color panel and the Color Picker
  * (the square + strip of Photoshop's picker in its six H/S/B/R/G/B modes).
  * Tested in `tests/panels/color-model.test.ts`.
@@ -151,14 +151,14 @@ export function grayKToRgb(k: number): RGB {
   return { r: v, g: v, b: v };
 }
 
-/** Luminance 0..255 (for choosing light/dark cursors over a colour). */
+/** Luminance 0..255 (for choosing light/dark cursors over a color). */
 export function luma(c: RGB): number {
   return 0.299 * c.r + 0.587 * c.g + 0.114 * c.b;
 }
 
 // ---------------------------------------------------------------------------- web safe
 
-/** Nearest of the 216 web-safe colours (each channel snapped to a multiple of 51). */
+/** Nearest of the 216 web-safe colors (each channel snapped to a multiple of 51). */
 export function snapWebSafe(c: RGB): RGB {
   const s = (n: number): number => Math.round(clampByte(n) / 51) * 51;
   return { r: s(c.r), g: s(c.g), b: s(c.b) };
@@ -172,7 +172,7 @@ export function isWebSafe(c: RGB): boolean {
 
 /**
  * Which field drives the vertical strip (Photoshop's radio buttons). The square then
- * shows the two remaining fields of that colour model:
+ * shows the two remaining fields of that color model:
  * - `H`: strip hue (red at top), square x = saturation, y = brightness
  * - `S`: strip saturation, square x = hue, y = brightness
  * - `B`: strip brightness, square x = hue, y = saturation
@@ -193,7 +193,7 @@ export interface CubePos {
 
 const clamp01 = (n: number): number => (n < 0 ? 0 : n > 1 ? 1 : n);
 
-/** Colour at a cube position. */
+/** Color at a cube position. */
 export function cubeColor(mode: CubeMode, pos: CubePos): RGB {
   const v = clamp01(pos.v);
   const u = clamp01(pos.u);
@@ -214,7 +214,7 @@ export function cubeColor(mode: CubeMode, pos: CubePos): RGB {
   }
 }
 
-/** Cube position of a colour (`hsb` lets callers keep a hue through s = 0 / b = 0). */
+/** Cube position of a color (`hsb` lets callers keep a hue through s = 0 / b = 0). */
 export function cubePosition(mode: CubeMode, c: RGB, hsb: HSB = rgbToHsb(c)): CubePos {
   switch (mode) {
     case "H":
@@ -232,7 +232,7 @@ export function cubePosition(mode: CubeMode, c: RGB, hsb: HSB = rgbToHsb(c)): Cu
   }
 }
 
-/** Colour along the strip at `v` for the current square point (the strip previews the current u/w in R/G/B/S/B modes). */
+/** Color along the strip at `v` for the current square point (the strip previews the current u/w in R/G/B/S/B modes). */
 export function stripColor(mode: CubeMode, v: number, pos: CubePos): RGB {
   if (mode === "H") return hsbToRgb({ h: (1 - clamp01(v)) * 360, s: 100, b: 100 });
   return cubeColor(mode, { v, u: pos.u, w: pos.w });

@@ -1,6 +1,6 @@
 /**
  * Wave-5 layer commands: masks, clipping, locks, fill opacity, effects, adjustment /
- * fill / shape / text specs, linking, colour. All are plain prop swaps (cheap undo);
+ * fill / shape / text specs, linking, color. All are plain prop swaps (cheap undo);
  * continuous ones (fill opacity, adjustment params, effects) merge consecutive ticks.
  */
 
@@ -169,7 +169,7 @@ export class SetMaskLinkedCommand extends SetLayerPropsCommand {
 }
 
 // ---------------------------------------------------------------------------
-// Clipping, fill opacity, colour, locks
+// Clipping, fill opacity, color, locks
 // ---------------------------------------------------------------------------
 
 export class SetClipToBelowCommand extends SetLayerPropsCommand {

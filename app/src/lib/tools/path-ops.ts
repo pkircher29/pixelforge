@@ -52,7 +52,7 @@ export function fillColorFor(contents: FillContents, fg: RGBA, bg: RGBA): RGBA {
   }
 }
 
-/** Fill `path` into `raster` (offset) with a colour or pattern, opacity, feather radius. Returns the coverage selection used. */
+/** Fill `path` into `raster` (offset) with a color or pattern, opacity, feather radius. Returns the coverage selection used. */
 export function fillPathInto(
   raster: Raster,
   offset: { x: number; y: number },

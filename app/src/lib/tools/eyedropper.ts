@@ -28,7 +28,7 @@ export class EyedropperTool implements Tool {
   readonly group = "eyedropper";
   readonly groupOrder = 0;
   readonly cursor = "crosshair";
-  readonly hint = "Click to set the foreground colour. Alt-click sets the background.";
+  readonly hint = "Click to set the foreground color. Alt-click sets the background.";
   readonly options: readonly ToolOption[] = [
     SAMPLE_SIZE_OPTION,
     {
@@ -79,7 +79,7 @@ export class EyedropperTool implements Tool {
   drawOverlay(g: CanvasRenderingContext2D): void {
     const r = this.ring;
     if (!r) return;
-    // PS sampling ring: top half = new colour, bottom half = previous colour.
+    // PS sampling ring: top half = new color, bottom half = previous color.
     g.save();
     g.lineWidth = 14;
     g.beginPath();
@@ -143,7 +143,7 @@ export class ColorSamplerTool implements Tool {
   readonly group = "eyedropper";
   readonly groupOrder = 1;
   readonly cursor = "crosshair";
-  readonly hint = "Click to place up to 4 colour samplers (values in the Info panel). Drag to move one, Alt-click to remove it.";
+  readonly hint = "Click to place up to 4 color samplers (values in the Info panel). Drag to move one, Alt-click to remove it.";
   readonly options: readonly ToolOption[] = [SAMPLE_SIZE_OPTION, { kind: "button", key: "clear", label: "Clear All", action: () => toolStore.clearColorSamplers() }];
 
   private readonly sampler = new CompositeSampler();
@@ -172,7 +172,7 @@ export class ColorSamplerTool implements Tool {
     const c = sampleColor(ctx, e.x, e.y, false, this.sampler, Number(ctx.opt<string>("sampleSize")));
     if (!c) return;
     const s = toolStore.addColorSampler(Math.floor(e.x), Math.floor(e.y), c);
-    if (!s) ctx.notify("info", "Photoshop-style limit: 4 colour samplers. Alt-click one to remove it.");
+    if (!s) ctx.notify("info", "Photoshop-style limit: 4 color samplers. Alt-click one to remove it.");
     ctx.invalidateOverlay();
   }
 
@@ -191,7 +191,7 @@ export class ColorSamplerTool implements Tool {
     this.dragId = null;
   }
 
-  /** Refresh every sampler's colour (call after pixel changes). */
+  /** Refresh every sampler's color (call after pixel changes). */
   refresh(ctx: ToolContext): void {
     for (const s of toolStore.colorSamplers) {
       const c = sampleColor(ctx, s.x, s.y, false, this.sampler, Number(ctx.opt<string>("sampleSize")));

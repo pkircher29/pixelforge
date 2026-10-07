@@ -1,4 +1,4 @@
-/** Navigator ≡ ▸ Panel Options: view box colour (PS default light red). */
+/** Navigator ≡ ▸ Panel Options: view box color (PS default light red). */
 
 export const VIEW_BOX_COLORS: readonly { id: string; label: string; css: string }[] = [
   { id: "red", label: "Light Red", css: "#ff4d4d" },

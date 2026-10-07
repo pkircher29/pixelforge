@@ -24,7 +24,7 @@
   const hex = $derived(rgbToHex(color));
   const mode = $derived(colorPanelUi.mode);
 
-  // External colour changes (eyedropper, X, D…) re-derive HSB; our own writes keep it.
+  // External color changes (eyedropper, X, D…) re-derive HSB; our own writes keep it.
   $effect(() => {
     const c = color;
     if (rgbEquals(c, lastRgb)) return;

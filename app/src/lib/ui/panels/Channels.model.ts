@@ -47,16 +47,16 @@ export function clickChannel(row: ChannelRow, rows: readonly ChannelRow[] = []):
 }
 
 /**
- * Toggle a row's eye. The engine renders one channel at a time, so: turning a colour
- * channel off leaves the other colours visible (view "rgb" when ≥ 2 are visible,
- * else the single visible colour); turning the last colour channel on returns to
+ * Toggle a row's eye. The engine renders one channel at a time, so: turning a color
+ * channel off leaves the other colors visible (view "rgb" when ≥ 2 are visible,
+ * else the single visible color); turning the last color channel on returns to
  * "rgb"; alpha / mask eyes view that channel while on.
  */
 export function toggleChannelEye(rows: readonly ChannelRow[], row: ChannelRow, view: ViewChannel, hidden: readonly string[]): { view: ViewChannel; hidden: string[] } {
   const h = new Set(hidden);
   if (row.kind === "composite") {
     if (row.visible) {
-      // PS: hiding RGB hides the colour channels (an alpha keeps showing if visible).
+      // PS: hiding RGB hides the color channels (an alpha keeps showing if visible).
       ["r", "g", "b"].forEach((c) => h.add(c));
       const alpha = rows.find((r) => (r.kind === "alpha" || r.kind === "mask") && r.visible);
       return { view: alpha ? alpha.view : view, hidden: [...h] };

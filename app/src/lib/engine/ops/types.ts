@@ -5,7 +5,7 @@
  * standalone WebGL2 runner (`gpu.ts`) and as a pure TypeScript function (`cpu`). Both must
  * produce the same pixels (within rounding) so the UI can transparently fall back.
  *
- * Colour-math assumptions (v1): channels are treated as linear 0..1 values even though the
+ * Color-math assumptions (v1): channels are treated as linear 0..1 values even though the
  * stored bytes are sRGB-encoded. This matches Photoshop 7's 8-bit behaviour and keeps the
  * GPU and CPU paths trivially identical. Blurs and resampling operate on **premultiplied**
  * RGB to avoid dark fringes at alpha edges, then un-premultiply before storing.

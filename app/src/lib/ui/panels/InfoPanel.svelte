@@ -2,7 +2,7 @@
   /**
    * Info panel (PS): two eyedropper readouts (click the dropper to change the mode),
    * cursor X/Y in the ruler unit, selection W/H (transform W/H/A while transforming),
-   * colour samplers #1–#4, ruler-tool readout, document size line and the status tip.
+   * color samplers #1–#4, ruler-tool readout, document size line and the status tip.
    */
   import { Rect, compositeToRaster, documentByteSize, type Raster, type RGBA } from "$lib/engine";
   import { docStore } from "$lib/stores/doc.svelte";
@@ -25,7 +25,7 @@
     return { w: entry.doc.width, h: entry.doc.height, dpi: entry.doc.meta.dpi || 72 };
   });
 
-  // Colour under the cursor: composite one pixel into a cached document-sized scratch.
+  // Color under the cursor: composite one pixel into a cached document-sized scratch.
   let scratch: Raster | null = null;
   const under = $derived.by((): RGBA | null => {
     const e = entry;

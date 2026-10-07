@@ -19,7 +19,7 @@ export interface DiffResult {
 
 export interface DiffOptions {
   threshold?: number;
-  /** Overlay colour, default magenta. */
+  /** Overlay color, default magenta. */
   color?: { r: number; g: number; b: number };
   /** Overlay alpha for changed pixels, default 160. */
   alpha?: number;

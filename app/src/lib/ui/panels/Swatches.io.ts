@@ -29,7 +29,7 @@ export async function exportSwatches(): Promise<void> {
   }
 }
 
-/** Parse + merge a swatch file's text. Returns the number of colours added, or -1 on a bad file. */
+/** Parse + merge a swatch file's text. Returns the number of colors added, or -1 on a bad file. */
 export function importSwatchText(text: string): number {
   let parsed: unknown;
   try {
@@ -45,7 +45,7 @@ export function importSwatchText(text: string): number {
   }
   swatchStore.importSet(set, true);
   const n = set.items.length + set.groups.reduce((k, g) => k + g.swatches.length, 0);
-  toast.success("Swatches imported", `${n} colour${n === 1 ? "" : "s"}`);
+  toast.success("Swatches imported", `${n} color${n === 1 ? "" : "s"}`);
   return n;
 }
 

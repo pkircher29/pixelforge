@@ -61,7 +61,7 @@
         <span>Matte</span>
         <span class="slider">
           <input type="color" class="swatch" bind:value={jpegBg} />
-          <span class="hint">transparent pixels are flattened onto this colour</span>
+          <span class="hint">transparent pixels are flattened onto this color</span>
         </span>
       </label>
     {/if}

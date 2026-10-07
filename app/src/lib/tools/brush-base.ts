@@ -77,7 +77,7 @@ export abstract class BrushBasedTool implements Tool {
   /** The blend for a new stroke, or null to refuse (after notifying). */
   protected abstract makeBlend(ctx: ToolContext, target: PaintTarget, e: ToolEvent): StrokeBlend | null;
 
-  /** Alt-click: default samples the foreground colour. Return true when handled. */
+  /** Alt-click: default samples the foreground color. Return true when handled. */
   protected onAltClick(e: ToolEvent, ctx: ToolContext): boolean {
     const c = sampleColor(ctx, e.x, e.y, false, this.sampler);
     if (c) ctx.setFg(c);
@@ -101,7 +101,7 @@ export abstract class BrushBasedTool implements Tool {
     return s;
   }
 
-  /** Colour to paint on masks for a given colour. */
+  /** Color to paint on masks for a given color. */
   protected static maskColor(target: PaintTarget, c: RGBA): RGBA {
     return target.isMask ? maskGray(c) : c;
   }

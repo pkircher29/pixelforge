@@ -219,7 +219,7 @@ class TypeSession {
 
 export const typeSession = new TypeSession();
 
-/** Default spec for new text from the Type tool options + foreground colour. */
+/** Default spec for new text from the Type tool options + foreground color. */
 export function specFromOptions(toolId: string, vertical: boolean): TextSpec {
   const o = <T extends string | number | boolean>(k: string, d: T): T => toolStore.option(toolId, k, d);
   const style = o<string>("style", "regular");

@@ -79,7 +79,7 @@ export class RenameAlphaChannelCommand implements Command {
   }
 }
 
-/** Replace a channel's mask raster and/or overlay colour / opacity. */
+/** Replace a channel's mask raster and/or overlay color / opacity. */
 export class SetAlphaChannelCommand implements Command {
   readonly label: string;
   readonly channelId: string;
