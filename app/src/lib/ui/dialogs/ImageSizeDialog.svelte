@@ -111,7 +111,7 @@
   {#snippet footer()}
     <span class="grow"></span>
     <button class="btn" type="button" onclick={onclose}>Cancel</button>
-    <button class="btn primary" type="button" onclick={ok} disabled={!valid}>Resize</button>
+    <button class="btn primary" type="button" onclick={ok} disabled={!valid}>OK</button>
   {/snippet}
 </Modal>
 
@@ -128,7 +128,7 @@
   .field,
   select {
     font: inherit;
-    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
     font-variant-numeric: tabular-nums;
     color: var(--fg-0);
     background: var(--bg-1);
@@ -187,7 +187,7 @@
     color: var(--fg-1);
   }
   .mono {
-    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
     font-size: var(--fs-xs);
   }
   .problem {

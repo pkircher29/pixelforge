@@ -134,7 +134,7 @@
     min-width: 0;
     padding: 3px 6px;
     font: inherit;
-    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
     font-variant-numeric: tabular-nums;
     text-align: right;
     color: var(--fg-0);

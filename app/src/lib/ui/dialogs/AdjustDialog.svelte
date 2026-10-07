@@ -242,7 +242,7 @@
         {:else}
           <div class="row">
             <span class="name">{p.label}</span>
-            <span class="muted mono">curve editor arrives in 1.1</span>
+            <span class="muted">Point editing is not available yet.</span>
           </div>
         {/if}
       {/each}
@@ -252,16 +252,12 @@
     </div>
 
     <div class="status">
-      <label class="check">
+      <label class="check" title={backend ? `${backend.toUpperCase()} preview: ${dirtyPixels.toLocaleString()} px in ${lastMs.toFixed(1)} ms` : undefined}>
         <input type="checkbox" checked={preview} onchange={togglePreview} />
         <span>Preview</span>
       </label>
       <span class="grow"></span>
-      {#if backend}
-        <span class="chip" class:gpu={backend === "gpu"} title="{dirtyPixels.toLocaleString()} px in {lastMs.toFixed(1)} ms">
-          {backend === "gpu" ? "GPU" : "CPU"} · {lastMs < 1 ? "<1" : Math.round(lastMs)} ms
-        </span>
-      {/if}
+      <!-- PS shows no backend/timing badge; the render time stays in the tooltip. -->
     </div>
   {/if}
 
@@ -342,18 +338,6 @@
   .grow {
     flex: 1;
   }
-  .chip {
-    font-family: var(--font-mono);
-    font-size: var(--fs-xs);
-    color: var(--fg-2);
-    padding: 1px 6px;
-    border-radius: var(--radius-sm);
-    background: var(--bg-1);
-  }
-  .chip.gpu {
-    color: var(--accent-2);
-    background: rgba(34, 211, 238, 0.1);
-  }
   .problem {
     margin: 0;
     padding: 10px 12px;
@@ -366,10 +350,6 @@
   .muted {
     color: var(--fg-2);
     margin: 0;
-  }
-  .mono {
-    font-family: var(--font-mono);
-    font-size: var(--fs-xs);
   }
   .btn {
     padding: 5px 12px;

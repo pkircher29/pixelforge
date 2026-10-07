@@ -32,9 +32,10 @@
     const r = el.getBoundingClientRect();
     const vw = window.innerWidth;
     const vh = window.innerHeight;
-    // Right third of the window, vertically comfortable; never off-screen.
-    x = Math.max(12, Math.min(vw - r.width - 300, vw - r.width - 12));
-    y = Math.max(52, Math.min(vh - r.height - 12, 96));
+    // PS opens adjustment dialogs centred on the window (left of the panel dock so the
+    // canvas preview stays visible).
+    x = Math.max(12, Math.round((vw - 300 - r.width) / 2));
+    y = Math.max(52, Math.round((vh - r.height) / 3));
     placed = true;
   });
 
@@ -105,15 +106,13 @@
     display: flex;
     flex-direction: column;
     max-height: calc(100vh - 24px);
-    background: rgba(18, 21, 28, 0.86);
-    backdrop-filter: blur(18px) saturate(1.3);
-    -webkit-backdrop-filter: blur(18px) saturate(1.3);
-    border: 1px solid var(--border-strong);
-    border-radius: var(--radius-lg);
+    /* Same chrome as the shell's PS dialogs (Dialog.svelte): flat, square, hairlines. */
+    background: var(--ps-app);
+    border: 1px solid var(--ps-border-dark);
     box-shadow:
-      var(--shadow-2),
-      0 0 0 1px rgba(124, 92, 255, 0.12);
-    color: var(--fg-0);
+      inset 0 0 0 1px var(--ps-border-light),
+      0 8px 24px rgba(0, 0, 0, 0.6);
+    color: var(--ps-text);
     font-size: var(--fs-sm);
     outline: none;
   }
@@ -121,43 +120,43 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 10px 10px 10px 14px;
-    border-bottom: 1px solid var(--border);
-    cursor: grab;
+    height: 26px;
+    padding: 0 4px 0 10px;
+    margin: 1px 1px 0;
+    background: var(--ps-panel-head);
+    border-bottom: 1px solid var(--ps-border-dark);
+    cursor: default;
     touch-action: none;
   }
-  .title:active {
-    cursor: grabbing;
-  }
   .title-text {
-    font-size: var(--fs-md);
-    font-weight: 600;
-    letter-spacing: 0.01em;
+    font-size: var(--fs-sm);
+    font-weight: 400;
   }
   .close {
     display: grid;
     place-items: center;
-    width: 24px;
-    height: 24px;
-    border-radius: var(--radius-sm);
-    color: var(--fg-1);
+    width: 18px;
+    height: 18px;
+    border-radius: 2px;
+    color: var(--ps-text-dim);
   }
   .close:hover {
-    background: var(--bg-3);
-    color: var(--fg-0);
+    background: var(--ps-hover);
+    color: var(--ps-text);
   }
   .body {
-    padding: 12px 14px;
+    padding: 12px 14px 10px;
     overflow: auto;
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 8px;
   }
   .footer {
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 10px 14px 12px;
-    border-top: 1px solid var(--border);
+    gap: 6px;
+    padding: 8px 14px 12px;
   }
-</style>
+  .footer :global(.btn) {
+    min-width: 72px;
+  }</style>

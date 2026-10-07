@@ -80,7 +80,7 @@
   }
   .field {
     font: inherit;
-    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
     color: var(--fg-0);
     background: var(--bg-1);
     border: 1px solid var(--border);
@@ -115,7 +115,7 @@
     color: var(--fg-2);
   }
   .mono {
-    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
     font-size: var(--fs-xs);
   }
   .grow {

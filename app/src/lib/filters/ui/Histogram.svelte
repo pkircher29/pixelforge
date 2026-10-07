@@ -115,7 +115,7 @@
     display: flex;
     justify-content: space-between;
     padding: 0 3px;
-    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
     font-size: 9px;
     color: var(--fg-2);
     pointer-events: none;
