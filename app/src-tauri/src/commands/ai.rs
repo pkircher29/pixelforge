@@ -192,7 +192,7 @@ pub fn custom_rows(
                 has_key: has_key(&id),
                 key_backend: backend.to_owned(),
                 default_model: c.model.trim().to_owned(),
-                edit_model: c.model.trim().to_owned(),
+                edit_model: if c.kind == CustomKind::Fal { c.extra_str("editModel").unwrap_or(c.model.trim()).to_owned() } else { c.model.trim().to_owned() },
                 models,
                 capabilities,
                 kind: c.kind.as_str().to_owned(),

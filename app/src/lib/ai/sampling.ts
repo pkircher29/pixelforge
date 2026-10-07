@@ -6,7 +6,7 @@ export interface SamplingOptions {
 }
 
 export function supportsSampling(provider: ProviderInfo | null): boolean {
-  return !!provider && ["openai_compat", "hugging_face", "comfy_ui", "a1111", "replicate"].includes(provider.kind);
+  return !!provider && ["openai_compat", "hugging_face", "comfy_ui", "a1111", "replicate", "fal"].includes(provider.kind);
 }
 
 /** Validate before encoding inputs, recording history or submitting a paid job. */

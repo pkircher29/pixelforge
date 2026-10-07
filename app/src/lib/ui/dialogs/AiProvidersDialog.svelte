@@ -618,6 +618,10 @@
               {/if}
             </span>
           </label>
+          {#if draft.kind === "fal"}
+            <label class="field"><span>Edit endpoint</span><input type="text" value={str("editModel")} onchange={(e) => setExtraStr("editModel", e)} placeholder="fal-ai/flux/dev/image-to-image" spellcheck="false" /></label>
+            <p class="hint">Use endpoint IDs from fal.ai. The default FLUX pair supports generation and image-to-image edits; selection edits are emulated. Other models may need different capabilities or extra input fields. API usage is billed by fal.ai. Test reads pricing metadata without generating an image. Cancel requests remote cancellation, but a running model may still finish and incur charges.</p>
+          {/if}
           {#if draft.kind === "hugging_face"}
             <div class="hub">
               <input type="text" bind:value={hubQuery} placeholder="Search the Hub (flux, sdxl, kontext…)" onkeydown={(e) => e.key === "Enter" && void searchHub()} />
@@ -640,7 +644,7 @@
               {#if draft.hasAuth}<label class="check"><input type="checkbox" bind:checked={clearAuth} /> clear stored</label>{/if}
             </span>
           </label>
-          {#if isSd || draft.kind === "openai_compat" || draft.kind === "hugging_face" || draft.kind === "replicate"}
+          {#if isSd || draft.kind === "openai_compat" || draft.kind === "hugging_face" || draft.kind === "replicate" || draft.kind === "fal"}
             <div class="grid4">
               <label class="field"><span>Steps</span><input type="number" min="1" max="150" value={num("steps")} onchange={(e) => setExtraNum("steps", e)} placeholder="20" /></label>
               <label class="field"><span>CFG</span><input type="number" min="0" max="30" step="0.5" value={num("cfg")} onchange={(e) => setExtraNum("cfg", e)} placeholder="7" /></label>

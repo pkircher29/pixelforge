@@ -264,8 +264,10 @@ engine, project-file and native save/reopen coverage (see `docs/crop-preserve.md
 - **Remove tool** (brush over object → AI or local inpaint).
 - **Local inpainting model** option (ONNX LaMa via `ort` crate) so Remove/Content-Aware works offline.
 - fal.ai provider; per-provider seed/steps where supported; prompt library.
-  Per-request seed/steps for the existing custom image adapters are implemented and
-  native-fixture verified ([evidence](docs/ai-sampling.md)); fal.ai remains open.
+  Per-request seed/steps for the custom image adapters are implemented and
+  native-fixture verified ([evidence](docs/ai-sampling.md)). The fal.ai queue adapter
+  is implemented with native-fixture checks for generation, edits, quota errors and
+  remote cancellation ([evidence](docs/fal-provider.md)); live account use remains unverified.
 - Live verification harness: `cargo run -p pf-ai --example live -- --all` producing a report Paul can run with his keys.
 
 ### 2.5 Files

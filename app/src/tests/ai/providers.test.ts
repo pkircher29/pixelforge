@@ -41,13 +41,20 @@ afterEach(() => {
 });
 
 describe("providersStore", () => {
+  it("starts fal with separate generation/edit endpoints and requires a key", () => {
+    const draft = newCustomProvider("fal");
+    expect(draft.model).toBe("fal-ai/flux/dev");
+    expect(draft.extra.editModel).toBe("fal-ai/flux/dev/image-to-image");
+    expect(draft.capabilities).toMatchObject({ generate: true, instructEdit: true, maskEdit: false, maxVariants: 4 });
+    expect(KIND_FALLBACK.find((k) => k.kind === "fal")?.requiresAuth).toBe(true);
+  });
   it("refresh loads the registry, the kind table and the provider list", async () => {
     await providersStore.refresh();
     expect(invoke).toHaveBeenCalledWith("ai_custom_list");
     expect(invoke).toHaveBeenCalledWith("ai_custom_kinds");
     expect(invoke).toHaveBeenCalledWith("ai_list_providers");
     expect(providersStore.custom.map((c) => c.id)).toEqual(["comfy", "ollama"]);
-    expect(providersStore.kinds).toHaveLength(6);
+    expect(providersStore.kinds).toHaveLength(7);
     expect(providersStore.loaded).toBe(true);
     expect(aiUi.providers).toHaveLength(4);
   });

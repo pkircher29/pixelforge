@@ -353,7 +353,7 @@ their secrets go to the key store under the user name `custom:<id>` and never cr
 back. Research and wire shapes per kind: `docs/ai-research.md` §4.
 
 ```ts
-type CustomKind = 'openai_compat' | 'hugging_face' | 'ollama' | 'comfy_ui' | 'a1111' | 'replicate';
+type CustomKind = 'openai_compat' | 'hugging_face' | 'ollama' | 'comfy_ui' | 'a1111' | 'replicate' | 'fal';
 
 type CustomProvider = {
   id: string;                  // [a-z0-9][a-z0-9-]{0,63}, unique

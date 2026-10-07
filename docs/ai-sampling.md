@@ -1,7 +1,7 @@
 # Per-request seed and sampling steps
 
 The AI panel's Advanced section exposes **Seed** and **Steps** for ComfyUI, Stable
-Diffusion WebUI / Forge, OpenAI-compatible servers, Hugging Face and Replicate.
+Diffusion WebUI / Forge, OpenAI-compatible servers, Hugging Face, Replicate and fal.ai.
 The selected endpoint/model must support these controls. Built-in OpenAI, Gemini,
 Grok and prompt-only Ollama connections do not expose them.
 
