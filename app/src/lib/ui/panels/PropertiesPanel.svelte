@@ -47,6 +47,7 @@
   const view = $derived.by(() => {
     if (!entry || !doc) return null;
     void entry.version;
+    void entry.pixelVersion; // bounds / thumbnails follow pixel edits (transform, paint)
     const l = docStore.activeLayer;
     const ctx = propertiesContext(doc, l, layersUi.maskTargeted);
     return { ctx, layer: l, title: ctx === "adjustment" && l?.kind === "adjustment" ? (opById(l.op)?.label ?? l.name) : CONTEXT_TITLE[ctx], tick: entry.version };

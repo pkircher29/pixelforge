@@ -13,13 +13,18 @@ import {
   Rect,
   Selection,
   SetSelectionCommand,
+  SetShapeLayerCommand,
+  SetTextLayerCommand,
   TransformLayerCommand,
+  clonePath,
   type Command,
+  type Path,
+  type PixelLayer,
   type Point,
-  type RasterLayer,
 } from "$lib/engine";
+import { toast } from "$lib/stores/toast.svelte";
 import { docStore, type OpenDoc } from "$lib/stores/doc.svelte";
-import { rawDoc, rawRasterLayer } from "../raw";
+import { rawDoc, rawLayer } from "../raw";
 import { Mat, affineResampleAsync, transformedBounds } from "./affine";
 import { CompositeCommand } from "./commands";
 
@@ -76,10 +81,11 @@ class TransformSession {
     return this.entry;
   }
 
-  /** The raw (non-proxied) layer being transformed. */
-  get layer(): RasterLayer | null {
+  /** The raw (non-proxied) layer being transformed (pixel, shape or type layer). */
+  get layer(): PixelLayer | null {
     if (!this.entry || !this.layerId) return null;
-    return rawRasterLayer(this.entry, this.layerId);
+    const l = rawLayer(this.entry, this.layerId);
+    return l && (l.kind === "raster" || l.kind === "shape" || l.kind === "text") ? l : null;
   }
 
   /** The pixels being transformed (identity placement at `floatingOrigin`). */
@@ -113,17 +119,19 @@ class TransformSession {
     return [Mat.apply(m, { x: 0, y: 0 }), Mat.apply(m, { x: w, y: 0 }), Mat.apply(m, { x: w, y: h }), Mat.apply(m, { x: 0, y: h })];
   }
 
-  /** Start a session on the active raster layer. Returns false (and does nothing) if impossible. */
+  /** Start a session on the active pixel, shape or type layer. Returns false (and does nothing) if impossible. */
   begin(): boolean {
     if (this.active) return true;
     const entry = docStore.active;
     const active = docStore.activeLayer;
-    if (!entry || !active || active.kind !== "raster") return false;
+    if (!entry || !active || (active.kind !== "raster" && active.kind !== "shape" && active.kind !== "text")) return false;
     // Mutate the raw objects only (see raw.ts).
     const doc = rawDoc(entry);
-    const layer = rawRasterLayer(entry, active.id);
-    if (!layer || layer.locked) return false;
-    const sel = doc.selection;
+    const raw = rawLayer(entry, active.id);
+    const layer = raw && (raw.kind === "raster" || raw.kind === "shape" || raw.kind === "text") ? raw : null;
+    if (!layer || layer.locked || layer.lock.all || layer.lock.position) return false;
+    // Vector (shape / type) layers always transform as a whole, like PS.
+    const sel = layer.kind === "raster" ? doc.selection : new Selection(doc.width, doc.height);
     this.entry = entry;
     this.layerId = layer.id;
     this.original = layer.raster;
@@ -163,8 +171,12 @@ class TransformSession {
       this.selection = sel;
       layer.raster = working;
     } else {
-      this.floating = layer.raster;
-      this.origin = { ...layer.offset };
+      // PS: the bounding box hugs the layer's non-transparent content, not the canvas.
+      const bb = layer.raster.boundingBoxOfAlpha(0);
+      if (!bb) return false;
+      const whole = bb.x === 0 && bb.y === 0 && bb.w === layer.raster.width && bb.h === layer.raster.height;
+      this.floating = whole ? layer.raster : layer.raster.crop(bb);
+      this.origin = { x: layer.offset.x + bb.x, y: layer.offset.y + bb.y };
       this.working = new Raster(layer.raster.width, layer.raster.height);
       layer.raster = this.working;
     }
@@ -208,6 +220,43 @@ class TransformSession {
     try {
       const m = this.matrix;
       const bounds = this.bounds;
+      if (layer.kind === "shape" || layer.kind === "text") {
+        // Re-author the vector source instead of resampling its cached pixels.
+        layer.raster = original;
+        layer.offset = { ...this.originalOffset };
+        const off = this.originalOffset;
+        const org = this.origin;
+        // layer-local → doc → floating-local → transformed doc → layer-local
+        const map = (x: number, y: number): Point => {
+          const q = Mat.apply(m, { x: x + off.x - org.x, y: y + off.y - org.y });
+          return { x: q.x - off.x, y: q.y - off.y };
+        };
+        if (layer.kind === "shape") {
+          const path: Path = clonePath(layer.path);
+          for (const sp of path.subpaths) {
+            for (const a of sp.anchors) {
+              const p = map(a.x, a.y);
+              const i = map(a.inX, a.inY);
+              const o = map(a.outX, a.outY);
+              a.x = p.x;
+              a.y = p.y;
+              a.inX = i.x;
+              a.inY = i.y;
+              a.outX = o.x;
+              a.outY = o.y;
+            }
+          }
+          docStore.exec(new SetShapeLayerCommand(layer.id, { path }, "Free Transform"));
+        } else {
+          if (this.params.angle % 360 !== 0) toast.info("Rotating type isn't supported yet — the text was scaled and moved. Rasterize the layer to rotate it.");
+          const t = layer.text;
+          const k = Math.max(0.01, (Math.abs(this.params.sx) + Math.abs(this.params.sy)) / 2);
+          const p = map(t.x, t.y);
+          // Keep the text centred where the box centre went.
+          docStore.exec(new SetTextLayerCommand(layer.id, { x: p.x, y: p.y, size: Math.max(1, t.size * k), leading: t.leading === null ? null : t.leading * k }, "Free Transform"));
+        }
+        return;
+      }
       const result = await affineResampleAsync(floating, m, bounds);
       // Restore the untouched layer before the command snapshots it.
       layer.raster = original;

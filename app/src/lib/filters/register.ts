@@ -84,7 +84,11 @@ export function registerFilterCommands(): void {
     order: 300,
     shortcut: "CmdOrCtrl+T",
     keywords: ["scale", "rotate", "move", "resize"],
-    enabled: rasterLayerEnabled,
+    // Pixel, shape and type layers (vector layers re-author their path / type spec).
+    enabled: () => {
+      const l = docStore.activeLayer;
+      return !!l && (l.kind === "raster" || l.kind === "shape" || l.kind === "text") && !l.locked && !l.lock.all && !l.lock.position;
+    },
     run: () => {
       closeDialog();
       if (transformSession.active) return;
