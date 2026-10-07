@@ -32,10 +32,14 @@ void import("$lib/ui/panels/Layers.store.svelte")
   .catch(() => {});
 
 /** The work path, else the active path, else the first path. */
+import { layersUi } from "$lib/ui/panels/Layers.store.svelte";
+
 function currentPath(): ReturnType<typeof findPath> {
   const d = docStore.doc;
   if (!d) return undefined;
-  return (d.workPathId ? findPath(d, d.workPathId) : undefined) ?? d.paths[0];
+  // The Paths panel's targeted path wins (PS strokes / fills the selected path).
+  const active = layersUi.activePathId ? findPath(d, layersUi.activePathId) : undefined;
+  return active ?? (d.workPathId ? findPath(d, d.workPathId) : undefined) ?? d.paths[0];
 }
 
 function ctxNow(): ToolContext | null {

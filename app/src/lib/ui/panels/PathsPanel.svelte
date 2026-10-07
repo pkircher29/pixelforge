@@ -9,6 +9,7 @@
   import { docStore } from "$lib/stores/doc.svelte";
   import Icon from "../icons/Icon.svelte";
   import { contextMenu } from "../context-menu.svelte";
+  import { getCommand } from "../registry.svelte";
   import { layersUi } from "./Layers.store.svelte";
   import { buildPathRows, savePathCommand, renamePathCommand, type PathRow } from "./Paths.model";
   import { drawPathThumb, thumbDims } from "./thumbnail";
@@ -69,8 +70,8 @@
       { label: "Delete Path", run: deletePath },
       { separator: true },
       { label: "Make Selection…", run: () => void makeSelectionDialog() },
-      { label: "Fill Path…", disabled: !pixelTarget, run: fillPath },
-      { label: "Stroke Path…", disabled: !pixelTarget, run: strokePath },
+      { label: "Fill Path…", disabled: !pixelTarget, run: () => void getCommand("path.fillDialog")?.run() },
+      { label: "Stroke Path…", disabled: !pixelTarget, run: () => void getCommand("path.strokeWithTool")?.run() },
       { separator: true },
       { label: "Clipping Path…", disabled: true },
     ]);

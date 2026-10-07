@@ -17,10 +17,10 @@ import ParagraphPanel from "./ParagraphPanel.svelte";
 import "$lib/tools/register";
 
 /** Panel ≡ items that proxy to registered commands (resolved lazily so order of registration doesn't matter). */
-function proxy(id: string): CommandDef {
+function proxy(id: string, label?: string): CommandDef {
   return {
     id: `panel.${id}`,
-    label: getCommand(id)?.label ?? id,
+    label: label ?? getCommand(id)?.label ?? id,
     get shortcut() {
       return getCommand(id)?.shortcut;
     },
@@ -34,15 +34,22 @@ function proxy(id: string): CommandDef {
 }
 
 const layersMenu: CommandDef[] = [
-  ...LAYERS_PANEL_MENU_IDS.map(proxy),
+  ...LAYERS_PANEL_MENU_IDS.map((id) => proxy(id)),
   { id: "panel.layers.thumbs.none", label: "Thumbnails: None", checked: () => layersUi.thumbSize === "none", run: () => layersUi.setThumbSize("none") },
   { id: "panel.layers.thumbs.small", label: "Thumbnails: Small", checked: () => layersUi.thumbSize === "small", run: () => layersUi.setThumbSize("small") },
   { id: "panel.layers.thumbs.medium", label: "Thumbnails: Medium", checked: () => layersUi.thumbSize === "medium", run: () => layersUi.setThumbSize("medium") },
   { id: "panel.layers.thumbs.large", label: "Thumbnails: Large", checked: () => layersUi.thumbSize === "large", run: () => layersUi.setThumbSize("large") },
 ];
 
-const channelsMenu: CommandDef[] = ["channels.new", "channels.duplicate", "channels.delete", "channels.spot", "channels.options"].map(proxy);
-const pathsMenu: CommandDef[] = ["paths.new", "paths.duplicate", "paths.delete", "paths.makeWork", "paths.makeSelection", "paths.fill", "paths.stroke", "paths.clipping"].map(proxy);
+const channelsMenu: CommandDef[] = ["channels.new", "channels.duplicate", "channels.delete", "channels.spot", "channels.options"].map((id) => proxy(id));
+// PS Paths ≡: Fill Path… / Stroke Path… open the option dialogs (contents / tool);
+// the footer buttons stay the one-click "fill with foreground" / "stroke with brush".
+const pathsMenu: CommandDef[] = [
+  ...["paths.new", "paths.duplicate", "paths.delete", "paths.makeWork", "paths.makeSelection"].map((id) => proxy(id)),
+  proxy("path.fillDialog", "Fill Path…"),
+  proxy("path.strokeWithTool", "Stroke Path…"),
+  proxy("paths.clipping"),
+];
 
 registerPanel({ id: "properties", title: "Properties", dock: "right", order: 20, group: "properties", component: PropertiesPanel, icon: "properties", preferredSize: 220 });
 registerPanel({ id: "layers", title: "Layers", dock: "right", order: 10, group: "layers", component: LayersPanel, icon: "layers", preferredSize: 360, menu: layersMenu });
