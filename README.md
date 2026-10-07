@@ -2,12 +2,13 @@
 
 **Open-source, cross-platform raster image editor with first-class, chainable AI.**
 
-Pixelforge is a Photoshop 7/8-style editor (layers, blend modes, selections, brushes,
-adjustments, filters, free transform) built with Tauri 2, Svelte 5 and Rust. Pixels live
+Pixelforge is a Photoshop-style editor (masks, adjustment / fill / shape / type layers,
+layer styles, channels, paths, the full Photoshop CC toolbar) built with Tauri 2,
+Svelte 5 and Rust. Pixels live
 in the webview and are composited with WebGL2; Rust handles codecs, the project format,
 PSD import, AI providers and OS integration.
 
-MIT licensed. Windows, macOS and Linux. Current release: **0.1.0** (see
+MIT licensed. Windows, macOS and Linux. Current release: **0.2.0** (see
 [CHANGELOG.md](CHANGELOG.md)).
 
 ## The pitch: chain three AI providers on one document
@@ -33,66 +34,93 @@ different provider, edit the prompt and re-run, reveal the result layer, or togg
 
 ## Screenshots
 
-| Instruct edit (Gemini) with the diff-ready result on its own layer | Mask edit on a provider without a native mask (Grok, emulated) |
+![The built-in sample document: group, clipped adjustment layer with mask, gradient fill layer, shape layers and a styled type layer](docs/screenshots/layers-sample.png)
+
+| Layer Style: Bevel & Emboss + Outer Glow live on a type layer | Shapes, editable type and a Pen path in progress |
 |---|---|
-| ![Instruct edit](docs/screenshots/ai-instruct-edit.png) | ![Emulated mask edit](docs/screenshots/ai-mask-emulated.png) |
+| ![Layer Style dialog](docs/screenshots/layer-style.png) | ![Tools session](docs/screenshots/tools-session.png) |
 
-| Free Transform (scale + rotate, one undo step) | Levels with live preview and histogram |
-|---|---|
-| ![Free Transform](docs/screenshots/free-transform.png) | ![Levels](docs/screenshots/levels-preview.png) |
+![AI shootout: one instruct-edit prompt sent to eight providers at once](docs/screenshots/ai-shootout.png)
 
-The AI images above come from the bundled fake provider server (see Development), not
-from a live model: they show the pipeline, not model quality.
+The AI images above come from the bundled fake provider servers (see Development), not
+from live models: they show the pipeline, not model quality.
 
-## What works in 0.1.0
+## What works in 0.2.0
 
-**Documents** — new (presets / custom, white / transparent / colour), open PNG / JPEG /
-WebP / GIF / BMP / TIFF / **PSD (read-only, layers + groups + blend modes)**, save /
-save-as `.pfproj` (layers, groups, blend modes, selection, AI history), export PNG /
-JPEG / WebP, multiple tabs, recent files, drag-drop files onto the window, copy / paste
-through the OS clipboard.
+0.2 is a Photoshop-fidelity overhaul: the UI follows Photoshop CC's dark theme, panel
+layout, menus, tool groups and shortcuts, and the layer system works the way Photoshop's
+does.
 
-**Layers** — add, delete, duplicate, drag to reorder, rename, show / hide, lock,
-opacity, all 16 Photoshop 7 blend modes, merge down, merge visible, flatten, one level
-of groups.
+**Look & shell** — Photoshop CC medium-dark theme (optional light theme), custom
+single-weight icon set, single-column toolbar with 20 grouped slots (right-click or
+long-press for the fly-out; the letter key picks the group's tool, Shift+letter cycles),
+context options bar per tool with presets, tabbed and dockable panel groups with ≡ panel
+menus, collapse-to-icons, Window ▸ Workspace ▸ Reset Essentials, rulers, status bar with
+document info popover, Preferences (Interface, Transparency & Gamut, Cursors, ...),
+command palette (Ctrl+K) that reaches every menu item, tool and panel command.
 
-**Tools** (Photoshop single-key shortcuts) — Move, Rectangular / Elliptical Marquee,
-Lasso / Polygon Lasso, Magic Wand, Crop, Eyedropper, Brush, Eraser, Paint Bucket,
-Gradient, Clone Stamp, Text, Zoom, Hand. Shift / Alt add, subtract and intersect
-selections; marching ants; feather / expand / contract / inverse / select layer alpha.
+**Layers** — pixel, group (pass-through), adjustment (Levels, Hue/Saturation, ... live in
+the Properties panel), fill (solid / gradient / pattern), shape and editable type layers;
+layer masks (Ctrl-click / Shift-click / Alt-click like PS), clipping masks (Ctrl+Alt+G),
+Fill opacity, lock transparent / pixels / position / all, linking, color labels, layer
+styles (Drop Shadow, Inner Shadow, Outer / Inner Glow, Bevel & Emboss, Stroke, Color /
+Gradient Overlay) with a Photoshop-layout Layer Style dialog and style presets, all 16
+blend modes, merge / flatten, arrange, Layers-panel filters and thumbnail options.
+**Channels** (view R/G/B, alpha channels, save / load selection, Ctrl+2..6) and
+**Paths** (work path, make selection, make work path from selection, fill / stroke path).
 
-**Adjustments & filters** (live preview, GPU with CPU fallback) — Brightness/Contrast,
-Levels, Hue/Saturation, Color Balance, Invert, Desaturate, Threshold, Posterize;
-Gaussian Blur, Motion Blur, Sharpen / Unsharp Mask, Add Noise, Pixelate; respects the
-active selection.
+**Tools** — Move (auto-select, linked layers), Marquees incl. single row / column, Lasso /
+Polygonal / Magnetic Lasso, Quick Selection, Magic Wand, Crop with Straighten,
+Eyedropper / Color Sampler / Ruler, Spot Healing / Healing / Patch / Red Eye, Brush /
+Pencil / Color Replacement with a real brush engine (custom sampled tips, scattering,
+shape dynamics, ~30 presets), Clone / Pattern Stamp, History Brush, Eraser / Background /
+Magic Eraser, Gradient (5 types, Gradient Editor) / Paint Bucket, Blur / Sharpen /
+Smudge, Dodge / Burn / Sponge, Pen / Freeform / anchor tools, Path / Direct Selection,
+Horizontal / Vertical Type and Type Masks, Rectangle / Rounded / Ellipse / Polygon /
+Line / Custom Shape (shape layers or paths), Hand / Rotate View / Zoom, Quick Mask (Q),
+Free Transform (Ctrl+T) for pixel, shape and type layers.
 
-**Image** — Image Size (bilinear / bicubic), Canvas Size (anchor grid), rotate / flip
-canvas, Trim, Free Transform (Ctrl+T: scale, rotate, move, flip; Enter commits).
+**Panels** — Color (hue cube) and the PS Color Picker, Swatches, Navigator, Info (with
+color samplers and ruler), History (snapshots, history-brush source), Properties
+(context-sensitive), Brush Settings, Brushes, Character, Paragraph, AI, AI History.
 
-**Navigation** — smooth zoom (wheel, Ctrl+/-, fit, 100%), space-drag / middle-drag pan,
-pixel grid at >= 800 %, unlimited undo with a memory budget, History panel with jump,
-command palette (Ctrl+K) that reaches every menu item and tool.
+**Documents** — open PNG / JPEG / WebP / GIF / BMP / TIFF / PSD (read-only, layers +
+groups + blend modes), save `.pfproj` (format 2: every layer kind, masks, effects,
+clipping, channels, paths, AI history), export PNG / JPEG / WebP with effects, drag-drop,
+clipboard, Image Size, Canvas Size, Image Rotation (incl. arbitrary), Trim, Fill
+(color / pattern), Stroke, Paste in Place / Paste Into, Transform ▸ Again.
 
-**AI** — Generate, Mask edit (native on ChatGPT, emulated on Grok / Gemini), Instruct
-edit, reference images, variants, cost estimate, cancel, typed errors (rate limit with
-Retry-After, auth, moderation, timeout), AI History with re-run / edit-prompt / reveal /
-diff.
+**AI** — Generate, Mask edit and Instruct edit with **ChatGPT, Grok and Gemini** plus
+any number of **custom and local providers**: OpenAI-compatible servers (LocalAI, vLLM,
+any hosted vendor that mimics OpenAI), Hugging Face (serverless router or a dedicated
+Inference Endpoint), ComfyUI (bundled txt2img / img2img / inpaint workflows or your own),
+Stable Diffusion WebUI / Forge, and Replicate. Edit ▸ AI Providers… tests connections,
+fetches models / checkpoints and detects capabilities; local providers cost nothing.
+**Shootout** (AI ▸ Generate with all models…, Ctrl+Shift+Alt+M or "Run on all models"):
+one prompt fans out to every enabled provider, results stream into a gallery next to the
+original; keep any of them as layers or new documents, or keep some and re-roll the rest.
+The AI History records the shootout as one entry.
 
-Deferred to later releases: layer masks UI, adjustment layers, curves, editable text
-layers, PSD export, local model providers, light theme. See [PLAN.md](PLAN.md).
+**About Ollama, honestly:** Ollama's API has no image-generation endpoint (its image
+models are an experimental, macOS-only CLI feature that writes files; see
+`docs/ai-research.md` §4.3). Pixelforge therefore uses Ollama only as a **✨ Improve
+prompt** helper: a local vision model looks at your composite and rewrites the prompt.
+It never produces the image itself.
 
+Not in 0.2: smart objects, Curves point editing, Satin / Pattern Overlay effects, warped
+text, PSD export, actions. See [PLAN-v2.md](PLAN-v2.md).
 ## Bring your own keys (BYOK)
 
 Pixelforge does not proxy AI calls through any server and has no account or
 subscription of its own. You paste your own API keys (OpenAI, xAI, Google AI Studio)
-into **Edit > AI API Keys** (or the key icon in the AI panel), and they are stored in
+into **Edit > AI Providers…** (or the gear next to the provider in the AI panel), and they are stored in
 your OS keychain (Windows Credential Manager, macOS Keychain, Secret Service on Linux;
 an obfuscated file is used only where no keychain exists). Keys never leave your machine
 except in requests to the provider you chose. You pay the provider directly at their
 published rates; Pixelforge shows a cost estimate per job.
 
 Signing in with a ChatGPT / Grok / Gemini **subscription** instead of an API key is not
-supported in 0.1.0: Google forbids subscription use of the API, xAI's subscription
+supported in 0.2.0: Google forbids subscription use of the API, xAI's subscription
 OAuth is partner-only, and OpenAI's "Sign in with ChatGPT" is not yet documented for
 image endpoints (details in `docs/ai-research.md`). Pixelforge will never ship
 reverse-engineered auth.
@@ -181,13 +209,27 @@ $env:PF_AI_BASE_URL_GEMINI = "http://127.0.0.1:8787"
 npm run tauri dev                                 # in another
 ```
 
-Save any non-empty key per provider in **Edit > AI API Keys** (a key starting with
+Save any non-empty key per provider in **Edit > AI Providers…** (a key starting with
 `bad-` makes the key test fail with `ai_auth`). Prompt tokens simulate failures:
 `!429` (rate limit with `Retry-After`), `!401`, `!500`, `!slow` (20 s, for testing
 cancel) and `!block` (moderation). Options: `--size 512`, `--delay 1200`.
 
 The override only changes the host; requests still carry the stored key. Leave the
 variables unset for real providers.
+
+`scripts/fake-local-ai.mjs` fakes every **custom / local** provider kind on one port
+(OpenAI-compatible, Hugging Face, Ollama, ComfyUI, Stable Diffusion WebUI / Forge,
+Replicate). Start it and add each kind in **Edit > AI Providers…** with the base URL
+from the table in the script header:
+
+```powershell
+node scripts/fake-local-ai.mjs --port 8790       # all custom kinds, e.g. http://127.0.0.1:8790
+```
+
+It honours the same `!429` / `!401` / `!500` / `!slow` / `!block` prompt tokens. With
+both servers running you can exercise the whole AI surface — custom providers, the
+shootout in generate / mask / instruct mode, Improve prompt via the fake Ollama — without
+any account. Help ▸ Open Sample Document gives you a rich layered scene to work on.
 
 ### Layout
 
@@ -196,12 +238,12 @@ See [docs/architecture.md](docs/architecture.md), [docs/ipc.md](docs/ipc.md),
 and [PLAN.md](PLAN.md).
 
 ```
-crates/pf-ai    AI provider trait + OpenAI / xAI / Gemini, job queue, key store (Rust)
+crates/pf-ai    AI provider trait + OpenAI / xAI / Gemini + custom kinds, job queue, key store (Rust)
 crates/pf-io    codecs, PSD import, .pfproj project format, thumbnails (Rust)
 app/src-tauri   Tauri shell: commands, state, plugins (Rust)
 app/src/lib     engine (document, raster, selection, history, WebGL2 compositor),
                 tools, filters, ai, io, stores, ui (Svelte 5)
-scripts/        fake-ai-server.mjs
+scripts/        fake-ai-server.mjs (built-in providers), fake-local-ai.mjs (custom / local kinds)
 ```
 
 ## Window chrome
