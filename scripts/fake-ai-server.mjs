@@ -94,12 +94,19 @@ const server = http.createServer(async (req, res) => {
     if (path === "/healthz") return json(res, 200, { ok: true, served });
 
     // ---- key tests
-    if (req.method === "GET" && (path === "/v1/models" || path === "/v1beta/models")) {
+    const modelMatch = /^\/(v1|v1beta)\/models\/([^/]+)$/.exec(path);
+    if (req.method === "GET" && (path === "/v1/models" || path === "/v1beta/models" || modelMatch)) {
       if (badKey(req)) {
         console.log(`${ts} ${path} -> 401 (bad key)`);
         return json(res, 401, path.startsWith("/v1beta") ? { error: { code: 401, message: "API key not valid. Please pass a valid API key. (fake)", status: "UNAUTHENTICATED" } } : { error: { message: "Incorrect API key provided: bad (fake).", type: "invalid_request_error", code: "invalid_api_key" } });
       }
       console.log(`${ts} ${path} -> 200`);
+      if (modelMatch) {
+        const id = modelMatch[2];
+        const known = ["gpt-image-2.5-flare", "gpt-image-2.5-sunburst", "grok-imagine-image-2.0", "gemini-3.1-flash-image"];
+        if (!known.includes(id)) return json(res, 404, { error: { message: "Model not found (fake)" } });
+        return json(res, 200, modelMatch[1] === "v1beta" ? { name: `models/${id}` } : { id, object: "model" });
+      }
       return json(res, 200, path.startsWith("/v1beta") ? { models: [{ name: "models/gemini-3.1-flash-image" }] } : { object: "list", data: [{ id: "gpt-image-2.5-flare" }, { id: "grok-imagine-image-2.0" }] });
     }
 
