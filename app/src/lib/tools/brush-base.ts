@@ -180,15 +180,16 @@ export abstract class BrushBasedTool implements Tool {
     const tail = s.catchUp({ x: e.x - t.offset.x, y: e.y - t.offset.y }, { pressure: e.pressure, pointerType: e.pointerType });
     if (tail) ctx.touch({ layerId: t.dirtyId, rect: tail });
     this.lastEnd = { x: e.x, y: e.y };
-    this.beforeFinish(ctx, s, t);
-    const cmd = t.finish(captured, this.spec.label, s.dirtyRect);
+    const processed = this.beforeFinish(ctx, s, t);
+    const dirty = processed && s.dirtyRect ? Rect.union(processed, s.dirtyRect) : processed || s.dirtyRect;
+    const cmd = t.finish(captured, this.spec.label, dirty);
     if (cmd) ctx.exec(cmd, { alreadyApplied: true, noMerge: true });
-    if (s.dirtyRect) ctx.touch({ layerId: t.dirtyId, rect: s.dirtyRect });
+    if (dirty) ctx.touch({ layerId: t.dirtyId, rect: dirty });
     this.onStrokeEnd(ctx, s, t);
   }
 
   /** Hook before the undo command snapshots the result (healing post-processes here). */
-  protected beforeFinish(_ctx: ToolContext, _stroke: BrushStroke, _target: PaintTarget): void {}
+  protected beforeFinish(_ctx: ToolContext, _stroke: BrushStroke, _target: PaintTarget): Rect | void {}
 
   onKey(e: KeyboardEvent, ctx: ToolContext, phase: "down" | "up"): boolean {
     if (phase !== "down" || e.ctrlKey || e.metaKey || e.altKey) return false;
