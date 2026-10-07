@@ -9,11 +9,12 @@ beforeEach(() => {
 describe("workspace store (tab groups)", () => {
   it("starts as Essentials: color / properties / layers / history groups", () => {
     const w = essentialsWorkspace();
-    expect(w.groups.map((g) => g.id)).toEqual(["color", "properties", "layers", "history"]);
+    expect(w.groups.map((g) => g.id)).toEqual(["color", "navigator", "properties", "layers", "history"]);
     expect(w.groups.find((g) => g.id === "layers")!.panels).toEqual(["layers", "channels", "paths"]);
     expect(w.groups.find((g) => g.id === "history")!.panels).toEqual(["history", "ai", "ai-history"]);
     expect(defaultGroupFor("swatches")).toBe("color");
-    expect(defaultGroupFor("navigator")).toBeNull();
+    expect(defaultGroupFor("navigator")).toBe("navigator");
+    expect(defaultGroupFor("brushes")).toBeNull();
   });
 
   it("places registered panels by hint, by the Essentials table, or in a new group", () => {
@@ -21,11 +22,11 @@ describe("workspace store (tab groups)", () => {
     expect(ui.groupOf("channels")!.id).toBe("layers");
     ui.placePanel("ai", null);
     expect(ui.groupOf("ai")!.id).toBe("history");
-    ui.placePanel("navigator", null, 0.8);
-    expect(ui.groupOf("navigator")!.id).toBe("navigator");
-    expect(ui.groupOf("navigator")!.weight).toBe(0.8);
-    ui.placePanel("navigator", "layers"); // idempotent: already placed
-    expect(ui.groupOf("navigator")!.id).toBe("navigator");
+    ui.placePanel("actions", null, 0.8);
+    expect(ui.groupOf("actions")!.id).toBe("actions");
+    expect(ui.groupOf("actions")!.weight).toBe(0.8);
+    ui.placePanel("actions", "layers"); // idempotent: already placed
+    expect(ui.groupOf("actions")!.id).toBe("actions");
   });
 
   it("activates a tab, un-hides it and expands its group", () => {

@@ -3,12 +3,13 @@ import { registerPanel, getCommand, type CommandDef } from "../registry.svelte";
 import LayersPanel from "./LayersPanel.svelte";
 import ChannelsPanel from "./ChannelsPanel.svelte";
 import PathsPanel from "./PathsPanel.svelte";
-import HistoryPanel from "./HistoryPanel.svelte";
 import PropertiesPanel from "./PropertiesPanel.svelte";
 import { LAYERS_PANEL_MENU_IDS } from "../commands/layer";
 import { layersUi } from "./Layers.store.svelte";
 import "./Channels.commands";
 import "./Paths.commands";
+// panels-v2: Color, Swatches, Navigator, Info, History (+ View menu, Color Picker).
+import "./register-panels-v2";
 
 /** Panel ≡ items that proxy to registered commands (resolved lazily so order of registration doesn't matter). */
 function proxy(id: string): CommandDef {
@@ -42,4 +43,3 @@ registerPanel({ id: "properties", title: "Properties", dock: "right", order: 20,
 registerPanel({ id: "layers", title: "Layers", dock: "right", order: 10, group: "layers", component: LayersPanel, icon: "layers", preferredSize: 360, menu: layersMenu });
 registerPanel({ id: "channels", title: "Channels", dock: "right", order: 11, group: "layers", component: ChannelsPanel, icon: "channels", preferredSize: 360, menu: channelsMenu });
 registerPanel({ id: "paths", title: "Paths", dock: "right", order: 12, group: "layers", component: PathsPanel, icon: "paths", preferredSize: 360, menu: pathsMenu });
-registerPanel({ id: "history", title: "History", dock: "right", order: 30, group: "history", component: HistoryPanel, icon: "history", preferredSize: 240 });

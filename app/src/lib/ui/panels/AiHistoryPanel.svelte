@@ -3,17 +3,23 @@
    * AI History panel: every job recorded on `doc.meta.aiHistory` (schema in
    * `docs/ai-history.md`), newest first. Actions: re-run with another provider, edit the
    * prompt and re-run, reveal the result layer, toggle the diff overlay.
-   * Registered by `$lib/ai/register` as panel `ai-history` (right dock, order 35).
+   * Registered by `$lib/ai/register` as panel `ai-history` (group `history`).
+   *
+   * Photoshop idiom: rows like the History panel (thumb · provider glyph · prompt ·
+   * status); hovering a row reveals Re-run / Reveal / Diff icon buttons; click a row for
+   * details; shootout entries expand into a strip of per-provider results.
    */
-  import { ChevronDown, ChevronRight, Eye, Pencil, RotateCcw, ScanEye } from "@lucide/svelte";
-  import { findLayer } from "$lib/engine";
+    import { findLayer } from "$lib/engine";
   import { docStore } from "$lib/stores/doc.svelte";
   import { getHistory, type AiHistoryEntry } from "$lib/ai/history";
   import { isDiffShown, toggleDiffOverlay } from "$lib/ai/overlay";
   import { formatUsd } from "$lib/ai/pricing";
   import { rememberedSelection, revealLayer, runAi, type AiRunRequest } from "$lib/ai/run";
   import { aiUi } from "$lib/ai/ui.svelte";
-  import { canGenerate, type ProviderId } from "$lib/ai/types";
+  import { canGenerate, type ProviderId, type ProviderInfo } from "$lib/ai/types";
+  import ProviderGlyph from "$lib/ai/ProviderGlyph.svelte";
+  import Icon from "$lib/ui/icons/Icon.svelte";
+  import PsSelect from "$lib/ui/controls/PsSelect.svelte";
 
   let expanded = $state<string | null>(null);
   let editing = $state<string | null>(null);
@@ -128,60 +134,89 @@
     aiUi.model = e.model;
     aiUi.focusPrompt(e.mode === "generate" ? "generate" : undefined);
   }
+
+  function glyphFor(id: ProviderId): Pick<ProviderInfo, "id" | "local" | "icon" | "kind"> {
+    return aiUi.providers.find((p) => p.id === id) ?? { id, local: false, icon: "cloud", kind: "builtin" };
+  }
+  function statusLabel(e: AiHistoryEntry): string {
+    return e.status === "running" ? "Running" : e.status === "failed" ? "Failed" : e.status === "cancelled" ? "Cancelled" : "";
+  }
+  const rerunChoices = $derived(rerunTargets.map((p) => ({ value: p.id, label: p.name })));
 </script>
 
 <div class="hist">
   {#if !docStore.doc}
     <p class="empty">Open a document to see its AI history.</p>
   {:else if entries.length === 0}
-    <p class="empty">Nothing yet. Every AI run on this document is recorded here and saved with the project.</p>
+    <p class="empty">Every AI run on this document is listed here and saved with the project.</p>
   {/if}
 
   {#if notice}
-    <p class="notice">{notice} <button type="button" class="link" onclick={() => (notice = null)}>ok</button></p>
+    <p class="notice"><span>{notice}</span><button type="button" class="x" aria-label="Dismiss" onclick={() => (notice = null)}><Icon name="close-small" size={10} /></button></p>
   {/if}
 
   <ul>
     {#each entries as e (e.id)}
+      {@const live = liveLayer(e)}
       <li class="entry" class:open={expanded === e.id} class:failed={e.status === "failed"}>
-        <button type="button" class="head" onclick={() => (expanded = expanded === e.id ? null : e.id)} aria-expanded={expanded === e.id}>
-          {#if expanded === e.id}<ChevronDown size={12} />{:else}<ChevronRight size={12} />{/if}
-          <span class="thumbs">
-            {#if e.resultThumbs[0]}
-              <img src={e.resultThumbs[0]} alt="" />
-            {:else if e.inputThumb}
-              <img src={e.inputThumb} alt="" class="dim" />
-            {:else}
-              <span class="ph"></span>
-            {/if}
-          </span>
-          <span class="meta">
-            <span class="line1">
-              <span class="prov">{e.providerName}</span>
-              <span class="mode">{modeLabel(e)}</span>
-              {#if e.status === "running"}<span class="st run">running</span>{/if}
-              {#if e.status === "failed"}<span class="st bad">failed</span>{/if}
-              {#if e.status === "cancelled"}<span class="st">cancelled</span>{/if}
+        <div class="row">
+          <button type="button" class="head" onclick={() => (expanded = expanded === e.id ? null : e.id)} aria-expanded={expanded === e.id} title={e.prompt}>
+            <span class="thumb">
+              {#if e.resultThumbs.find((t) => t)}
+                <img src={e.resultThumbs.find((t) => t)} alt="" />
+              {:else if e.inputThumb}
+                <img src={e.inputThumb} alt="" class="faded" />
+              {/if}
             </span>
-            <span class="prompt">{e.prompt}</span>
+            <span class="glyph" title={e.providerName}>
+              {#if e.mode === "shootout"}<Icon name="ai" size={14} />{:else}<ProviderGlyph provider={glyphFor(e.provider)} />{/if}
+            </span>
+            <span class="prompt">{e.prompt || "(no prompt)"}</span>
+            {#if statusLabel(e)}<span class="st" class:bad={e.status === "failed"}>{statusLabel(e)}</span>{/if}
+          </button>
+          <span class="acts">
+            {#if e.mode !== "shootout"}
+              <button type="button" class="icon-btn sm" data-tip="Re-run with {e.providerName}" aria-label="Re-run" onclick={() => void rerun(e, e.prompt, e.provider)}><Icon name="redo" size={12} /></button>
+            {/if}
+            <button type="button" class="icon-btn sm" data-tip="Reveal layer" aria-label="Reveal layer" disabled={!live} onclick={() => reveal(e)}><Icon name="layers" size={12} /></button>
+            <button type="button" class="icon-btn sm" class:on={diffOn(e)} data-tip="Toggle diff overlay" aria-label="Toggle diff overlay" disabled={!live} onclick={() => diff(e)}><Icon name="eye" size={12} /></button>
           </span>
-        </button>
+        </div>
 
         {#if expanded === e.id}
           <div class="body">
-            <div class="pics">
-              {#if e.inputThumb}<figure><img src={e.inputThumb} alt="Input" /><figcaption>input</figcaption></figure>{/if}
-              {#if e.maskThumb}<figure><img src={e.maskThumb} alt="Mask" /><figcaption>mask</figcaption></figure>{/if}
-              {#each e.resultThumbs as t, i (i)}
-                {#if t}<figure><img src={t} alt="Result {i + 1}" /><figcaption>result{e.resultThumbs.length > 1 ? ` ${i + 1}` : ""}</figcaption></figure>{/if}
-              {/each}
-            </div>
+            {#if e.mode === "shootout" && e.subResults?.length}
+              <div class="strip">
+                {#if e.inputThumb}
+                  <figure><img src={e.inputThumb} alt="Original" /><figcaption>Original</figcaption></figure>
+                {/if}
+                {#each e.subResults as sub (sub.provider)}
+                  {@const keptHere = (e.kept ?? []).filter((k) => k.provider === sub.provider).map((k) => k.index)}
+                  {#each sub.thumbs.length ? sub.thumbs : [""] as t, i (i)}
+                    <figure class:kept={keptHere.includes(i)} title="{sub.providerName} · {sub.model}{sub.error ? ` — ${sub.error.message}` : ''}">
+                      {#if t}<img src={t} alt="{sub.providerName} {i + 1}" />{:else}<span class="ph">{sub.status === "failed" ? "failed" : "–"}</span>{/if}
+                      <figcaption><ProviderGlyph provider={glyphFor(sub.provider)} size={10} />{sub.providerName}{sub.thumbs.length > 1 ? ` ${i + 1}` : ""}</figcaption>
+                    </figure>
+                  {/each}
+                {/each}
+              </div>
+            {:else}
+              <div class="strip">
+                {#if e.inputThumb}<figure><img src={e.inputThumb} alt="Input" /><figcaption>Input</figcaption></figure>{/if}
+                {#if e.maskThumb}<figure><img src={e.maskThumb} alt="Mask" /><figcaption>Mask</figcaption></figure>{/if}
+                {#each e.resultThumbs as t, i (i)}
+                  {#if t}<figure><img src={t} alt="Result {i + 1}" /><figcaption>Result{e.resultThumbs.length > 1 ? ` ${i + 1}` : ""}</figcaption></figure>{/if}
+                {/each}
+              </div>
+            {/if}
             <dl class="facts">
-              <dt>Model</dt>
-              <dd>{e.model}</dd>
+              <dt>Provider</dt>
+              <dd>{e.providerName}{e.model ? ` · ${e.model}` : ""}</dd>
+              <dt>Mode</dt>
+              <dd>{modeLabel(e)}</dd>
               <dt>When</dt>
               <dd>{when(e.ts)}{#if e.durationMs}, {(e.durationMs / 1000).toFixed(1)} s{/if}</dd>
-              {#if e.size}<dt>Size</dt><dd>{e.size.width} x {e.size.height}</dd>{/if}
+              {#if e.size}<dt>Size</dt><dd>{e.size.width} × {e.size.height}</dd>{/if}
               {#if e.n > 1}<dt>Variants</dt><dd>{e.n}</dd>{/if}
               {#if e.costUsd !== undefined}<dt>Cost</dt><dd>{formatUsd(e.costUsd, true)}</dd>{/if}
               {#if e.negativePrompt}<dt>Avoid</dt><dd>{e.negativePrompt}</dd>{/if}
@@ -189,27 +224,24 @@
             </dl>
 
             {#if editing === e.id}
-              <textarea bind:value={draft} rows="3" aria-label="Edited prompt"></textarea>
+              <textarea class="input" bind:value={draft} rows="3" aria-label="Edited prompt"></textarea>
               <div class="actions">
-                <button type="button" class="btn primary" onclick={() => void rerun(e, draft, rerunProvider[e.id] ?? e.provider)}>Run</button>
-                <button type="button" class="btn" onclick={() => (editing = null)}>Cancel</button>
+                <button type="button" class="btn sm primary" onclick={() => void rerun(e, draft, rerunProvider[e.id] ?? e.provider)}>Run</button>
+                <button type="button" class="btn sm" onclick={() => (editing = null)}>Cancel</button>
+              </div>
+            {:else if e.mode !== "shootout"}
+              <div class="actions">
+                <span class="lbl">Re-run with:</span>
+                <PsSelect value={rerunProvider[e.id] ?? e.provider} choices={rerunChoices} width={110} onchange={(v) => (rerunProvider[e.id] = v as ProviderId)} />
+                <button type="button" class="btn sm" onclick={() => void rerun(e, e.prompt, rerunProvider[e.id] ?? e.provider)}>Run</button>
+              </div>
+              <div class="actions">
+                <button type="button" class="textbtn" onclick={() => startEdit(e)}>Edit prompt…</button>
+                <button type="button" class="textbtn" onclick={() => loadIntoPanel(e)}>Load into AI panel</button>
               </div>
             {:else}
               <div class="actions">
-                <label class="rerun">
-                  <RotateCcw size={12} />
-                  <span>Re-run with</span>
-                  <select bind:value={rerunProvider[e.id]}>
-                    {#each rerunTargets as p (p.id)}
-                      <option value={p.id} selected={p.id === e.provider}>{p.local ? "🖥 " : ""}{p.name}</option>
-                    {/each}
-                  </select>
-                  <button type="button" class="btn" onclick={() => void rerun(e, e.prompt, rerunProvider[e.id] ?? e.provider)}>Go</button>
-                </label>
-                <button type="button" class="btn" onclick={() => startEdit(e)}><Pencil size={12} /> Edit prompt</button>
-                <button type="button" class="btn" onclick={() => loadIntoPanel(e)}>Load into panel</button>
-                <button type="button" class="btn" disabled={!liveLayer(e)} onclick={() => reveal(e)}><Eye size={12} /> Reveal layer</button>
-                <button type="button" class="btn" class:on={diffOn(e)} disabled={!liveLayer(e)} onclick={() => diff(e)}><ScanEye size={12} /> Diff</button>
+                <button type="button" class="textbtn" onclick={() => loadIntoPanel(e)}>Load prompt into AI panel</button>
               </div>
             {/if}
           </div>
@@ -223,219 +255,205 @@
   .hist {
     display: flex;
     flex-direction: column;
-    gap: 6px;
-    padding: 8px 10px;
-    font-size: var(--fs-sm);
-    color: var(--fg-1);
-    overflow-y: auto;
-    min-height: 0;
     height: 100%;
-  }
-  .hist > * {
-    flex: none;
+    min-height: 0;
+    overflow: hidden auto;
+    font-size: var(--fs-sm);
+    color: var(--ps-text);
   }
   .empty {
     margin: 0;
-    color: var(--fg-2);
-    line-height: 1.5;
+    padding: 10px;
+    color: var(--ps-text-dim);
   }
   .notice {
-    margin: 0;
-    padding: 6px 8px;
-    border-radius: var(--radius-sm);
-    background: var(--bg-2);
-    border-left: 2px solid var(--accent-2);
-    color: var(--fg-0);
+    display: flex;
+    gap: 6px;
+    margin: 6px 8px;
+    padding: 4px 6px;
+    background: var(--ps-input);
+    border: 1px solid var(--ps-border-dark);
+  }
+  .notice span {
+    flex: 1;
+  }
+  .x {
+    display: grid;
+    place-items: center;
+    width: 14px;
+    height: 14px;
+    color: var(--ps-text-dim);
   }
   ul {
     list-style: none;
     margin: 0;
-    padding: 0;
+    padding: 2px 0;
+  }
+  .entry.open > .row {
+    background: var(--ps-row-selected);
+  }
+  .row {
+    position: relative;
     display: flex;
-    flex-direction: column;
-    gap: 4px;
+    align-items: center;
+    height: 30px;
   }
-  .entry {
-    border-radius: var(--radius-sm);
-    border: 1px solid var(--border);
-    background: var(--bg-2);
-  }
-  .entry.open {
-    border-color: var(--border-strong);
-  }
-  .entry.failed {
-    border-color: rgba(255, 92, 122, 0.4);
+  .row:hover {
+    background: var(--ps-hover);
   }
   .head {
     display: flex;
     align-items: center;
     gap: 6px;
-    width: 100%;
-    padding: 6px;
+    flex: 1;
+    min-width: 0;
+    height: 100%;
+    padding: 0 6px;
     text-align: left;
-    color: var(--fg-2);
+    color: inherit;
   }
-  .thumbs {
-    width: 36px;
-    height: 36px;
+  .thumb {
+    display: block;
+    width: 32px;
+    height: 24px;
     flex: none;
-    border-radius: var(--radius-sm);
+    background: var(--ps-input);
+    border: 1px solid var(--ps-border-dark);
     overflow: hidden;
-    background: var(--bg-3);
   }
-  .thumbs img,
-  .ph {
+  .thumb img {
     display: block;
     width: 100%;
     height: 100%;
     object-fit: cover;
   }
-  .thumbs img.dim {
-    opacity: 0.5;
+  .thumb img.faded {
+    opacity: 0.45;
   }
-  .meta {
-    display: flex;
-    flex-direction: column;
+  .glyph {
+    display: grid;
+    place-items: center;
+    width: 16px;
+    flex: none;
+    color: var(--ps-text-dim);
+  }
+  .prompt {
+    flex: 1;
     min-width: 0;
-    gap: 2px;
-  }
-  .line1 {
-    display: flex;
-    gap: 6px;
-    align-items: baseline;
-  }
-  .prov {
-    font-weight: 600;
-    color: var(--fg-0);
-  }
-  .mode {
-    color: var(--fg-1);
-    font-size: var(--fs-xs);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
   .st {
+    flex: none;
+    color: var(--ps-text-dim);
     font-size: var(--fs-xs);
-    padding: 0 5px;
-    border-radius: 999px;
-    background: var(--bg-3);
-  }
-  .st.run {
-    color: var(--accent-2);
   }
   .st.bad,
   .bad {
-    color: var(--danger);
+    color: #ff9a9a;
   }
-  .prompt {
-    color: var(--fg-1);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+  .entry.failed .prompt {
+    color: var(--ps-text-dim);
+  }
+  .acts {
+    display: none;
+    align-items: center;
+    gap: 1px;
+    padding-right: 4px;
+    background: inherit;
+  }
+  .row:hover .acts,
+  .row:focus-within .acts {
+    display: flex;
+  }
+  .row:hover .st {
+    display: none;
+  }
+  .icon-btn.sm {
+    width: 18px;
+    height: 18px;
   }
   .body {
-    padding: 0 8px 8px;
     display: flex;
     flex-direction: column;
-    gap: 8px;
-  }
-  .pics {
-    display: flex;
     gap: 6px;
-    flex-wrap: wrap;
+    padding: 6px 8px 8px 44px;
+    border-bottom: 1px solid var(--ps-border-dark);
+  }
+  .strip {
+    display: flex;
+    gap: 4px;
+    overflow-x: auto;
+    padding-bottom: 2px;
   }
   figure {
-    margin: 0;
     display: flex;
     flex-direction: column;
     gap: 2px;
-    align-items: center;
+    margin: 0;
+    flex: none;
   }
-  figure img {
-    width: 72px;
-    height: 72px;
+  figure img,
+  .ph {
+    display: grid;
+    place-items: center;
+    width: 56px;
+    height: 56px;
     object-fit: contain;
-    border-radius: var(--radius-sm);
-    background: var(--bg-0);
+    background: var(--ps-input);
+    border: 1px solid var(--ps-border-dark);
+    color: var(--ps-text-disabled);
+    font-size: var(--fs-xs);
+  }
+  figure.kept img {
+    outline: 1px solid var(--ps-accent);
+    outline-offset: -1px;
   }
   figcaption {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    max-width: 56px;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    color: var(--ps-text-dim);
     font-size: var(--fs-xs);
-    color: var(--fg-2);
   }
   .facts {
     display: grid;
     grid-template-columns: auto 1fr;
-    gap: 2px 10px;
+    gap: 1px 8px;
     margin: 0;
-    font-size: var(--fs-xs);
   }
   dt {
-    color: var(--fg-2);
+    color: var(--ps-text-dim);
   }
   dd {
     margin: 0;
-    color: var(--fg-1);
     overflow-wrap: anywhere;
   }
   textarea {
     width: 100%;
-    font: inherit;
-    color: var(--fg-0);
-    background: var(--bg-0);
-    border: 1px solid var(--border-strong);
-    border-radius: var(--radius-sm);
-    padding: 6px 8px;
     resize: vertical;
-    user-select: text;
-    -webkit-user-select: text;
   }
   .actions {
     display: flex;
     flex-wrap: wrap;
-    gap: 4px;
     align-items: center;
+    gap: 6px;
   }
-  .rerun {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    color: var(--fg-2);
+  .lbl {
+    color: var(--ps-text-dim);
+  }
+  .textbtn {
+    color: var(--ps-text-dim);
+    text-decoration: underline;
+    text-underline-offset: 2px;
     font-size: var(--fs-xs);
   }
-  select {
-    font: inherit;
-    font-size: var(--fs-xs);
-    color: var(--fg-0);
-    background: var(--bg-3);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    padding: 2px 4px;
-  }
-  .btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    padding: 3px 8px;
-    border-radius: var(--radius-sm);
-    background: var(--bg-3);
-    color: var(--fg-1);
-    font-size: var(--fs-xs);
-  }
-  .btn:hover:not(:disabled) {
-    color: var(--fg-0);
-    background: var(--border-strong);
-  }
-  .btn:disabled {
-    opacity: 0.4;
-  }
-  .btn.on {
-    color: #fff;
-    background: #ff00c8;
-  }
-  .btn.primary {
-    background: var(--accent);
-    color: #fff;
-  }
-  .link {
-    color: var(--accent-2);
-    font-size: var(--fs-xs);
+  .textbtn:hover {
+    color: var(--ps-text);
   }
 </style>

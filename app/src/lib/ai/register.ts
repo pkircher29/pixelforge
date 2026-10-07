@@ -3,7 +3,7 @@
  * module once (`import("$lib/ai/register")`); nothing else in `lib/ai` has side effects.
  */
 
-import { KeyRound, Layers, ScanEye, Sparkles, WandSparkles, History as HistoryIcon, RotateCcw } from "@lucide/svelte";
+import { KeyRound, Layers, ScanEye, Sparkles, WandSparkles, RotateCcw } from "@lucide/svelte";
 import { docStore } from "$lib/stores/doc.svelte";
 import { registerCommands, registerPanel } from "$lib/ui/registry.svelte";
 import AiPanel from "$lib/ui/panels/AiPanel.svelte";
@@ -15,8 +15,8 @@ import { toggleDiffOverlay } from "./overlay";
 import { runAi } from "./run";
 import { aiUi } from "./ui.svelte";
 
-registerPanel({ id: "ai", title: "AI", dock: "right", order: 15, component: AiPanel, icon: Sparkles, preferredSize: 420 });
-registerPanel({ id: "ai-history", title: "AI History", dock: "right", order: 35, component: AiHistoryPanel, icon: HistoryIcon, preferredSize: 240, collapsed: true });
+registerPanel({ id: "ai", title: "AI", dock: "right", order: 31, group: "history", component: AiPanel, icon: "ai", preferredSize: 420 });
+registerPanel({ id: "ai-history", title: "AI History", dock: "right", order: 32, group: "history", component: AiHistoryPanel, icon: "ai-history", preferredSize: 240 });
 
 registerCommands([
   {

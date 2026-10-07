@@ -1,37 +1,34 @@
 <script lang="ts">
   /**
    * AI panel: provider / model / mode / prompt / options / run / jobs / results.
-   * Registered by `$lib/ai/register` as panel `ai` (right dock, order 15).
+   * Registered by `$lib/ai/register` as panel `ai` (group `history`).
    *
-   * Self-contained on purpose (Wave 3 runs in parallel with the shell): inline status
-   * messages instead of the toast store, own styling on the app.css tokens.
-   * TODO(shell): swap `.notice` for the shared toast store once `lib/stores/toast` lands.
+   * Photoshop idiom (Wave 6): flat `--ps-*` surfaces, 22 px rows, PsSelect / ScrubbyNumber
+   * fields, collapsible section headers (Prompt / Reference images / Options / Advanced),
+   * a Run split button ("Run on all" in the caret half), compact job rows with a thin
+   * progress bar. Behaviour is unchanged from Wave 3/5.
    */
   import { onMount } from "svelte";
   import { listen } from "@tauri-apps/api/event";
   import { invoke } from "@tauri-apps/api/core";
-  import {
-    ChevronDown,
-    ChevronRight,
-    ImagePlus,
-    LoaderCircle,
-    ScanEye,
-    Sparkles,
-    X,
-  } from "@lucide/svelte";
   import { Raster } from "$lib/engine";
   import { decodeFrame } from "$lib/io/frame";
   import { docStore } from "$lib/stores/doc.svelte";
   import { assistProviders, improvePrompt } from "$lib/ai/assist";
   import { hasTauri } from "$lib/ai/client";
-  import { openApiKeysDialog } from "$lib/ai/dialogs";
+  import { openApiKeysDialog, openShootoutDialog } from "$lib/ai/dialogs";
   import { jobStore, TERMINAL, type AiJob } from "$lib/ai/jobs.svelte";
   import { toggleDiffOverlay } from "$lib/ai/overlay";
   import { decodeImage, thumbnailDataUrl } from "$lib/ai/png";
   import { estimateCost, formatUsd } from "$lib/ai/pricing";
   import ProviderPicker from "$lib/ai/ProviderPicker.svelte";
   import { applyAll, applyOne, resolveForDoc, resultPreviews, runAi, runFor, type AiRunRequest } from "$lib/ai/run";
-  import { runOnAll } from "$lib/ai/shootout";
+  import { runOnAll, shootoutProviders } from "$lib/ai/shootout";
+  import Icon from "$lib/ui/icons/Icon.svelte";
+  import Popover from "$lib/ui/controls/Popover.svelte";
+  import PsSelect from "$lib/ui/controls/PsSelect.svelte";
+  import ScrubbyNumber from "$lib/ui/controls/ScrubbyNumber.svelte";
+  import { aiSections, modeTooltip, progressFraction } from "./ai-panel-ui.svelte";
   import { aiUi, type SizeOption } from "$lib/ai/ui.svelte";
   import { type AiMode, type ImageSize, type ProviderId } from "$lib/ai/types";
 
@@ -325,561 +322,566 @@
     }
   }
 
+
+  let splitBtn = $state<HTMLButtonElement | null>(null);
+  let splitOpen = $state(false);
+  const shootoutCount = $derived(shootoutProviders(aiUi.providers).length);
+  const modelChoices = $derived([
+    { value: "", label: `Default (${isEdit ? provider?.editModel || "–" : provider?.defaultModel || "–"})` },
+    ...(provider?.models ?? []).map((m) => ({ value: m, label: m })),
+  ]);
+  const sizeChoices = $derived(sizeOptions.map((o) => ({ value: o.key, label: o.label })));
+  const qualityChoices = $derived([{ value: "", label: "Default" }, ...qualityOptions.map((q) => ({ value: q, label: q }))]);
 </script>
 
 <div class="ai" onpaste={onPaste}>
-  <ProviderPicker providers={aiUi.providers} selected={aiUi.providerId} onselect={pickProvider} onmanage={() => openApiKeysDialog()} />
+  <div class="top">
+    <ProviderPicker providers={aiUi.providers} selected={aiUi.providerId} onselect={pickProvider} onmanage={() => openApiKeysDialog()} />
+    <div class="frow">
+      <span class="flbl">Model:</span>
+      <span class="grow-field"><PsSelect value={aiUi.model} choices={modelChoices} onchange={(v) => (aiUi.model = v)} /></span>
+    </div>
+    <div class="frow">
+      <span class="flbl">Mode:</span>
+      <span class="mode" title={modeTooltip(resolution.reason, resolution.emulated)}>{modeLabel}{resolution.emulated ? " (emulated)" : ""}</span>
+      {#if aiUi.forcedMode}
+        <button type="button" class="textbtn" title="Pick the mode from the selection again" onclick={() => (aiUi.forcedMode = undefined)}>Auto</button>
+      {/if}
+    </div>
+    <div class="flow" title="Every result lands on a new layer, so providers can be chained.">{flow}</div>
+  </div>
 
   {#if aiUi.providersError}
     <p class="notice error">{aiUi.providersError}</p>
   {/if}
 
-  <div class="row">
-    <label class="field grow">
-      <span>Model</span>
-      <select bind:value={aiUi.model}>
-        <option value="">Default ({isEdit ? (provider?.editModel ?? "–") : (provider?.defaultModel ?? "–")})</option>
-        {#each provider?.models ?? [] as m (m)}
-          <option value={m}>{m}</option>
-        {/each}
-      </select>
-    </label>
-  </div>
-
-  <div class="mode" title={resolution.reason}>
-    <span class="badge" class:gen={mode === "generate"} class:mask={mode === "mask"} class:instr={mode === "instruct"}>{modeLabel}</span>
-    {#if resolution.emulated}
-      <span class="emu" title="This provider has no pixel mask. Pixelforge crops the composite to the selection, sends an instruct edit, and pastes the result back only under the selection.">emulated</span>
-    {/if}
-    <span class="flow">{flow}</span>
-    {#if aiUi.forcedMode}
-      <button type="button" class="link" onclick={() => (aiUi.forcedMode = undefined)}>auto</button>
-    {/if}
-  </div>
-
-  <textarea
-    bind:this={promptEl}
-    bind:value={aiUi.prompt}
-    class="prompt"
-    rows="4"
-    placeholder={mode === "generate" ? "Describe the image to make…" : mode === "mask" ? "What should change inside the selection?" : "How should the whole image change?"}
-    onkeydown={onPromptKey}
-    aria-label="Prompt"
-  ></textarea>
-
-  {#if !aiUi.prompt && jobStore.jobs.length === 0}
-    <p class="empty">
-      With nothing selected the whole image is edited; with a selection only that region changes.
-      Every result lands on a new layer, so you can chain providers: rough it in with Grok, refine with Gemini, finish with ChatGPT.
-    </p>
-  {/if}
-
-  <button type="button" class="disclosure" onclick={() => (aiUi.showNegative = !aiUi.showNegative)} aria-expanded={aiUi.showNegative}>
-    {#if aiUi.showNegative}<ChevronDown size={12} />{:else}<ChevronRight size={12} />{/if}
-    Avoid
-    {#if !aiUi.showNegative && aiUi.negativePrompt}<span class="muted">· {aiUi.negativePrompt.slice(0, 32)}</span>{/if}
-  </button>
-  {#if aiUi.showNegative}
-    <textarea bind:value={aiUi.negativePrompt} class="prompt small" rows="2" placeholder="Things to leave out (folded into the prompt)" aria-label="Negative prompt"></textarea>
-  {/if}
-
-  <div
-    bind:this={dropEl}
-    class="refs"
-    class:over={dragOver}
-    role="group"
-    aria-label="Reference images"
-    ondragover={(e) => {
-      e.preventDefault();
-      dragOver = true;
-    }}
-    ondragleave={() => (dragOver = false)}
-    ondrop={onDrop}
-  >
-    {#each aiUi.refs as r (r.id)}
-      <div class="ref" title={r.name}>
-        <img src={r.thumb} alt={r.name} />
-        <button type="button" class="rm" aria-label="Remove {r.name}" onclick={() => aiUi.removeRef(r.id)}><X size={10} /></button>
+  <section class="sec">
+    <button type="button" class="sechead" aria-expanded={aiSections.prompt} onclick={() => (aiSections.prompt = !aiSections.prompt)}>
+      <Icon name={aiSections.prompt ? "chevron-down" : "chevron-right"} size={10} /> Prompt
+    </button>
+    {#if aiSections.prompt}
+      <div class="secbody">
+        <textarea
+          bind:this={promptEl}
+          bind:value={aiUi.prompt}
+          class="input prompt"
+          rows="4"
+          placeholder={mode === "generate" ? "Describe the image to make…" : mode === "mask" ? "What should change inside the selection?" : "How should the whole image change?"}
+          onkeydown={onPromptKey}
+          aria-label="Prompt"
+        ></textarea>
+        <label class="chkrow">
+          <input type="checkbox" checked={aiUi.showNegative} onchange={() => (aiUi.showNegative = !aiUi.showNegative)} />
+          Avoid{#if !aiUi.showNegative && aiUi.negativePrompt}<span class="dim">: {aiUi.negativePrompt.slice(0, 32)}</span>{/if}
+        </label>
+        {#if aiUi.showNegative}
+          <textarea bind:value={aiUi.negativePrompt} class="input prompt small" rows="2" placeholder="Things to leave out (folded into the prompt)" aria-label="Negative prompt"></textarea>
+        {/if}
       </div>
-    {/each}
-    {#if aiUi.refs.length < maxRefs}
-      <button type="button" class="add" onclick={() => fileInput?.click()} title="Add reference images (drop, paste or browse)">
-        <ImagePlus size={14} />
-        <span>{aiUi.refs.length === 0 ? `Reference images (up to ${maxRefs})` : `${aiUi.refs.length} of ${maxRefs}`}</span>
-      </button>
-    {:else}
-      <span class="muted small-text">{maxRefs} of {maxRefs} references</span>
     {/if}
-    <input bind:this={fileInput} type="file" accept="image/*" multiple hidden onchange={(e) => void addRefFiles((e.currentTarget as HTMLInputElement).files ?? [])} />
-  </div>
+  </section>
 
-  <div class="grid">
-    <label class="field">
-      <span>Size</span>
-      <select bind:value={aiUi.sizeKey}>
-        {#each sizeOptions as o (o.key)}<option value={o.key}>{o.label}</option>{/each}
-      </select>
-    </label>
-    <label class="field">
-      <span>Variants</span>
-      <select bind:value={aiUi.n}>
-        {#each Array.from({ length: maxN }, (_, i) => i + 1) as k (k)}<option value={k}>{k}</option>{/each}
-      </select>
-    </label>
-    {#if qualityOptions.length}
-      <label class="field">
-        <span>Quality</span>
-        <select bind:value={aiUi.quality}>
-          <option value="">Default</option>
-          {#each qualityOptions as q (q)}<option value={q}>{q}</option>{/each}
-        </select>
-      </label>
+  <section class="sec">
+    <button type="button" class="sechead" aria-expanded={aiSections.refs} onclick={() => (aiSections.refs = !aiSections.refs)}>
+      <Icon name={aiSections.refs ? "chevron-down" : "chevron-right"} size={10} /> Reference images
+      <span class="count">{aiUi.refs.length}/{maxRefs}</span>
+    </button>
+    {#if aiSections.refs}
+      <div
+        bind:this={dropEl}
+        class="secbody refs"
+        class:over={dragOver}
+        role="group"
+        aria-label="Reference images"
+        ondragover={(e) => {
+          e.preventDefault();
+          dragOver = true;
+        }}
+        ondragleave={() => (dragOver = false)}
+        ondrop={onDrop}
+      >
+        {#each aiUi.refs as r (r.id)}
+          <div class="ref" title={r.name}>
+            <img src={r.thumb} alt={r.name} />
+            <button type="button" class="rm" aria-label="Remove {r.name}" onclick={() => aiUi.removeRef(r.id)}><Icon name="close-small" size={10} /></button>
+          </div>
+        {/each}
+        {#if aiUi.refs.length < maxRefs}
+          <button type="button" class="addref" onclick={() => fileInput?.click()} title="Add reference images (drop, paste or browse)">
+            <Icon name="image" size={14} />
+            <span>Drop, paste or browse…</span>
+          </button>
+        {:else}
+          <span class="dim">{maxRefs === 0 ? "This provider takes no reference images." : `${maxRefs} of ${maxRefs} references`}</span>
+        {/if}
+        <input bind:this={fileInput} type="file" accept="image/*" multiple hidden onchange={(e) => void addRefFiles((e.currentTarget as HTMLInputElement).files ?? [])} />
+      </div>
     {/if}
-    {#if caps?.transparentBg}
-      <label class="check">
-        <input type="checkbox" bind:checked={aiUi.transparent} />
-        Transparent background
-      </label>
+  </section>
+
+  <section class="sec">
+    <button type="button" class="sechead" aria-expanded={aiSections.options} onclick={() => (aiSections.options = !aiSections.options)}>
+      <Icon name={aiSections.options ? "chevron-down" : "chevron-right"} size={10} /> Options
+    </button>
+    {#if aiSections.options}
+      <div class="secbody">
+        <div class="frow">
+          <span class="flbl">Size:</span>
+          <span class="grow-field"><PsSelect value={aiUi.sizeKey} choices={sizeChoices} onchange={(v) => (aiUi.sizeKey = v)} /></span>
+        </div>
+        <div class="frow">
+          <ScrubbyNumber label="Variants" value={aiUi.n} min={1} max={Math.max(1, maxN)} disabled={maxN <= 1} width={32} onchange={(v) => (aiUi.n = Math.round(v))} />
+          {#if qualityOptions.length}
+            <span class="flbl q">Quality:</span>
+            <PsSelect value={aiUi.quality} choices={qualityChoices} width={80} onchange={(v) => (aiUi.quality = v)} />
+          {/if}
+        </div>
+        {#if caps?.transparentBg}
+          <label class="chkrow"><input type="checkbox" bind:checked={aiUi.transparent} /> Transparent background</label>
+        {/if}
+        {#if mode === "generate" && doc}
+          <label class="chkrow"><input type="checkbox" bind:checked={aiUi.newDocument} /> New document</label>
+        {/if}
+      </div>
     {/if}
-    {#if mode === "generate" && doc}
-      <label class="check">
-        <input type="checkbox" bind:checked={aiUi.newDocument} />
-        New document
-      </label>
+  </section>
+
+  <section class="sec">
+    <button type="button" class="sechead" aria-expanded={aiUi.showAdvanced} onclick={() => (aiUi.showAdvanced = !aiUi.showAdvanced)}>
+      <Icon name={aiUi.showAdvanced ? "chevron-down" : "chevron-right"} size={10} /> Advanced
+    </button>
+    {#if aiUi.showAdvanced}
+      <div class="secbody">
+        <div class="frow">
+          <ScrubbyNumber label="Timeout" value={aiUi.timeoutSecs} min={10} max={3600} step={10} unit="s" width={40} onchange={(v) => (aiUi.timeoutSecs = Math.round(v))} />
+          <ScrubbyNumber label="Edge feather" value={aiUi.feather} min={0} max={64} unit="px" width={32} onchange={(v) => (aiUi.feather = Math.round(v))} />
+        </div>
+      </div>
     {/if}
-  </div>
+  </section>
 
   <div class="run">
-    <button type="button" class="primary" disabled={!canRun} onclick={run} title="Ctrl+Enter">
-      {#if busy}<LoaderCircle size={14} class="spin" />{:else}<Sparkles size={14} />{/if}
-      Run
-    </button>
-    <button type="button" class="link" disabled={!aiUi.prompt.trim()} title="Generate with all models (Ctrl+Shift+Alt+M)" onclick={runAll}>Run on all ▸</button>
+    <span class="split">
+      <button type="button" class="btn primary runbtn" disabled={!canRun} onclick={run} title="Run (Ctrl+Enter)">{busy ? "Running…" : "Run"}</button>
+      <button type="button" class="btn primary caretbtn" bind:this={splitBtn} aria-label="Run on all models" aria-haspopup="menu" aria-expanded={splitOpen} title="Run on all ▸" onclick={() => (splitOpen = !splitOpen)}><Icon name="caret-small" size={12} /></button>
+    </span>
+    <Popover anchor={splitBtn} open={splitOpen} onclose={() => (splitOpen = false)} minWidth={210}>
+      <div class="pmenu" role="menu">
+        <button type="button" role="menuitem" class="pitem" disabled={!aiUi.prompt.trim() || shootoutCount === 0} onclick={() => { splitOpen = false; runAll(); }}>
+          <span class="plabel">Run on All Models ({shootoutCount})</span><span class="psc">Ctrl+Shift+Alt+M</span>
+        </button>
+        <button type="button" role="menuitem" class="pitem" onclick={() => { splitOpen = false; openShootoutDialog(null); }}>
+          <span class="plabel">Choose Models…</span>
+        </button>
+      </div>
+    </Popover>
     {#if assistants.length}
-      <button type="button" class="link" disabled={improving} title="Rewrite the prompt with {assistants[0]?.name} (vision model); never generates an image" onclick={() => void improve()}>{improving ? "✨ …" : "✨ Improve prompt"}</button>
+      <button type="button" class="icon-btn" disabled={improving} data-tip="Improve prompt with {assistants[0]?.name} (never makes an image)" aria-label="Improve prompt" onclick={() => void improve()}><Icon name="ai" size={14} /></button>
     {/if}
+    <span class="grow"></span>
     {#if cost}
-      <span class="cost" title={cost.note}>{provider?.local ? "free" : formatUsd(cost.usd, cost.approx)}</span>
-    {/if}
-    {#if provider && !provider.hasKey && !provider.keyOptional && hasTauri()}
-      <button type="button" class="link" onclick={() => openApiKeysDialog({ select: provider.id })}>Add {provider.name} key</button>
+      <span class="cost" title={cost.note}>{provider?.local ? "Free" : formatUsd(cost.usd, cost.approx)}</span>
     {/if}
   </div>
+  {#if provider && !provider.hasKey && !provider.keyOptional && hasTauri()}
+    <button type="button" class="textbtn keylink" onclick={() => openApiKeysDialog({ select: provider.id })}>Add a {provider.name} key…</button>
+  {/if}
 
   {#if notice}
     <p class="notice" class:error={notice.kind === "error"}>
-      {notice.text}
-      <button type="button" class="rm-notice" aria-label="Dismiss" onclick={() => (notice = null)}><X size={10} /></button>
+      <span>{notice.text}</span>
+      <button type="button" class="x" aria-label="Dismiss" onclick={() => (notice = null)}><Icon name="close-small" size={10} /></button>
     </p>
   {/if}
 
   {#if jobStore.jobs.length}
     <ul class="jobs" aria-label="Jobs">
       {#each jobStore.jobs.slice(0, 6) as job (job.id)}
+        {@const live = !TERMINAL.has(job.state)}
+        {@const frac = progressFraction(job)}
         <li class="job" class:failed={job.state === "failed"}>
-          <div class="job-head">
-            {#if !TERMINAL.has(job.state)}<LoaderCircle size={12} class="spin" />{/if}
-            <span class="job-prov">{job.providerName}</span>
-            <span class="job-state">{stateLabel(job)}</span>
-            <span class="muted">{elapsed(job)}</span>
-            <span class="grow"></span>
-            {#if !TERMINAL.has(job.state)}
-              <button type="button" class="link" onclick={() => void jobStore.cancel(job.id)}>Cancel</button>
+          <div class="jrow">
+            <span class="jprov">{job.providerName}</span>
+            <span class="jprompt" title={job.prompt}>{job.prompt}</span>
+            <span class="jstate">{stateLabel(job)} · {elapsed(job)}</span>
+            {#if live}
+              <button type="button" class="icon-btn sm" data-tip="Cancel" aria-label="Cancel job" onclick={() => void jobStore.cancel(job.id)}><Icon name="stop" size={10} /></button>
             {:else}
               {#if job.state === "completed" && job.docId}
-                <button type="button" class="icon" title="Toggle diff overlay" aria-label="Toggle diff overlay" onclick={() => showDiff(job)}><ScanEye size={13} /></button>
+                <button type="button" class="icon-btn sm" data-tip="Toggle diff overlay" aria-label="Toggle diff overlay" onclick={() => showDiff(job)}><Icon name="eye" size={12} /></button>
               {/if}
-              <button type="button" class="icon" title="Remove" aria-label="Remove job" onclick={() => jobStore.remove(job.id)}><X size={12} /></button>
+              <button type="button" class="icon-btn sm" data-tip="Remove" aria-label="Remove job" onclick={() => jobStore.remove(job.id)}><Icon name="close-small" size={10} /></button>
             {/if}
           </div>
-          <div class="job-prompt" title={job.prompt}>{job.prompt}</div>
+          <div class="bar" class:indet={live && frac === null} class:done={job.state === "completed"} class:bad={job.state === "failed"}>
+            <span style:width="{(frac ?? (live ? 0.3 : 1)) * 100}%"></span>
+          </div>
           {#if job.error}
-            <div class="job-err">
-              {job.error.title}
-              {#if job.error.hint}<span class="muted"> {job.error.hint}</span>{/if}
-            </div>
+            <div class="jerr">{job.error.title}{#if job.error.hint}{" "}<span class="dim">{job.error.hint}</span>{/if}</div>
           {/if}
           {#if job.state === "completed" && job.results && job.results.length > 1}
             <div class="variants">
               {#each previews[job.id] ?? [] as url, i (i)}
                 <button type="button" class="variant" class:added={job.applied.includes(i)} title="Add variant {i + 1} as a layer" onclick={() => void addVariant(job, i)}>
-                  {#if url}<img src={url} alt="Variant {i + 1}" />{:else}<span class="muted">{i + 1}</span>{/if}
+                  {#if url}<img src={url} alt="Variant {i + 1}" />{:else}<span class="dim">{i + 1}</span>{/if}
                 </button>
               {/each}
-              <button type="button" class="link" onclick={() => void applyAll(job.id)}>Add all</button>
+              <button type="button" class="textbtn" onclick={() => void applyAll(job.id)}>Add all</button>
             </div>
           {/if}
         </li>
       {/each}
     </ul>
   {/if}
-
-  <button type="button" class="disclosure" onclick={() => (aiUi.showAdvanced = !aiUi.showAdvanced)} aria-expanded={aiUi.showAdvanced}>
-    {#if aiUi.showAdvanced}<ChevronDown size={12} />{:else}<ChevronRight size={12} />{/if}
-    Advanced
-  </button>
-  {#if aiUi.showAdvanced}
-    <div class="grid">
-      <label class="field">
-        <span>Timeout (s)</span>
-        <input type="number" min="10" max="3600" step="10" bind:value={aiUi.timeoutSecs} />
-      </label>
-      <label class="field">
-        <span>Edge feather (px)</span>
-        <input type="number" min="0" max="64" step="1" bind:value={aiUi.feather} />
-      </label>
-    </div>
-  {/if}
 </div>
 
 <style>
   .ai {
-    --ok: #43d17a;
-    --magenta: #ff00c8;
     display: flex;
     flex-direction: column;
-    gap: 8px;
-    padding: 10px;
-    font-size: var(--fs-sm);
-    color: var(--fg-1);
-    overflow-y: auto;
-    min-height: 0;
     height: 100%;
+    min-height: 0;
+    overflow: hidden auto;
+    font-size: var(--fs-sm);
+    color: var(--ps-text);
   }
   .ai > * {
     flex: none;
   }
-
-  .icon {
-    display: inline-flex;
-    padding: 4px;
-    border-radius: var(--radius-sm);
-    color: var(--fg-2);
+  .top {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 6px 8px 4px;
   }
-  .icon:hover {
-    color: var(--fg-0);
-    background: var(--bg-3);
+  .frow {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    min-height: var(--row-h);
   }
-
-  .row,
-  .grid {
-    display: grid;
-    gap: 6px;
+  .flbl {
+    width: 52px;
+    flex: none;
+    color: var(--ps-text-dim);
   }
-  .grid {
-    grid-template-columns: 1fr 1fr;
-    align-items: end;
+  .flbl.q {
+    width: auto;
+    margin-left: 10px;
   }
-  .field {
+  .grow-field {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+  }
+  .grow-field :global(.wrap) {
+    flex: 1;
+    min-width: 0;
+  }
+  .grow-field :global(.sel) {
+    flex: 1;
+    min-width: 0;
+  }
+  .mode {
+    color: var(--ps-text);
+    cursor: help;
+  }
+  .flow {
+    padding-left: 56px;
+    color: var(--ps-text-disabled);
+    font-size: var(--fs-xs);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .textbtn {
+    color: var(--ps-text-dim);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    font-size: var(--fs-xs);
+  }
+  .textbtn:hover {
+    color: var(--ps-text);
+  }
+  .sec {
+    border-top: 1px solid var(--ps-border-dark);
+    box-shadow: inset 0 1px 0 var(--ps-border-light);
+  }
+  .sechead {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    width: 100%;
+    height: var(--row-h);
+    padding: 0 6px;
+    background: var(--ps-panel-head);
+    color: var(--ps-text);
+    text-align: left;
+  }
+  .sechead:hover {
+    background: var(--ps-hover);
+  }
+  .count {
+    margin-left: auto;
+    color: var(--ps-text-dim);
+    font-size: var(--fs-xs);
+    font-variant-numeric: tabular-nums;
+  }
+  .secbody {
     display: flex;
     flex-direction: column;
     gap: 3px;
-    min-width: 0;
+    padding: 5px 8px 7px;
   }
-  .field > span {
-    color: var(--fg-2);
-    font-size: var(--fs-xs);
+  .prompt {
+    width: 100%;
+    resize: vertical;
+    min-height: 60px;
+    line-height: 1.4;
+  }
+  .prompt.small {
+    min-height: 34px;
+  }
+  .chkrow {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 20px;
+  }
+  .dim {
+    color: var(--ps-text-disabled);
+  }
+  .refs {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px;
+  }
+  .refs.over {
+    box-shadow: inset 0 0 0 1px var(--ps-accent);
+  }
+  .ref {
+    position: relative;
+    width: 36px;
+    height: 36px;
+    border: 1px solid var(--ps-border-dark);
+    background: var(--ps-input);
+  }
+  .ref img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+  .rm {
+    position: absolute;
+    top: 0;
+    right: 0;
+    display: grid;
+    place-items: center;
+    width: 12px;
+    height: 12px;
+    background: var(--ps-panel);
+    color: var(--ps-text);
+  }
+  .addref {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    height: 22px;
+    padding: 0 4px;
+    color: var(--ps-text-dim);
+  }
+  .addref:hover {
+    color: var(--ps-text);
+    background: var(--ps-hover);
+  }
+  .run {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 8px;
+    border-top: 1px solid var(--ps-border-dark);
+    box-shadow: inset 0 1px 0 var(--ps-border-light);
+  }
+  .split {
+    display: inline-flex;
+  }
+  .runbtn {
+    min-width: 64px;
+    border-top-right-radius: 0;
+    border-bottom-right-radius: 0;
+  }
+  .caretbtn {
+    min-width: 0;
+    width: 18px;
+    padding: 0;
+    border-left: 1px solid #0d5bbd;
+    border-top-left-radius: 0;
+    border-bottom-left-radius: 0;
   }
   .grow {
     flex: 1;
   }
-  select,
-  input[type="number"] {
-    width: 100%;
-    font: inherit;
-    color: var(--fg-0);
-    background: var(--bg-2);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    padding: 4px 6px;
-  }
-  select:focus-visible,
-  input:focus-visible,
-  textarea:focus-visible {
-    outline: 2px solid var(--accent);
-    outline-offset: -1px;
-  }
-  .check {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    color: var(--fg-1);
-    padding-bottom: 4px;
-  }
-
-  .mode {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    flex-wrap: wrap;
-    padding: 6px 8px;
-    border-radius: var(--radius-md);
-    background: var(--bg-2);
-    border: 1px solid var(--border);
-  }
-  .badge {
-    padding: 1px 7px;
-    border-radius: 999px;
-    font-weight: 600;
-    color: var(--bg-0);
-    background: var(--fg-1);
-  }
-  .badge.gen {
-    background: var(--accent);
-    color: #fff;
-  }
-  .badge.mask {
-    background: var(--magenta);
-    color: #fff;
-  }
-  .badge.instr {
-    background: var(--accent-2);
-    color: var(--bg-0);
-  }
-  .emu {
-    padding: 1px 6px;
-    border-radius: 999px;
-    border: 1px dashed var(--accent-2);
-    color: var(--accent-2);
-    font-size: var(--fs-xs);
-  }
-  .flow {
-    color: var(--fg-2);
-    font-size: var(--fs-xs);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  .prompt {
-    width: 100%;
-    resize: vertical;
-    font: inherit;
-    font-size: var(--fs-md);
-    line-height: 1.45;
-    color: var(--fg-0);
-    background: var(--bg-0);
-    border: 1px solid var(--border-strong);
-    border-radius: var(--radius-md);
-    padding: 8px 10px;
-    user-select: text;
-    -webkit-user-select: text;
-  }
-  .prompt.small {
-    font-size: var(--fs-sm);
-  }
-  .prompt::placeholder {
-    color: var(--fg-2);
-  }
-
-  .empty {
-    margin: 0;
-    color: var(--fg-2);
-    line-height: 1.5;
-  }
-
-  .disclosure {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    color: var(--fg-2);
-    font-size: var(--fs-xs);
-    align-self: flex-start;
-  }
-  .disclosure:hover {
-    color: var(--fg-0);
-  }
-
-  .refs {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-    align-items: center;
-    min-height: 40px;
-    padding: 6px;
-    border: 1px dashed var(--border-strong);
-    border-radius: var(--radius-md);
-  }
-  .refs.over {
-    border-color: var(--accent);
-    background: var(--accent-soft);
-  }
-  .ref {
-    position: relative;
-    width: 40px;
-    height: 40px;
-    border-radius: var(--radius-sm);
-    overflow: hidden;
-    background: var(--bg-2);
-  }
-  .ref img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-    display: block;
-  }
-  .rm {
-    position: absolute;
-    top: 1px;
-    right: 1px;
-    display: inline-flex;
-    padding: 2px;
-    border-radius: 50%;
-    background: rgba(0, 0, 0, 0.7);
-    color: #fff;
-  }
-  .add {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    color: var(--fg-2);
-    padding: 4px 6px;
-    border-radius: var(--radius-sm);
-  }
-  .add:hover {
-    color: var(--fg-0);
-    background: var(--bg-2);
-  }
-
-  .run {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-  }
-  .primary {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 6px 14px;
-    border-radius: var(--radius-md);
-    background: var(--accent);
-    color: #fff;
-    font-weight: 600;
-    box-shadow: var(--shadow-1);
-  }
-  .primary:hover:not(:disabled) {
-    box-shadow: var(--glow-accent);
-  }
-  .primary:disabled {
-    opacity: 0.45;
-  }
   .cost {
-    font-family: var(--font-mono);
-    color: var(--fg-1);
+    color: var(--ps-text-dim);
+    font-variant-numeric: tabular-nums;
   }
-  .link {
-    color: var(--accent-2);
-    font-size: var(--fs-xs);
+  .keylink {
+    align-self: flex-start;
+    margin: -2px 8px 4px;
   }
-  .link:hover {
-    text-decoration: underline;
-  }
-
   .notice {
-    position: relative;
-    margin: 0;
-    padding: 6px 24px 6px 8px;
-    border-radius: var(--radius-sm);
-    background: var(--bg-2);
-    border-left: 2px solid var(--accent-2);
-    color: var(--fg-0);
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    margin: 0 8px 6px;
+    padding: 4px 6px;
+    background: var(--ps-input);
+    border: 1px solid var(--ps-border-dark);
+    color: var(--ps-text);
+  }
+  .notice span {
+    flex: 1;
   }
   .notice.error {
-    border-left-color: var(--danger);
+    color: #ff9a9a;
   }
-  .rm-notice {
-    position: absolute;
-    top: 6px;
-    right: 6px;
-    color: var(--fg-2);
-    display: inline-flex;
+  .x {
+    display: grid;
+    place-items: center;
+    width: 14px;
+    height: 14px;
+    color: var(--ps-text-dim);
   }
-
   .jobs {
     list-style: none;
     margin: 0;
     padding: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
+    border-top: 1px solid var(--ps-border-dark);
   }
   .job {
-    padding: 6px 8px;
-    border-radius: var(--radius-sm);
-    background: var(--bg-2);
-    border: 1px solid var(--border);
+    padding: 2px 8px 4px;
+    border-bottom: 1px solid var(--ps-border-dark);
   }
-  .job.failed {
-    border-color: rgba(255, 92, 122, 0.4);
-  }
-  .job-head {
+  .jrow {
     display: flex;
     align-items: center;
     gap: 6px;
+    height: 20px;
   }
-  .job-prov {
-    font-weight: 600;
-    color: var(--fg-0);
+  .jprov {
+    flex: none;
+    color: var(--ps-text);
   }
-  .job-state {
-    color: var(--fg-1);
-  }
-  .job-prompt {
-    color: var(--fg-2);
-    white-space: nowrap;
+  .jprompt {
+    flex: 1;
+    min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
-    margin-top: 2px;
+    white-space: nowrap;
+    color: var(--ps-text-dim);
   }
-  .job-err {
-    margin-top: 4px;
-    color: var(--danger);
-  }
-  .variants {
-    display: flex;
-    gap: 4px;
-    margin-top: 6px;
-    align-items: center;
-    flex-wrap: wrap;
-  }
-  .variant {
-    width: 48px;
-    height: 48px;
-    border-radius: var(--radius-sm);
-    overflow: hidden;
-    background: var(--bg-3);
-    border: 2px solid transparent;
-  }
-  .variant img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-    display: block;
-  }
-  .variant:hover {
-    border-color: var(--accent);
-  }
-  .variant.added {
-    border-color: var(--ok);
-  }
-  .muted {
-    color: var(--fg-2);
-  }
-  .small-text {
+  .jstate {
+    flex: none;
+    color: var(--ps-text-dim);
     font-size: var(--fs-xs);
+    font-variant-numeric: tabular-nums;
   }
-
-  :global(.ai .spin) {
-    animation: ai-spin 0.9s linear infinite;
+  .icon-btn.sm {
+    width: 16px;
+    height: 16px;
   }
-  @keyframes ai-spin {
+  .bar {
+    position: relative;
+    height: 2px;
+    background: var(--ps-input);
+    overflow: hidden;
+  }
+  .bar span {
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    background: var(--ps-accent);
+  }
+  .bar.done span {
+    background: var(--ps-text-disabled);
+  }
+  .bar.bad span {
+    background: var(--ps-danger);
+  }
+  .bar.indet span {
+    animation: ai-indet 1.2s linear infinite;
+  }
+  @keyframes ai-indet {
+    from {
+      transform: translateX(-100%);
+    }
     to {
-      transform: rotate(360deg);
+      transform: translateX(340%);
     }
   }
   @media (prefers-reduced-motion: reduce) {
-    :global(.ai .spin) {
+    .bar.indet span {
       animation: none;
     }
+  }
+  .jerr {
+    padding-top: 2px;
+    color: #ff9a9a;
+  }
+  .variants {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 3px;
+    padding-top: 4px;
+  }
+  .variant {
+    width: 40px;
+    height: 40px;
+    border: 1px solid var(--ps-border-dark);
+    background: var(--ps-input);
+  }
+  .variant img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+  .variant:hover {
+    border-color: var(--ps-text);
+  }
+  .variant.added {
+    outline: 1px solid var(--ps-accent);
+    outline-offset: -1px;
+  }
+  .pmenu {
+    display: flex;
+    flex-direction: column;
+    padding: 2px 0;
+  }
+  .pitem {
+    display: flex;
+    align-items: center;
+    height: 22px;
+    padding: 0 12px 0 16px;
+    text-align: left;
+    white-space: nowrap;
+    color: var(--ps-text);
+  }
+  .pitem:hover:not(:disabled) {
+    background: var(--ps-row-selected);
+  }
+  .pitem:disabled {
+    color: var(--ps-text-disabled);
+  }
+  .plabel {
+    flex: 1;
+    padding-right: 20px;
+  }
+  .psc {
+    color: var(--ps-text-dim);
   }
 </style>
