@@ -258,7 +258,9 @@
       // Keep the user's edits for sizes; adopt what the probe could tell.
       draft.capabilities = { ...draft.capabilities, generate: r.detectedCaps.generate, instructEdit: r.detectedCaps.instructEdit, maskEdit: r.detectedCaps.maskEdit };
     }
-    result = r.reachable ? { ok: !r.authFailed, text: fetchedModels && !r.models.length ? `${r.message} No models reported.` : r.message } : { ok: false, text: `Not reachable: ${r.message}` };
+    // A reachable server can still reject the request (e.g. a malformed model id): show ✕.
+    const rejected = /^(invalid request|error|bad request)\b/i.test(r.message);
+    result = r.reachable ? { ok: !r.authFailed && !rejected, text: fetchedModels && !r.models.length ? `${r.message} No models reported.` : r.message } : { ok: false, text: `Not reachable: ${r.message}` };
   }
   async function probeDraft(fetchModels: boolean): Promise<void> {
     if (!draft) return;

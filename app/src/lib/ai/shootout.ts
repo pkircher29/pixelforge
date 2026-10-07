@@ -202,6 +202,7 @@ export class ShootoutSession {
       } catch {
         this.originalThumb = null;
       }
+      this.bump(); // the "Original" column fills in as soon as its thumbnail exists
     }
     if (open) {
       const first = this.columns[0]?.provider;

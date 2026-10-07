@@ -71,6 +71,15 @@
     void version;
     return (session?.columns ?? []).map((c) => ({ ...c, cards: c.cards.map((k) => ({ ...k })) }));
   });
+  // Class-instance fields aren't reactive: read them through `version`.
+  const sessionDone = $derived.by(() => {
+    void version;
+    return session?.done ?? false;
+  });
+  const originalThumb = $derived.by(() => {
+    void version;
+    return session?.originalThumb ?? null;
+  });
   const selectedKeys = $derived(Object.entries(selected).filter(([, v]) => v).map(([k]) => k));
   const gridCols = $derived((session?.isEdit ? 1 : 0) + columns.length);
 
@@ -186,13 +195,13 @@
 <svelte:window onkeydown={onKey} />
 
 <div class="scrim" role="presentation" onclick={(e) => e.target === e.currentTarget && props.onclose()}>
-  <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="shootout-title">
+  <div class="dialog" class:wide={!!session} role="dialog" aria-modal="true" aria-labelledby="shootout-title">
     <header>
       <h2 id="shootout-title">Generate with all models</h2>
       {#if session}
         <span class="muted">{session.mode === "generate" ? "Generate" : session.mode === "mask" ? "Mask edit" : "Instruct edit"} · {columns.length} provider{columns.length === 1 ? "" : "s"} · "{session.request.prompt.slice(0, 60)}"</span>
       {/if}
-      <button type="button" class="icon" aria-label="Close" onclick={props.onclose}>✕</button>
+      <button type="button" class="icon close" aria-label="Close" onclick={props.onclose}>✕</button>
     </header>
 
     {#if !session}
@@ -225,7 +234,7 @@
           <div class="col">
             <div class="head"><span class="pname">Original</span><span class="muted">input</span></div>
             <div class="card static">
-              {#if session.originalThumb}<img src={session.originalThumb} alt="Original composite" />{:else}<span class="muted">…</span>{/if}
+              {#if originalThumb}<img src={originalThumb} alt="Original composite" />{:else}<span class="muted">…</span>{/if}
             </div>
           </div>
         {/if}
@@ -267,12 +276,12 @@
         {/each}
       </div>
       <footer>
-        <span class="muted">{selectedKeys.length} selected{session.done ? "" : " · still running"}</span>
+        <span class="muted">{selectedKeys.length} selected{sessionDone ? "" : " · still running"}</span>
         <span class="grow"></span>
         {#if notice}<span class="notice">{notice}</span>{/if}
         <button type="button" class="btn primary" disabled={busy || !selectedKeys.length || session.docId === null} title={session.docId === null ? "No document open: use Keep as new documents" : ""} onclick={keepLayers}>Keep as layers</button>
         <button type="button" class="btn" disabled={busy || !selectedKeys.length} onclick={keepDocs}>Keep as new documents</button>
-        <button type="button" class="btn" disabled={busy || !session.done} title="Keep the selection as layers, re-roll everything else" onclick={keepRerun}>Keep &amp; re-run unselected</button>
+        <button type="button" class="btn" disabled={busy || !sessionDone} title="Keep the selection as layers, re-roll everything else" onclick={keepRerun}>Keep &amp; re-run unselected</button>
         <button type="button" class="btn danger" disabled={busy} onclick={discard}>Discard</button>
       </footer>
     {/if}
@@ -297,6 +306,8 @@
 <style>
   .scrim { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; background: rgba(0, 0, 0, 0.55); }
   .dialog { position: relative; width: min(1100px, calc(100vw - 24px)); max-height: calc(100vh - 24px); display: flex; flex-direction: column; background: var(--bg-1); border: 1px solid var(--border-strong); box-shadow: 0 4px 12px rgba(0, 0, 0, 0.6); color: var(--fg-1); font-size: 11px; }
+  /* The gallery uses the window: one column per provider should fit without scrolling. */
+  .dialog.wide { width: min(1760px, calc(100vw - 48px)); }
   header { display: flex; align-items: center; gap: 10px; height: 28px; padding: 0 8px 0 10px; border-bottom: 1px solid var(--border); }
   h2 { margin: 0; font-size: 12px; font-weight: 600; color: var(--fg-0); white-space: nowrap; }
   header .muted { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -320,11 +331,12 @@
   .meta { display: flex; gap: 6px; font-size: 10px; color: var(--fg-2); white-space: nowrap; overflow: hidden; }
   .meta span:first-child { overflow: hidden; text-overflow: ellipsis; flex: 1; }
   .err { font-size: 10px; color: var(--danger, #ff5c7a); overflow: hidden; text-overflow: ellipsis; }
-  .card { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 160px; background: var(--bg-0); border: 1px solid var(--border); }
+  .card { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 200px; background: var(--bg-0); border: 1px solid var(--border); }
   .card.on { border-color: var(--accent); }
   .card.kept { opacity: 0.75; }
-  .card.static { min-height: 160px; }
-  .card img { display: block; max-width: 100%; max-height: 160px; object-fit: contain; transition: transform 80ms; }
+  .card.static { min-height: 200px; }
+  .icon.close { margin-left: auto; }
+  .card img { display: block; max-width: 100%; max-height: 220px; object-fit: contain; transition: transform 80ms; }
   .img { display: block; width: 100%; padding: 0; background: none; cursor: zoom-in; }
   .img:hover img { transform: scale(1.4); position: relative; z-index: 3; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.6); }
   .pick { position: absolute; left: 4px; bottom: 4px; display: inline-flex; align-items: center; gap: 4px; padding: 1px 5px; background: rgba(0, 0, 0, 0.65); color: #fff; border-radius: 2px; font-size: 10px; }
