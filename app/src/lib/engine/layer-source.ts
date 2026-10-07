@@ -17,6 +17,7 @@ import { Raster } from "./raster";
 import type { Document, FillLayer, Layer, LayerId } from "./types";
 import { applyMaskToRaster, effectExtent, hasEnabledEffects, renderLayerStyle } from "./ops/effects";
 import { renderFill } from "./ops/fill";
+import { renderMask } from "./mask-render";
 
 /** Pixel layers carry their own raster; fill layers render one on demand. */
 export function layerHasPixels(layer: Layer): boolean {
@@ -92,7 +93,7 @@ interface ClipEntry {
 
 function styleKey(doc: Document, layer: Layer, src: LayerSource): string {
   // Object identities become stable tokens via a per-cache registry.
-  return `${doc.width}x${doc.height}|${layer.fillOpacity}|${layer.maskEnabled ? 1 : 0}|${src.offset.x},${src.offset.y}`;
+  return `${doc.width}x${doc.height}|${layer.fillOpacity}|${layer.maskEnabled ? 1 : 0}|${layer.maskDensity}|${layer.maskFeather}|${src.offset.x},${src.offset.y}`;
 }
 
 /**
@@ -103,6 +104,7 @@ function styleKey(doc: Document, layer: Layer, src: LayerSource): string {
 export class StyleCache {
   private readonly styles = new Map<LayerId, StyleEntry>();
   private readonly clips = new Map<LayerId, ClipEntry>();
+  private readonly masks = new Map<LayerId, { key: string; raster: Raster }>();
   private readonly ids = new WeakMap<object, number>();
   private nextId = 1;
 
@@ -120,17 +122,31 @@ export class StyleCache {
   invalidate(layerId: LayerId): void {
     this.styles.delete(layerId);
     this.clips.delete(layerId);
+    this.masks.delete(layerId);
   }
 
   clear(): void {
     this.styles.clear();
     this.clips.clear();
+    this.masks.clear();
   }
 
   /** Drop entries for layers that no longer exist. */
   retain(ids: ReadonlySet<LayerId>): void {
     for (const id of this.styles.keys()) if (!ids.has(id)) this.styles.delete(id);
     for (const id of this.clips.keys()) if (!ids.has(id)) this.clips.delete(id);
+    for (const id of this.masks.keys()) if (!ids.has(id)) this.masks.delete(id);
+  }
+
+  /** Effective mask shared by pixels, groups, adjustments, effects and clipping. */
+  mask(layer: Layer): Raster | null {
+    if (!maskActive(layer)) return null;
+    const key = `${this.token(layer.mask)}|${layer.maskDensity}|${layer.maskFeather}`;
+    const hit = this.masks.get(layer.id);
+    if (hit?.key === key) return hit.raster;
+    const raster = renderMask(layer.mask!, layer.maskDensity, layer.maskFeather);
+    this.masks.set(layer.id, { key, raster });
+    return raster;
   }
 
   /**
@@ -144,7 +160,8 @@ export class StyleCache {
     const key = `${styleKey(doc, layer, src)}|${this.token(src.raster)}|${this.token(layer.mask)}|${this.token(layer.effects)}|${JSON.stringify(layer.effects)}`;
     const hit = this.styles.get(layer.id);
     if (hit && hit.key === key) return { raster: hit.raster, offset: hit.offset, styled: true, extent: hit.extent };
-    const masked = maskActive(layer) ? applyMaskToRaster(src.raster, layer.mask!) : src.raster;
+    const mask = this.mask(layer);
+    const masked = mask ? applyMaskToRaster(src.raster, mask) : src.raster;
     const styled = renderLayerStyle(masked, layer.effects!, layer.fillOpacity);
     const entry: StyleEntry = {
       key,
@@ -164,7 +181,7 @@ export class StyleCache {
    */
   clipAlpha(doc: Document, base: Layer): Uint8Array {
     const src = layerSource(doc, base);
-    const key = `${doc.width}x${doc.height}|${this.token(src?.raster ?? null)}|${this.token(base.mask)}|${base.maskEnabled ? 1 : 0}|${base.offset.x},${base.offset.y}`;
+    const key = `${doc.width}x${doc.height}|${this.token(src?.raster ?? null)}|${this.token(base.mask)}|${base.maskEnabled ? 1 : 0}|${base.maskDensity}|${base.maskFeather}|${base.offset.x},${base.offset.y}`;
     const hit = this.clips.get(base.id);
     if (hit && hit.key === key) return hit.alpha;
     const alpha = new Uint8Array(doc.width * doc.height);
@@ -172,7 +189,7 @@ export class StyleCache {
       alpha.fill(255);
     } else {
       const r = src.raster;
-      const m = maskActive(base) ? base.mask : null;
+      const m = this.mask(base);
       const area = Rect.intersect(Rect.make(src.offset.x, src.offset.y, r.width, r.height), Rect.ofSize(doc.width, doc.height));
       for (let y = area.y; y < area.y + area.h; y++) {
         for (let x = area.x; x < area.x + area.w; x++) {

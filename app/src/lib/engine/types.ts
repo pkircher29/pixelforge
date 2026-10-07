@@ -169,6 +169,10 @@ export interface LayerBase {
   mask: Raster | null;
   /** False = mask temporarily disabled (Shift-click, red X). The mask is kept. */
   maskEnabled: boolean;
+  /** Render-only mask strength, 0 = reveal all, 1 = painted mask. */
+  maskDensity: number;
+  /** Render-only Gaussian feather radius in document pixels (0..250). */
+  maskFeather: number;
   /** Chain icon: the Move tool moves layer and mask together. */
   maskLinked: boolean;
   /** Clipping mask: this layer is clipped by the base below it (Alt-click between rows). */
@@ -490,6 +494,8 @@ export interface LayerProps {
   passThrough: boolean;
   fillOpacity: number;
   maskEnabled: boolean;
+  maskDensity: number;
+  maskFeather: number;
   maskLinked: boolean;
   clipToBelow: boolean;
   color: LayerColor | null;

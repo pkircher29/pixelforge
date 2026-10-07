@@ -15,6 +15,8 @@ interface LayerState {
   offset: Point;
   mask: Raster | null;
   maskEnabled: boolean;
+  maskDensity: number;
+  maskFeather: number;
   opacity: number;
   fillOpacity: number;
   blendMode: BlendMode;
@@ -48,6 +50,8 @@ function snapshot(doc: Document): DocSnapshot {
       offset: { x: l.offset.x, y: l.offset.y },
       mask: l.mask,
       maskEnabled: l.maskEnabled,
+      maskDensity: l.maskDensity,
+      maskFeather: l.maskFeather,
       opacity: l.opacity,
       fillOpacity: l.fillOpacity,
       blendMode: l.blendMode,
@@ -91,6 +95,8 @@ function restore(doc: Document, s: DocSnapshot): void {
     l.offset = { x: st.offset.x, y: st.offset.y };
     l.mask = st.mask;
     l.maskEnabled = st.maskEnabled;
+    l.maskDensity = st.maskDensity;
+    l.maskFeather = st.maskFeather;
     l.opacity = st.opacity;
     l.fillOpacity = st.fillOpacity;
     l.blendMode = st.blendMode;

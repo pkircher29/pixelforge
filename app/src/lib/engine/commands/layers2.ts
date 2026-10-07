@@ -8,7 +8,8 @@ import { Raster } from "../raster";
 import { Selection } from "../selection";
 import { getLayer, getPixelLayer, rerasterizeShape, rerasterizeText, setLayerProps, layerDocRect, findLayer } from "../document";
 import { assertEditable } from "../locks";
-import { cloneEffects } from "../ops/effects";
+import { cloneEffects, applyMaskToRaster } from "../ops/effects";
+import { renderMask } from "../mask-render";
 import { invalidateFillLayer } from "../layer-source";
 import type { ParamValues } from "../ops/types";
 import type {
@@ -80,6 +81,8 @@ export class SetLayerMaskCommand implements Command {
   private readonly next: Raster | null;
   private prev: Raster | null | undefined;
   private prevEnabled = true;
+  private prevDensity = 1;
+  private prevFeather = 0;
 
   constructor(layerId: LayerId, mask: Raster | null, label?: string) {
     this.layerId = layerId;
@@ -92,8 +95,14 @@ export class SetLayerMaskCommand implements Command {
     if (this.prev === undefined) {
       this.prev = l.mask;
       this.prevEnabled = l.maskEnabled;
+      this.prevDensity = l.maskDensity;
+      this.prevFeather = l.maskFeather;
     }
     l.mask = this.next;
+    if (!this.next || !this.prev) {
+      l.maskDensity = 1;
+      l.maskFeather = 0;
+    }
     if (this.next) l.maskEnabled = true;
     doc.dirty = true;
   }
@@ -102,6 +111,8 @@ export class SetLayerMaskCommand implements Command {
     const l = getLayer(doc, this.layerId);
     l.mask = this.prev ?? null;
     l.maskEnabled = this.prevEnabled;
+    l.maskDensity = this.prevDensity;
+    l.maskFeather = this.prevFeather;
     doc.dirty = true;
   }
 
@@ -114,7 +125,7 @@ export class SetLayerMaskCommand implements Command {
 export class ApplyMaskCommand implements Command {
   readonly label = "Apply Layer Mask";
   readonly layerId: LayerId;
-  private prev: { raster: Raster; mask: Raster | null; enabled: boolean } | null = null;
+  private prev: { raster: Raster; mask: Raster | null; enabled: boolean; density: number; feather: number } | null = null;
   private next: Raster | null = null;
 
   constructor(layerId: LayerId) {
@@ -126,19 +137,14 @@ export class ApplyMaskCommand implements Command {
     assertEditable(l, "pixels");
     if (!l.mask) return;
     if (!this.prev) {
-      this.prev = { raster: l.raster, mask: l.mask, enabled: l.maskEnabled };
-      const out = l.raster.clone();
-      if (l.maskEnabled) {
-        const d = out.data;
-        const m = l.mask.data;
-        const n = Math.min(d.length, m.length);
-        for (let i = 0; i < n; i += 4) d[i + 3] = (d[i + 3]! * m[i]!) / 255;
-      }
-      this.next = out;
+      this.prev = { raster: l.raster, mask: l.mask, enabled: l.maskEnabled, density: l.maskDensity, feather: l.maskFeather };
+      this.next = l.maskEnabled ? applyMaskToRaster(l.raster, renderMask(l.mask, l.maskDensity, l.maskFeather)) : l.raster.clone();
     }
     l.raster = this.next!;
     l.mask = null;
     l.maskEnabled = true;
+    l.maskDensity = 1;
+    l.maskFeather = 0;
     doc.dirty = true;
   }
 
@@ -148,6 +154,8 @@ export class ApplyMaskCommand implements Command {
     l.raster = this.prev.raster;
     l.mask = this.prev.mask;
     l.maskEnabled = this.prev.enabled;
+    l.maskDensity = this.prev.density;
+    l.maskFeather = this.prev.feather;
     doc.dirty = true;
   }
 

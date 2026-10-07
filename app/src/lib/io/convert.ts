@@ -209,6 +209,8 @@ export interface ManifestLayer {
   // ---- format 2 (all optional for format-1 readers/writers)
   fill_opacity?: number;
   mask_enabled?: boolean;
+  mask_density?: number;
+  mask_feather?: number;
   mask_linked?: boolean;
   clip_to_below?: boolean;
   lock?: LayerLock;
@@ -433,6 +435,8 @@ export function documentFromProjectFrame(frame: Frame<ProjectHeader>): Document 
       blendMode: blendFromFile(e.blend_mode),
       fillOpacity: typeof e.fill_opacity === "number" ? unit(e.fill_opacity) : 1,
       maskEnabled: e.mask_enabled !== false,
+      maskDensity: typeof e.mask_density === "number" && Number.isFinite(e.mask_density) ? unit(e.mask_density) : 1,
+      maskFeather: typeof e.mask_feather === "number" && Number.isFinite(e.mask_feather) ? Math.max(0, Math.min(250, e.mask_feather)) : 0,
       maskLinked: e.mask_linked !== false,
       clipToBelow: e.clip_to_below === true,
       lock: lockFromFile(e.lock, e.locked ?? false),
@@ -585,6 +589,8 @@ export function projectFrameParts(
     locked: l.locked || l.lock.all,
     fill_opacity: l.fillOpacity,
     mask_enabled: l.maskEnabled,
+    mask_density: l.maskDensity,
+    mask_feather: l.maskFeather,
     mask_linked: l.maskLinked,
     clip_to_below: l.clipToBelow,
     lock: { ...l.lock },

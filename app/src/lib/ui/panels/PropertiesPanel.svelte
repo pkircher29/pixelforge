@@ -3,7 +3,7 @@
    * Properties panel — context-sensitive like Photoshop: pixel layer (Transform with
    * W/H/X/Y, flip / rotate, align), adjustment layer (the op's parameters as live
    * sliders + the PS footer: clip, view previous state, reset, visibility, delete),
-   * fill layer, mask (Density / Feather, applied with Apply), type layer, shape layer,
+   * fill layer, mask (non-destructive Density / Feather), type layer, shape layer,
    * and the document when nothing is selected.
    */
   import {
@@ -36,7 +36,7 @@
   import PsSelect from "../controls/PsSelect.svelte";
   import Segmented from "../controls/Segmented.svelte";
   import { layersUi } from "./Layers.store.svelte";
-  import { propertiesContext, CONTEXT_TITLE, visibleAdjustmentParams, adjustmentDefaults, paramNumber, adjustmentModified, processMask, invertMask, resizedRaster } from "./Properties.model";
+  import { propertiesContext, CONTEXT_TITLE, visibleAdjustmentParams, adjustmentDefaults, paramNumber, adjustmentModified, invertMask, resizedRaster } from "./Properties.model";
   import { rgbaToHex, hexToRgba } from "../dialogs/layer-style-model";
   import { TEXT_FAMILIES } from "$lib/tools/paint/text";
 
@@ -108,17 +108,14 @@
   let density = $state(100);
   let feather = $state(0);
   $effect(() => {
-    void view?.layer?.id;
-    density = 100;
-    feather = 0;
+    void view?.tick;
+    density = (view?.layer?.maskDensity ?? 1) * 100;
+    feather = view?.layer?.maskFeather ?? 0;
   });
-  function applyMaskEdits() {
+  function setMaskParam(key: "maskDensity" | "maskFeather", value: number) {
     const l = view?.layer;
     if (!l?.mask) return;
-    if (density === 100 && feather === 0) return;
-    docStore.exec(new SetLayerMaskCommand(l.id, processMask(l.mask, density / 100, feather), "Mask Density / Feather"));
-    density = 100;
-    feather = 0;
+    docStore.exec(new SetLayerPropsCommand(l.id, { [key]: value }));
   }
   function invert() {
     const l = view?.layer;
@@ -297,21 +294,20 @@
         <div class="row"><span class="lbl">Layer Mask</span><span class="val">{l.name}</span></div>
         <div class="prow">
           <span class="plbl">Density</span>
-          <span class="pval mono">{density}%</span>
-          <input class="prange" type="range" min="0" max="100" bind:value={density} aria-label="Density" />
+          <span class="pval mono">{Math.round(density)}%</span>
+          <input class="prange" type="range" min="0" max="100" bind:value={density} oninput={(e) => setMaskParam("maskDensity", e.currentTarget.valueAsNumber / 100)} aria-label="Density" />
         </div>
         <div class="prow">
           <span class="plbl">Feather</span>
           <span class="pval mono">{feather} px</span>
-          <input class="prange" type="range" min="0" max="100" step="0.5" bind:value={feather} aria-label="Feather" />
+          <input class="prange" type="range" min="0" max="250" step="0.5" bind:value={feather} oninput={(e) => setMaskParam("maskFeather", e.currentTarget.valueAsNumber)} aria-label="Feather" />
         </div>
         <div class="btns">
-          <button type="button" class="btn" disabled={density === 100 && feather === 0} onclick={applyMaskEdits}>Apply</button>
           <button type="button" class="btn" disabled>Select and Mask…</button>
           <button type="button" class="btn" disabled>Color Range…</button>
           <button type="button" class="btn" onclick={invert}>Invert</button>
         </div>
-        <p class="hint">Density and Feather are applied to the mask pixels when you click Apply.</p>
+        <p class="hint">Density and Feather preserve the painted mask. Set Density to 100% and Feather to 0 px to restore its original appearance.</p>
       </section>
       <footer class="foot">
         <button type="button" class="icon-btn" data-tip="Load selection from mask" aria-label="Load selection from mask" onclick={() => { const s = loadMaskAsSelection(doc, l.id); if (s) docStore.exec(new SetSelectionCommand(s, "Load Selection")); }}><Icon name="marquee-rect" size={14} /></button>

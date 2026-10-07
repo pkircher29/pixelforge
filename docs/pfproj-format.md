@@ -61,6 +61,8 @@ manifest's `file` / `mask` / `channels[].file` / `selection.file` / `thumbnail` 
       // ---- format 2 (all optional; defaults in parentheses)
       "fill_opacity": 1.0,             // PS "Fill": pixels only, not effects (1.0)
       "mask_enabled": true,            // false = mask kept but disabled (true)
+      "mask_density": 1.0,             // non-destructive mask strength, 0..1 (1)
+      "mask_feather": 0.0,             // non-destructive Gaussian radius, 0..250 px (0)
       "mask_linked": true,             // move tool moves layer and mask together (true)
       "clip_to_below": false,          // clipping mask (false)
       "lock": { "transparent": false, "pixels": false, "position": false, "all": false },
@@ -151,7 +153,8 @@ light, hard mix, ...) become `normal`, and `darker color` / `lighter color` beco
 `normal`, `visible` → true, `locked` → false, `layers` → `[]`, `ai_history` → `[]`,
 `app_version` / `created` / `modified` → `""`.
 
-Format-2 fields: `fill_opacity` → 1, `mask_enabled` / `mask_linked` → true,
+Format-2 fields: `fill_opacity` / `mask_density` → 1, `mask_feather` → 0,
+`mask_enabled` / `mask_linked` → true,
 `clip_to_below` → false, `lock` → all false (`locked: true` sets `lock.all`), `linked_to`
 → `[]`, `color` / `effects` → null, `pass_through` → true, `channels` / `paths` → `[]`,
 `work_path` → null. A `shape` / `text` / `fill` / `adjustment` entry whose spec is

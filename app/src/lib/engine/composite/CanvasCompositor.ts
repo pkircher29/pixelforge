@@ -32,7 +32,7 @@ function css(c: [number, number, number]): string {
 }
 
 function propsOf(l: Layer): string {
-  let s = `${l.opacity}|${l.fillOpacity}|${l.blendMode}|${l.visible ? 1 : 0}|${l.clipToBelow ? 1 : 0}|${l.maskEnabled ? 1 : 0}|${l.offset.x},${l.offset.y}`;
+  let s = `${l.opacity}|${l.fillOpacity}|${l.blendMode}|${l.visible ? 1 : 0}|${l.clipToBelow ? 1 : 0}|${l.maskEnabled ? 1 : 0}|${l.maskDensity}|${l.maskFeather}|${l.offset.x},${l.offset.y}`;
   if (l.effects) s += `|fx:${JSON.stringify(l.effects)}`;
   if (l.kind === "adjustment") s += `|adj:${l.op}:${JSON.stringify(l.params)}`;
   if (l.kind === "fill") s += `|fill`;

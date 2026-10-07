@@ -134,7 +134,7 @@ const CONTEXT_ATTRS: WebGLContextAttributes = {
 const QUICK_MASK_ID = "@quickmask";
 
 function layerProps(l: Layer): string {
-  let s = `${l.opacity}|${l.fillOpacity}|${l.blendMode}|${l.visible ? 1 : 0}|${l.parentId ?? ""}|${l.clipToBelow ? 1 : 0}|${l.maskEnabled ? 1 : 0}|${l.offset.x},${l.offset.y}`;
+  let s = `${l.opacity}|${l.fillOpacity}|${l.blendMode}|${l.visible ? 1 : 0}|${l.parentId ?? ""}|${l.clipToBelow ? 1 : 0}|${l.maskEnabled ? 1 : 0}|${l.maskDensity}|${l.maskFeather}|${l.offset.x},${l.offset.y}`;
   if (l.effects) s += `|fx:${JSON.stringify(l.effects)}`;
   if (l.kind === "adjustment") s += `|adj:${l.op}:${JSON.stringify(l.params)}`;
   if (l.kind === "group") s += `|pt:${l.passThrough ? 1 : 0}`;
@@ -566,7 +566,7 @@ export class GlCompositor implements ICompositor {
         }
         // A group's mask is applied at composite time from the CPU raster → treat as a
         // layer texture only when needed (handled in compositeGroup via lerp/blend).
-        if (layer.mask !== (this.layers.get(layer.id)?.mask ?? null) || this.dirty.peek(layer.id) !== undefined) {
+        if (this.styles.mask(layer) !== (this.layers.get(layer.id)?.mask ?? null) || this.dirty.peek(layer.id) !== undefined) {
           this.dirty.take(layer.id);
           this.syncMask(layer, this.ensureGroupEntry(layer));
           change(full, ti);
@@ -629,7 +629,7 @@ export class GlCompositor implements ICompositor {
       }
       // Layer mask texture (only needed when the source is not already styled).
       if (!e.styled && maskActive(layer)) {
-        if (layer.mask !== e.mask || dirtyRegion !== undefined) {
+        if (this.styles.mask(layer) !== e.mask || dirtyRegion !== undefined) {
           this.syncMask(layer, e);
           change(docRect, ti);
         }
@@ -719,19 +719,20 @@ export class GlCompositor implements ICompositor {
 
   private syncMask(layer: Layer, e: LayerGpu): void {
     const gl = this.gl;
-    if (layer.mask) {
-      if (e.maskTex && e.mask && e.mask.width === layer.mask.width && e.mask.height === layer.mask.height) {
-        this.uploadFull(e.maskTex, layer.mask, false);
+    const mask = this.styles.mask(layer);
+    if (mask) {
+      if (e.maskTex && e.mask && e.mask.width === mask.width && e.mask.height === mask.height) {
+        this.uploadFull(e.maskTex, mask, false);
       } else {
         if (e.maskTex) gl.deleteTexture(e.maskTex);
-        e.maskTex = createTexture(gl, layer.mask.width, layer.mask.height, gl.RGBA8, gl.RGBA, layer.mask.data);
+        e.maskTex = createTexture(gl, mask.width, mask.height, gl.RGBA8, gl.RGBA, mask.data);
         this.stats.uploads++;
       }
     } else if (e.maskTex) {
       gl.deleteTexture(e.maskTex);
       e.maskTex = null;
     }
-    e.mask = layer.mask;
+    e.mask = mask;
   }
 
   private syncChannelView(doc: Document, opts: RenderOptions): void {

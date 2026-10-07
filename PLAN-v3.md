@@ -37,6 +37,14 @@ Implemented on `feat/v03-oauth-polish`:
   Tests cover already-applied paint, layer deletion, repeated branch switching and
   independent snapshot/History Brush sources. Browser screenshots:
   `docs/screenshots/history-options.png`, `docs/screenshots/history-nonlinear.png`.
+- Polish item 10: Density and Feather are layer render parameters with undo, preserved
+  in `.pfproj` and layer/structural snapshots. CPU and GL compositors share cached
+  effective masks for pixels, groups, adjustments, effects and clipping. Painted mask
+  bytes are untouched; Apply Mask explicitly bakes the rendered result. The frontend
+  suite passes 660 tests. Browser pixel checks verify both settings affect the canvas
+  and resetting them restores the original image exactly, including slider state after undo.
+  The same pixel checks pass in the rebuilt Windows executable with no page errors;
+  screenshot: `docs/screenshots/mask-params-native.png`.
 
 Windows native verification (2026-10-07): rebuilt the debug executable and exercised
 items 1, 2 and 5 through the real WebView: permanent deletion, retained branches,

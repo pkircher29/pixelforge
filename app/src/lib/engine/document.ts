@@ -59,7 +59,7 @@ import { cloneEffects } from "./ops/effects";
 import { cloneFill } from "./ops/fill";
 import { clonePath, pathCoverage, strokePathCoverage, coverageToRaster } from "./ops/vector";
 import { rasterizeText } from "./ops/text";
-import { StyleCache, docStyleCache, fillLayerRaster, layerSource, maskActive } from "./layer-source";
+import { StyleCache, docStyleCache, fillLayerRaster, layerSource } from "./layer-source";
 
 let idCounter = 0;
 
@@ -148,6 +148,8 @@ export interface CreateLayerOptions {
   id?: LayerId;
   mask?: Raster | null;
   maskEnabled?: boolean;
+  maskDensity?: number;
+  maskFeather?: number;
   maskLinked?: boolean;
   clipToBelow?: boolean;
   fillOpacity?: number;
@@ -171,6 +173,8 @@ function baseFields(id: LayerId, kind: Layer["kind"], name: string, opts: Create
     parentId: opts.parentId ?? null,
     mask: opts.mask ?? null,
     maskEnabled: opts.maskEnabled ?? true,
+    maskDensity: Number.isFinite(opts.maskDensity) ? Math.max(0, Math.min(1, opts.maskDensity!)) : 1,
+    maskFeather: Number.isFinite(opts.maskFeather) ? Math.max(0, Math.min(250, opts.maskFeather!)) : 0,
     maskLinked: opts.maskLinked ?? true,
     clipToBelow: opts.clipToBelow ?? false,
     fillOpacity: opts.fillOpacity ?? 1,
@@ -493,6 +497,8 @@ export function layerBaseOf(layer: Layer, over: { id?: LayerId; name?: string } 
     parentId: layer.parentId,
     mask: layer.mask ? layer.mask.clone() : null,
     maskEnabled: layer.maskEnabled,
+    maskDensity: layer.maskDensity,
+    maskFeather: layer.maskFeather,
     maskLinked: layer.maskLinked,
     clipToBelow: layer.clipToBelow,
     fillOpacity: layer.fillOpacity,
@@ -609,6 +615,14 @@ export function setLayerProps(doc: Document, id: LayerId, props: Partial<LayerPr
   if (props.maskEnabled !== undefined && props.maskEnabled !== layer.maskEnabled) {
     prev.maskEnabled = layer.maskEnabled;
     layer.maskEnabled = props.maskEnabled;
+  }
+  if (props.maskDensity !== undefined && Number.isFinite(props.maskDensity)) {
+    prev.maskDensity = layer.maskDensity;
+    layer.maskDensity = Math.max(0, Math.min(1, props.maskDensity));
+  }
+  if (props.maskFeather !== undefined && Number.isFinite(props.maskFeather)) {
+    prev.maskFeather = layer.maskFeather;
+    layer.maskFeather = Math.max(0, Math.min(250, props.maskFeather));
   }
   if (props.maskLinked !== undefined && props.maskLinked !== layer.maskLinked) {
     prev.maskLinked = layer.maskLinked;
@@ -880,7 +894,7 @@ function docMaskAt(mask: Raster, offset: Point, x: number, y: number): number {
  * (with the op's margin), then lerp the color towards the result by `opacity × mask ×
  * clip` with the layer's blend mode. Alpha is never changed.
  */
-export function applyAdjustmentInto(doc: Document, out: Raster, layer: AdjustmentLayer, rect: Rect, clip: Uint8Array | null): void {
+export function applyAdjustmentInto(doc: Document, out: Raster, layer: AdjustmentLayer, rect: Rect, clip: Uint8Array | null, cache = docStyleCache(doc) ?? new StyleCache()): void {
   const op = opById(layer.op);
   if (!op || layer.opacity <= 0) return;
   const area = Rect.intersect(rect, Rect.ofSize(doc.width, doc.height));
@@ -891,7 +905,7 @@ export function applyAdjustmentInto(doc: Document, out: Raster, layer: Adjustmen
   const res = op.cpu(src, layer.params);
   const d = out.data;
   const r = res.data;
-  const mask = maskActive(layer) ? layer.mask : null;
+  const mask = cache.mask(layer);
   const inv = 1 / 255;
   for (let y = area.y; y < area.y + area.h; y++) {
     for (let x = area.x; x < area.x + area.w; x++) {
@@ -924,7 +938,7 @@ function blendLayer(doc: Document, out: Raster, layer: Layer, rect: Rect, clip: 
   const opacity = opacityOverride ?? layer.opacity;
   const mode = modeOverride ?? layer.blendMode;
   if (layer.kind === "adjustment") {
-    applyAdjustmentInto(doc, out, { ...layer, opacity, blendMode: mode }, rect, clip);
+    applyAdjustmentInto(doc, out, { ...layer, opacity, blendMode: mode }, rect, clip, ctx.cache);
     return;
   }
   const src = ctx.cache.styledSource(doc, layer);
@@ -934,7 +948,7 @@ function blendLayer(doc: Document, out: Raster, layer: Layer, rect: Rect, clip: 
     return;
   }
   let raster = src.raster;
-  let mask = maskActive(layer) ? layer.mask : null;
+  let mask = ctx.cache.mask(layer);
   if (mask && (mask.width !== raster.width || mask.height !== raster.height)) {
     // Masks are normally layer-sized; tolerate a mismatch by resampling nothing and
     // treating the mask as anchored at the layer origin (outside = reveal).
@@ -985,7 +999,8 @@ function lerpInto(out: Raster, src: Raster, rect: Rect, t: number, mask: Raster 
 function compositeGroup(doc: Document, out: Raster, group: GroupLayer, rect: Rect, ctx: Ctx): void {
   const children = childrenOf(doc, group.id);
   if (children.length === 0) return;
-  const hasMask = maskActive(group);
+  const mask = ctx.cache.mask(group);
+  const hasMask = !!mask;
   if (group.passThrough) {
     if (group.opacity >= 1 && !hasMask) {
       compositeSiblings(doc, children, out, rect, ctx);
@@ -993,12 +1008,12 @@ function compositeGroup(doc: Document, out: Raster, group: GroupLayer, rect: Rec
     }
     const tmp = out.clone();
     compositeSiblings(doc, children, tmp, rect, ctx);
-    lerpInto(out, tmp, rect, group.opacity, hasMask ? group.mask : null, group.offset);
+    lerpInto(out, tmp, rect, group.opacity, mask, group.offset);
     return;
   }
   const tmp = new Raster(doc.width, doc.height);
   compositeSiblings(doc, children, tmp, rect, ctx);
-  blendRasterInto(out, tmp, { x: 0, y: 0 }, group.opacity, group.blendMode, hasMask && group.mask!.width === doc.width && group.mask!.height === doc.height ? group.mask : null, rect, null);
+  blendRasterInto(out, tmp, { x: 0, y: 0 }, group.opacity, group.blendMode, mask && mask.width === doc.width && mask.height === doc.height ? mask : null, rect, null);
 }
 
 /** Composite a clipping unit: the base plus its clipped layers, then blend as one. */

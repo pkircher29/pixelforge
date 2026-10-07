@@ -45,7 +45,7 @@ describe("pfproj format 2", () => {
     bg.lock = { transparent: true, pixels: false, position: true, all: false };
     bg.color = "blue";
     bg.effects = { dropShadow: defaultDropShadow({ distance: 3 }), stroke: defaultStroke({ size: 2 }) };
-    const top = createRasterLayer(doc, { name: "top", clipToBelow: true, maskEnabled: false, maskLinked: false });
+    const top = createRasterLayer(doc, { name: "top", clipToBelow: true, maskEnabled: false, maskLinked: false, maskDensity: 0.6, maskFeather: 7.5 });
     top.mask = Raster.filled(8, 6, rgba(128, 128, 128));
     top.linkedTo = [bg.id];
     bg.linkedTo = [top.id];
@@ -59,6 +59,8 @@ describe("pfproj format 2", () => {
     expect(m0.effects?.dropShadow?.distance).toBe(3);
     expect(manifest.layers[1]!.clip_to_below).toBe(true);
     expect(manifest.layers[1]!.mask_enabled).toBe(false);
+    expect(manifest.layers[1]!.mask_density).toBe(0.6);
+    expect(manifest.layers[1]!.mask_feather).toBe(7.5);
     const b0 = back.layers[0]!;
     const b1 = back.layers[1]!;
     expect(b0.fillOpacity).toBe(0.5);
@@ -70,6 +72,8 @@ describe("pfproj format 2", () => {
     expect(b1.clipToBelow).toBe(true);
     expect(b1.maskEnabled).toBe(false);
     expect(b1.maskLinked).toBe(false);
+    expect(b1.maskDensity).toBe(0.6);
+    expect(b1.maskFeather).toBe(7.5);
     expect(b1.mask!.getPixel(0, 0).r).toBe(128);
   });
 
