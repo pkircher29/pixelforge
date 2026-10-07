@@ -115,8 +115,10 @@ Implemented on `feat/v03-oauth-polish`:
   shape geometry/stroke and independent saved paths as well as rendered pixels.
   Regression tests verify wrapping and line positions after uniform resize,
   nonuniform paragraph scaling, text undo/redo and shape/path restoration across
-  resize branches. All 710 tests and Svelte checks pass. Native UI verification
-  of this resize integration remains pending.
+  resize branches. All 710 tests and Svelte checks pass. Browser and rebuilt Windows
+  UI checks resize to 50%, verify all six paragraph measurements halve, then verify
+  undo restores the original editable values and redo restores the scaled values.
+  No page errors; screenshot: `docs/screenshots/paragraph-resize-native.png`.
 - Polish item 9, drag portion: dragging a selected row moves the full selection in
   stack order, carries group children once, and excludes every moved row as a target.
   Multi-layer reparenting is one undoable move; pointer cancellation no longer commits.
