@@ -24,6 +24,7 @@ export {
   SetFillLayerCommand,
   SetShapeLayerCommand,
   SetTextLayerCommand,
+  typeLayerName,
   LinkLayersCommand,
   MoveLayersCommand,
   SetGroupPassThroughCommand,

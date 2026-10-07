@@ -10,6 +10,7 @@ import {
   Selection,
   SetSelectionCommand,
   SetTextLayerCommand,
+  typeLayerName,
   createTextLayer,
   findLayer,
   newId,
@@ -171,7 +172,7 @@ class TypeSession {
       l.text = original.text;
       l.raster = original.raster;
     }
-    if (isNew) l.name = spec.text.split("\n")[0]!.slice(0, 40) || "Type";
+    if (isNew) l.name = typeLayerName(spec.text) || "Type";
     docStore.exec(new SetTextLayerCommand(layerId, spec, isNew ? "Type Tool" : "Edit Type"), { noMerge: true });
     return true;
   }

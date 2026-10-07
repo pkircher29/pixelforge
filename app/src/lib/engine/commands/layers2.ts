@@ -393,11 +393,16 @@ export class SetShapeLayerCommand implements Command {
 }
 
 /** Edit a text layer's spec and re-rasterize. */
+/** Photoshop's automatic type-layer name: the first line of the text (max 40 chars). */
+export function typeLayerName(text: string): string {
+  return text.split("\n")[0]!.slice(0, 40);
+}
+
 export class SetTextLayerCommand implements Command {
   readonly label: string;
   readonly layerId: LayerId;
   private next: Partial<TextSpec>;
-  private prev: { text: TextSpec; raster: Raster } | null = null;
+  private prev: { text: TextSpec; raster: Raster; name: string } | null = null;
   private nextRaster: Raster | null = null;
 
   constructor(layerId: LayerId, text: Partial<TextSpec>, label = "Edit Type") {
@@ -410,7 +415,9 @@ export class SetTextLayerCommand implements Command {
     const l = getLayer(doc, this.layerId);
     if (l.kind !== "text") throw new Error(`Layer ${this.layerId} is not a text layer`);
     assertEditable(l, "pixels");
-    if (!this.prev) this.prev = { text: l.text, raster: l.raster };
+    if (!this.prev) this.prev = { text: l.text, raster: l.raster, name: l.name };
+    // PS: a type layer that was never renamed keeps showing its text as its name.
+    if (this.next.text !== undefined && l.name === typeLayerName(this.prev.text.text)) l.name = typeLayerName(this.next.text) || l.name;
     l.text = { ...l.text, ...this.next };
     if (!this.nextRaster) this.nextRaster = rerasterizeText(doc, l);
     else l.raster = this.nextRaster;
@@ -421,6 +428,7 @@ export class SetTextLayerCommand implements Command {
     const l = getLayer(doc, this.layerId);
     if (l.kind !== "text" || !this.prev) return;
     l.text = this.prev.text;
+    l.name = this.prev.name;
     l.raster = this.prev.raster;
     doc.dirty = true;
   }
