@@ -7,6 +7,9 @@ choose the provider, then click **Run**. The command now reveals the panel and o
 the prompt section even when History was selected or the dock was collapsed.
 The connection test checks authentication only; it does not generate an image or
 prove that the account has image-model access, billing or sufficient quota.
+The panel-reveal fix passes 99 AI tests and a rebuilt Windows UI check: both OpenAI
+and Gemini can be selected, a prompt entered, and Run becomes enabled. That check
+did not submit a billable image request and is not evidence of successful generation.
 
 ![Google OAuth setup in the native Windows app](screenshots/gemini-oauth.png)
 
