@@ -5,11 +5,12 @@
    * the last-used tool becomes the group's face. Below: fg/bg swatches with default (D)
    * and swap (X) mini glyphs, Quick Mask (Q), Screen Mode (F).
    */
-  import { toolStore, rgbaToHex, hexToRgba } from "$lib/stores/tool.svelte";
+  import { toolStore, rgbaToHex } from "$lib/stores/tool.svelte";
   import { settings } from "$lib/stores/settings.svelte";
   import { toolbarSlots, toolGlyph, type ToolbarSlot, type ToolSlotMember } from "$lib/tools";
   import { canvasHost } from "./canvas/host.svelte";
   import Icon from "./icons/Icon.svelte";
+  import { runCommand } from "./registry.svelte";
 
   const LONG_PRESS_MS = 300;
   const slots = toolbarSlots();
@@ -91,12 +92,6 @@
   function tip(m: ToolSlotMember, key: string): string {
     return key ? `${m.name} (${key})` : m.name;
   }
-  function pickColor(which: "fg" | "bg", e: Event) {
-    const c = hexToRgba((e.currentTarget as HTMLInputElement).value);
-    if (!c) return;
-    if (which === "fg") toolStore.setFg(c);
-    else toolStore.setBg(c);
-  }
   const screenTip = $derived(
     toolStore.screenMode === "standard" ? "Standard Screen Mode (F)" : toolStore.screenMode === "fullscreen-menu" ? "Full Screen Mode With Menu Bar (F)" : "Full Screen Mode (F)",
   );
@@ -158,12 +153,9 @@
     <button type="button" class="mini swap" data-tip="Switch Foreground and Background Colors (X)" aria-label="Swap colors" onclick={() => toolStore.swap()}>
       <Icon name="swap-colors" size={11} />
     </button>
-    <label class="sw bg" data-tip="Set background color" style:background={rgbaToHex(toolStore.bg)}>
-      <input type="color" value={rgbaToHex(toolStore.bg)} oninput={(e) => pickColor("bg", e)} aria-label="Background color" />
-    </label>
-    <label class="sw fg" data-tip="Set foreground color" style:background={rgbaToHex(toolStore.fg)}>
-      <input type="color" value={rgbaToHex(toolStore.fg)} oninput={(e) => pickColor("fg", e)} aria-label="Foreground color" />
-    </label>
+    <!-- PS: clicking a swatch opens the Color Picker dialog (not the OS picker). -->
+    <button type="button" class="sw bg" data-tip="Set background color" aria-label="Background color" style:background={rgbaToHex(toolStore.bg)} onclick={() => void runCommand("color.pickBackground")}></button>
+    <button type="button" class="sw fg" data-tip="Set foreground color" aria-label="Foreground color" style:background={rgbaToHex(toolStore.fg)} onclick={() => void runCommand("color.pick")}></button>
   </div>
 
   <div class="modes">
@@ -329,12 +321,8 @@
     box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.55);
     overflow: hidden;
   }
-  .sw input {
-    position: absolute;
-    inset: 0;
-    opacity: 0;
-    width: 100%;
-    height: 100%;
+  .sw {
+    padding: 0;
     cursor: pointer;
   }
   .sw.bg {
