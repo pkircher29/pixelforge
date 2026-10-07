@@ -45,8 +45,18 @@ configuration. API-key mode stays available; OAuth errors do not silently switch
 
 Mock-server tests exercise Google code exchange, refresh, bearer/quota headers, image
 response decoding, revocation and API quota errors. They do not establish a successful
-sign-in or image request against a real customer account. No live credentials were
-provided for this continuation. The v0.3 live-provider and cross-OS gates remain open.
+sign-in or image request against a real customer account. The v0.3 live-provider and
+cross-OS gates remain open.
+
+Windows follow-up (2026-10-07): saved-key authentication checks succeeded for OpenAI
+and Gemini; xAI rejected its saved key. No billable vendor image requests were sent.
+An isolated native app using a loopback fixture server added an OpenAI-generated
+image layer, then Gemini and Grok edited-image layers. A simulated project spending
+limit produced an actionable error, no extra layer, and no automatic retry. Failed
+jobs now offer **Provider details** so the returned message can be read and copied.
+These fixture results verify application plumbing, not live model access or billing.
+
+![Local fixture generation and quota diagnostics](screenshots/ai-local-pipeline.png)
 
 Local verification (Windows, 2026-10-06): 649 frontend tests; Svelte check with zero
 errors/warnings; 191 Rust tests passed (two existing fixture/benchmark helpers ignored);

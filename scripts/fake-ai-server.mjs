@@ -26,6 +26,7 @@
  *
  * Error simulation: include one of these tokens in the prompt:
  *   `!429`   -> 429 with Retry-After: 7            (ai_rate_limited)
+ *   `!quota` -> explicit project spend limit      (ai_quota; no automatic retry)
  *   `!401`   -> 401                                 (ai_auth)
  *   `!500`   -> 500                                 (ai_http)
  *   `!slow`  -> waits 20 s before answering (test cancel / timeouts)
@@ -52,6 +53,10 @@ const DELAY = Number(argOf("--delay", "1200"));
 
 /** Simulated failures keyed off tokens in the prompt. Returns true when it answered. */
 async function simulate(prompt, provider, res) {
+  if (/!quota/.test(prompt)) {
+    json(res, 429, { error: { message: "Project spend limit reached (fake). Review API project limits.", type: "insufficient_quota", code: "project_spend_limit_exceeded" } });
+    return true;
+  }
   if (/!slow/.test(prompt)) await sleep(20_000);
   if (/!429/.test(prompt)) {
     json(res, 429, { error: { message: "Rate limit reached for images (fake). Try again in 7 seconds.", type: "rate_limit_error", code: "rate_limit_exceeded" } }, { "retry-after": "7" });
@@ -167,6 +172,7 @@ const server = http.createServer(async (req, res) => {
 });
 
 server.listen(PORT, "127.0.0.1", () => {
-  console.log(`fake-ai-server listening on http://127.0.0.1:${PORT} (image ${SIZE}px, delay ${DELAY} ms)`);
-  console.log(`set PF_AI_BASE_URL_OPENAI / PF_AI_BASE_URL_XAI / PF_AI_BASE_URL_GEMINI to http://127.0.0.1:${PORT}`);
+  const port = server.address().port;
+  console.log(`fake-ai-server listening on http://127.0.0.1:${port} (image ${SIZE}px, delay ${DELAY} ms)`);
+  console.log(`set PF_AI_BASE_URL_OPENAI / PF_AI_BASE_URL_XAI / PF_AI_BASE_URL_GEMINI to http://127.0.0.1:${port}`);
 });

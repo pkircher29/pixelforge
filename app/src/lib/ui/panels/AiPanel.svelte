@@ -523,6 +523,12 @@
           </div>
           {#if job.error}
             <div class="jerr">{job.error.title}{#if job.error.hint}{" "}<span class="dim">{job.error.hint}</span>{/if}</div>
+            {#if job.error.detail}
+              <details class="error-details">
+                <summary>Provider details</summary>
+                <pre>{job.error.detail}</pre>
+              </details>
+            {/if}
           {/if}
           {#if job.state === "completed" && job.results && job.results.length > 1}
             <div class="variants">
@@ -835,6 +841,19 @@
   .jerr {
     padding-top: 2px;
     color: #ff9a9a;
+  }
+  .error-details {
+    margin-top: 4px;
+    user-select: text;
+  }
+  .error-details summary {
+    cursor: pointer;
+  }
+  .error-details pre {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    font: inherit;
+    margin: 4px 0;
   }
   .variants {
     display: flex;
