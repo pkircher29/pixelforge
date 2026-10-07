@@ -29,6 +29,10 @@
     void entry.version;
     return aiUi.expansion?.docId === entry.id && aiUi.expansion.selection === entry.doc.selection;
   });
+  const removing = $derived.by(() => {
+    void entry.version;
+    return aiUi.removal?.docId === entry.id && aiUi.removal.selection === entry.doc.selection;
+  });
   const model = $derived(provider?.editModel || provider?.defaultModel || "");
   const activeJob = $derived(jobStore.active.find((j) => j.docId === entry.id));
   const compatible = $derived(Boolean(provider && provider.capabilities.instructEdit && provider.capabilities.maxVariants >= 3));
@@ -94,7 +98,7 @@
     onkeydown={(e) => e.stopPropagation()}
     onsubmit={(e) => { e.preventDefault(); void generate(); }}>
     <div class="top">
-      <strong>{expanding ? "Generative Expand" : "Generative Fill"}</strong>
+      <strong>{expanding ? "Generative Expand" : removing ? "Remove" : "Generative Fill"}</strong>
       <span class="details" title={cost?.note ?? "Provider billing and account limits apply"}>3 variants · {cost ? formatUsd(cost.usd, cost.approx) : provider && onSubscription(provider) ? "Plan access" : "Provider pricing"}</span>
       <button type="button" class="icon-btn" aria-label="Hide selection task bar" title="Hide until the selection changes" onclick={() => (dismissed = entry.doc.selection)}>×</button>
     </div>

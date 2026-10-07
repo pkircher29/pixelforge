@@ -27,8 +27,8 @@ describe("toolbar groups (PLAN-v2 §2)", () => {
 
   it("placeholders (PLAN-v2 skips) are listed but have no live tool", () => {
     const healing = toolbarSlots().find((s) => s.id === "healing")!;
-    expect(healing.members.map((m) => m.id)).toEqual(["healing-spot", "healing-brush", "patch", "content-aware-move", "red-eye"]);
-    expect(healing.tools.map((t) => t.id)).toEqual(["healing-spot", "healing-brush", "patch", "red-eye"]);
+    expect(healing.members.map((m) => m.id)).toEqual(["healing-spot", "remove", "healing-brush", "patch", "content-aware-move", "red-eye"]);
+    expect(healing.tools.map((t) => t.id)).toEqual(["healing-spot", "remove", "healing-brush", "patch", "red-eye"]);
     expect(healing.members.find((m) => m.id === "content-aware-move")!.tool).toBeNull();
   });
 

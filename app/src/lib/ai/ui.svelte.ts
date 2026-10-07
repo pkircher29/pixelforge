@@ -52,6 +52,7 @@ class AiUiState {
   forcedMode = $state<AiMode | undefined>(undefined);
   generativeFill = $state(false);
   expansion = $state.raw<{ docId: string; selection: Selection } | null>(null);
+  removal = $state.raw<{ docId: string; selection: Selection } | null>(null);
   showAdvanced = $state(false);
 
   /** Bumped by commands that want the prompt focused. */
@@ -128,6 +129,12 @@ class AiUiState {
     this.prompt = "Extend the image naturally into the empty area, matching its lighting, perspective and style.";
     this.feather = 0;
     this.focusGenerativeFill();
+  }
+
+  prepareRemoval(docId: string, selection: Selection, resetPrompt: boolean): void {
+    this.removal = { docId, selection };
+    if (resetPrompt) this.prompt = "Remove the object inside the marked area. Reconstruct the background naturally, matching the surrounding image, lighting and texture.";
+    this.feather = 2;
   }
 }
 
