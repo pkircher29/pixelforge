@@ -57,7 +57,14 @@ Implemented on `feat/v03-oauth-polish`:
   Alt-drag duplicates selected root blocks. Tests cover separated rows, group/child
   selections, self-drop rejection, group destinations and exact undo/redo. Browser
   verification covers nonadjacent multi-selection drag and undo/redo without errors;
-  screenshot: `docs/screenshots/layers-multi-drag.png`. Group clipping remains open.
+  screenshot: `docs/screenshots/layers-multi-drag.png`.
+  Group clipping now uses the children's combined isolated silhouette, with group mask,
+  opacity and blend mode applied consistently. Group bases are accepted by the layer
+  commands. The GL path uploads a CPU-composited group clipping unit on recomposition;
+  ordinary groups stay on the GPU. Real WebGL pixels match CPU pixels exactly in eight
+  checks (including child edits and visibility changes) via
+  `app/src/tests/engine/group-clip-demo/index.html`. All 670 tests pass. Large-document
+  performance and native/cross-OS verification remain open; this is not the tiled GPU gate.
 - Polish item 10: Density and Feather are layer render parameters with undo, preserved
   in `.pfproj` and layer/structural snapshots. CPU and GL compositors share cached
   effective masks for pixels, groups, adjustments, effects and clipping. Painted mask

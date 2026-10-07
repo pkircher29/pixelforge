@@ -127,7 +127,7 @@ async function newLayerDialog(): Promise<void> {
   const d = doc();
   if (!d) return;
   const below = active();
-  const r = await openDialog<{ name: string; canClip: boolean }, NewLayerResult>(NewLayerDialog, { name: nextName(d, "Layer"), canClip: !!below && below.kind !== "group" });
+  const r = await openDialog<{ name: string; canClip: boolean }, NewLayerResult>(NewLayerDialog, { name: nextName(d, "Layer"), canClip: !!below });
   if (!r) return;
   const layer = createRasterLayer(d, { name: r.name, blendMode: r.blendMode, opacity: r.opacity, color: r.color, clipToBelow: r.clip });
   docStore.exec(new AddLayerCommand(layer));

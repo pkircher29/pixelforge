@@ -413,7 +413,7 @@ export function clipBaseOf(doc: Document, id: LayerId): Layer | null {
   let i = sibs.findIndex((l) => l.id === id) - 1;
   while (i >= 0) {
     const l = sibs[i]!;
-    if (!l.clipToBelow || l.kind === "group") return l.kind === "group" ? null : l;
+    if (!l.clipToBelow || l.kind === "group") return l;
     i--;
   }
   return null;
@@ -1025,8 +1025,17 @@ function compositeClipUnit(doc: Document, out: Raster, base: Layer, chain: reado
     return;
   }
   const unit = new Raster(doc.width, doc.height);
-  blendLayer(doc, unit, base, rect, null, ctx, 1, BlendMode.Normal);
-  const clip = ctx.cache.clipAlpha(doc, base);
+  let clip: Uint8Array;
+  if (base.kind === "group") {
+    // A group clipping base is isolated from the backdrop. Its mask participates in
+    // the combined silhouette; opacity and blend mode apply once to the whole unit.
+    compositeGroup(doc, unit, { ...base, opacity: 1, blendMode: BlendMode.Normal, passThrough: false }, rect, ctx);
+    clip = new Uint8Array(doc.width * doc.height);
+    for (let i = 0; i < clip.length; i++) clip[i] = unit.data[i * 4 + 3]!;
+  } else {
+    blendLayer(doc, unit, base, rect, null, ctx, 1, BlendMode.Normal);
+    clip = ctx.cache.clipAlpha(doc, base);
+  }
   for (const c of chain) {
     if (!ctx.ignoreVisibility && !c.visible) continue;
     blendLayer(doc, unit, c, rect, clip, ctx);
@@ -1043,16 +1052,14 @@ function compositeSiblings(doc: Document, layers: readonly Layer[], out: Raster,
     const layer = layers[i]!;
     let j = i + 1;
     const chain: Layer[] = [];
-    if (layer.kind !== "group") {
-      while (j < layers.length && layers[j]!.clipToBelow && layers[j]!.kind !== "group") {
-        chain.push(layers[j]!);
-        j++;
-      }
+    while (j < layers.length && layers[j]!.clipToBelow && layers[j]!.kind !== "group") {
+      chain.push(layers[j]!);
+      j++;
     }
     const visible = ctx.ignoreVisibility || layer.visible;
     if (visible) {
-      if (layer.kind === "group") compositeGroup(doc, out, layer, area, ctx);
-      else if (chain.some((c) => ctx.ignoreVisibility || c.visible)) compositeClipUnit(doc, out, layer, chain, area, ctx);
+      if (chain.some((c) => ctx.ignoreVisibility || c.visible)) compositeClipUnit(doc, out, layer, chain, area, ctx);
+      else if (layer.kind === "group") compositeGroup(doc, out, layer, area, ctx);
       else blendLayer(doc, out, layer, area, null, ctx);
     }
     i = j;

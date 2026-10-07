@@ -305,7 +305,7 @@ export function canMergeDown(doc: Document, l: Layer): boolean {
 export function canClip(doc: Document, l: Layer): boolean {
   if (l.kind === "group") return false;
   const below = siblingBelow(doc, l);
-  return !!below && below.kind !== "group";
+  return !!below;
 }
 
 export function contextMenuState(doc: Document, l: Layer, selected: readonly LayerId[]): ContextMenuState {

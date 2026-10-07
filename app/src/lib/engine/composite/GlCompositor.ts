@@ -22,6 +22,8 @@
  * the cache is invalidated by `markDirty` on that layer or by any change of its
  * raster / mask / effects / fill opacity. Adjustment ops without usable GLSL fall back
  * to a CPU read-back → op → upload per composite.
+ * Groups used as clipping bases are isolated and composited on the CPU, then
+ * uploaded on recomposition. Ordinary groups retain the GPU path.
  *
  * `render()` is cheap when nothing changed: it diffs layer props (O(layers)), uploads
  * only what `markDirty` reported, re-composites only the union dirty rect (scissored)
@@ -35,7 +37,7 @@ import { Rect } from "../rect";
 import { Raster } from "../raster";
 import type { Selection } from "../selection";
 import { BLEND_MODE_INDEX } from "../blend";
-import { topLevelLayers, childrenOf } from "../document";
+import { topLevelLayers, childrenOf, compositeToRaster } from "../document";
 import { StyleCache, bindDocStyleCache, layerVisualRect, maskActive } from "../layer-source";
 import { opById } from "../ops/registry";
 import { buildOpFragmentSource } from "../ops/glsl";
@@ -827,7 +829,17 @@ export class GlCompositor implements ICompositor {
     const layer = unit.layer;
     if (!layer.visible) return;
     if (layer.kind === "group") {
-      this.drawGroup(doc, chain, layer, rect);
+      if (unit.chain.some(c => c.visible)) {
+        // Flatten just this isolated clipping unit, never its backdrop. Ordinary
+        // groups continue through GPU passes; this source updates only on recompose.
+        const base = { ...layer, opacity: 1, blendMode: BlendMode.Normal, passThrough: false };
+        const sourceDoc = { ...doc, layers: doc.layers.map(l => l.id === layer.id ? base : l) };
+        const raster = compositeToRaster(sourceDoc, { layerIds: [layer.id, ...unit.chain.map(c => c.id)], cache: this.styles });
+        const entry = this.ensureGroupEntry(layer);
+        this.uploadFull(entry.tex, raster, entry.w !== raster.width || entry.h !== raster.height);
+        entry.w = raster.width; entry.h = raster.height;
+        this.drawBlend(chain, entry.tex, Rect.ofSize(this.docW, this.docH), layer.opacity, layer.blendMode, null, null, false, "normal");
+      } else this.drawGroup(doc, chain, layer, rect);
       return;
     }
     const visibleChain = unit.chain.filter((c) => c.visible);
@@ -1189,11 +1201,9 @@ export function buildUnits(siblings: readonly Layer[]): Unit[] {
     const layer = siblings[i]!;
     const chain: Layer[] = [];
     let j = i + 1;
-    if (layer.kind !== "group") {
-      while (j < siblings.length && siblings[j]!.clipToBelow && siblings[j]!.kind !== "group") {
-        chain.push(siblings[j]!);
-        j++;
-      }
+    while (j < siblings.length && siblings[j]!.clipToBelow && siblings[j]!.kind !== "group") {
+      chain.push(siblings[j]!);
+      j++;
     }
     units.push({ layer, chain });
     i = j;

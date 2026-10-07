@@ -96,7 +96,7 @@ describe("shader sources (v2)", () => {
 });
 
 describe("buildUnits", () => {
-  it("groups clipped layers under their base and never under a group", () => {
+  it("groups clipped layers under raster and group bases", () => {
     const doc = createDocument({ width: 4, height: 4 });
     const base = doc.layers[0]!;
     const c1 = createRasterLayer(doc, { clipToBelow: true });
@@ -115,8 +115,8 @@ describe("buildUnits", () => {
     doc.layers.push(clippedAfterGroup);
     const u2 = buildUnits(doc.layers.filter((l) => l.parentId === null));
     expect(u2[1]!.layer.id).toBe(g.id);
-    expect(u2[1]!.chain).toEqual([]);
-    expect(u2[2]!.layer.id).toBe(clippedAfterGroup.id);
+    expect(u2[1]!.chain).toEqual([clippedAfterGroup]);
+    expect(u2).toHaveLength(2);
   });
 });
 
