@@ -225,9 +225,9 @@
   </div>
 {/snippet}
 
-{#snippet blendRow(mode: BlendMode, col: RGBA | null, onmode: (m: BlendMode) => void, oncolor: ((c: RGBA) => void) | null)}
+{#snippet blendRow(mode: BlendMode, col: RGBA | null, onmode: (m: BlendMode) => void, oncolor: ((c: RGBA) => void) | null, label = "Blend Mode")}
   <div class="srow">
-    <span class="sl">Blend Mode:</span>
+    <span class="sl">{label}:</span>
     <span class="inline">
       <PsSelect value={mode} choices={BLEND_CHOICES} width={120} onchange={(v) => onmode(v as BlendMode)} />
       {#if col && oncolor}
@@ -370,9 +370,9 @@
             </span>
           </div>
           <div class="srow"><span class="sl">Altitude:</span><span class="inline"><input class="input num" type="number" min="0" max="90" value={e.altitude} onchange={(ev) => patch("bevelEmboss", { altitude: Math.max(0, Math.min(90, Number(ev.currentTarget.value))) })} aria-label="Altitude" /><span class="unit">°</span></span></div>
-          {@render blendRow(e.highlightMode, e.highlightColor, (m) => patch("bevelEmboss", { highlightMode: m }), (c) => patch("bevelEmboss", { highlightColor: c }))}
+          {@render blendRow(e.highlightMode, e.highlightColor, (m) => patch("bevelEmboss", { highlightMode: m }), (c) => patch("bevelEmboss", { highlightColor: c }), "Highlight Mode")}
           {@render slider("Opacity", pct(e.highlightOpacity), 0, 100, "%", (v) => patch("bevelEmboss", { highlightOpacity: v / 100 }))}
-          {@render blendRow(e.shadowMode, e.shadowColor, (m) => patch("bevelEmboss", { shadowMode: m }), (c) => patch("bevelEmboss", { shadowColor: c }))}
+          {@render blendRow(e.shadowMode, e.shadowColor, (m) => patch("bevelEmboss", { shadowMode: m }), (c) => patch("bevelEmboss", { shadowColor: c }), "Shadow Mode")}
           {@render slider("Opacity", pct(e.shadowOpacity), 0, 100, "%", (v) => patch("bevelEmboss", { shadowOpacity: v / 100 }))}
         </fieldset>
       {:else if page === "colorOverlay"}
