@@ -24,6 +24,27 @@ describe("default swatch set", () => {
 });
 
 describe("swatch store", () => {
+  it("preserves transparent and translucent colors through export and import", () => {
+    const group = swatchStore.addGroup("Alpha");
+    swatchStore.add({ r: 20, g: 40, b: 80, a: 0 }, "Clear");
+    swatchStore.add({ r: 90, g: 60, b: 30, a: 128 }, "Translucent", group.id);
+    const parsed = parseSwatches(JSON.parse(swatchStore.exportJson()))!;
+    expect(parsed.items.find((s) => s.name === "Clear")!.color.a).toBe(0);
+    expect(parsed.groups.find((g) => g.name === "Alpha")!.swatches[0]!.color.a).toBe(128);
+    swatchStore.importSet(parsed);
+    expect(swatchStore.all.find((s) => s.name === "Translucent")!.color.a).toBe(128);
+  });
+
+  it("accepts legacy opaque swatches and bounds imported alpha", () => {
+    const parsed = parseSwatches({ items: [
+      { n: "Legacy", c: "#102030" },
+      { n: "Low", c: "#102030", a: -1 },
+      { n: "High", c: "#102030", a: 999 },
+      { n: "Invalid", c: "#102030", a: "0" },
+    ] })!;
+    expect(parsed.items.map((s) => s.color.a ?? 255)).toEqual([255, 0, 255, 255]);
+  });
+
   it("adds and deletes swatches (loose and inside groups)", () => {
     const n = swatchStore.items.length;
     const s = swatchStore.add({ r: 1, g: 2, b: 3 }, "Mine");

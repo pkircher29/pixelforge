@@ -30,6 +30,13 @@ Implemented on `feat/v03-oauth-polish`:
   docks scroll. Browser checks cover expand, divider shrinking/growing, window resize,
   reload and collapse/reopen. Screenshot: `docs/screenshots/navigator-min-height.png`.
   This also fixes tooltip focusout during removal of a focused panel control.
+- Polish item 4: shared `Swatch.svelte` and `ColorSwatchInput.svelte` show checkerboards
+  under alpha in Properties, toolbar, Color/Swatches/Character, shape fill pickers,
+  gradient previews, and color dialogs. The Color Picker exposes opacity and preserves
+  alpha; foreground/background and saved/exported swatches retain it. Legacy palette
+  files remain compatible. Svelte check passes; frontend suite: 662 tests. Browser and
+  rebuilt Windows tests verify 50% previews, saving a swatch, picker reopening and no
+  runtime errors. Screenshot: `docs/screenshots/swatch-alpha-native.png`.
 - Polish item 5: `History.dropAfter(index)` permanently truncates states. Delete State
   uses it in linear mode; the persisted Allow Non-Linear History option retains later
   states when branching and deletes individual rows without changing later results.

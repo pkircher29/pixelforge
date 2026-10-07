@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Swatch from "$lib/ui/controls/Swatch.svelte";
   /**
    * Gradient Editor (PS layout): presets grid, Name + New, Smoothness, gradient bar with
    * opacity stops above / color stops below (click empty area = add, drag = move, drag off
@@ -274,7 +275,8 @@
         </div>
         <div class="srow">
           <span class="lab">Color:</span>
-          <span class="swatch" class:dis={!selColor} style:background={selColor ? stopHex(selColor.color) : "transparent"}>
+          <span class="swatch" class:dis={!selColor}>
+            <Swatch color={selColor ? resolveColor(selColor.color, fg, bg) : "transparent"} />
             <input bind:this={colorInput} type="color" disabled={!selColor} value={selColor ? stopHex(selColor.color) : "#000000"} oninput={(e) => setColorHex(e.currentTarget.value)} aria-label="Stop color" />
           </span>
           <button type="button" class="btn sm" disabled={!selColor} onclick={() => sel && (def = setColorStop(def, sel.index, "fg"))} title="Use the foreground color">FG</button>

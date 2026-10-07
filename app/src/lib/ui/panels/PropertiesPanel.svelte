@@ -1,4 +1,7 @@
 <script lang="ts">
+  import Swatch from "$lib/ui/controls/Swatch.svelte";
+  import { swatchCss } from "$lib/ui/controls/swatch";
+  import ColorSwatchInput from "$lib/ui/controls/ColorSwatchInput.svelte";
   /**
    * Properties panel — context-sensitive like Photoshop: pixel layer (Transform with
    * W/H/X/Y, flip / rotate, align), adjustment layer (the op's parameters as live
@@ -275,11 +278,11 @@
       {#if l.kind === "fill"}
         <section>
           {#if l.fill.type === "solid"}
-            <div class="row"><span class="lbl">Color</span><span class="val"><input type="color" class="swatch" value={rgbaToHex(l.fill.color)} oninput={(e) => setSolid(e.currentTarget.value)} aria-label="Fill color" /></span></div>
+            <div class="row"><span class="lbl">Color</span><span class="val"><ColorSwatchInput color={l.fill.color} value={rgbaToHex(l.fill.color)} oninput={(e) => setSolid(e.currentTarget.value)} label="Fill color" /></span></div>
           {:else if l.fill.type === "gradient"}
             {@const first = l.fill.gradient.stops[0]?.color ?? { r: 0, g: 0, b: 0, a: 255 }}
             {@const last = l.fill.gradient.stops[l.fill.gradient.stops.length - 1]?.color ?? { r: 255, g: 255, b: 255, a: 255 }}
-            <div class="row"><span class="lbl">Gradient</span><span class="gbar" style:background="linear-gradient(90deg, {rgbaToHex(first)}, {rgbaToHex(last)})"></span></div>
+            <div class="row"><span class="lbl">Gradient</span><span class="gbar"><Swatch background={`linear-gradient(90deg,${swatchCss(first)},${swatchCss(last)})`} /></span></div>
             <div class="row"><span class="lbl">Style</span><span class="val">{l.fill.style}, {l.fill.angle}°, {Math.round(l.fill.scale * 100)} %</span></div>
           {:else}
             <div class="row"><span class="lbl">Pattern</span><span class="val mono">{l.fill.pattern.width} × {l.fill.pattern.height} px tile · {Math.round(l.fill.scale * 100)} %</span></div>
@@ -324,7 +327,7 @@
         <div class="row"><span class="lbl">Size</span><ScrubbyNumber unit="px" min={4} max={800} value={l.text.size} width={48} log oninput={(v) => setText({ size: v }, true)} onchange={(v) => setText({ size: v }, true)} /></div>
         <div class="row"><span class="lbl">Leading</span><ScrubbyNumber unit="px" min={0} max={2000} value={l.text.leading ?? Math.round(l.text.size * 1.2)} width={48} oninput={(v) => setText({ leading: v }, true)} onchange={(v) => setText({ leading: v }, true)} /></div>
         <div class="row"><span class="lbl">Tracking</span><ScrubbyNumber min={-1000} max={1000} value={l.text.tracking} width={48} oninput={(v) => setText({ tracking: v }, true)} onchange={(v) => setText({ tracking: v }, true)} /></div>
-        <div class="row"><span class="lbl">Color</span><span class="val"><input type="color" class="swatch" value={rgbaToHex(l.text.color)} oninput={(e) => { const c = hexToRgba(e.currentTarget.value); if (c) setText({ color: c }, true); }} aria-label="Text color" /></span></div>
+        <div class="row"><span class="lbl">Color</span><span class="val"><ColorSwatchInput color={l.text.color} value={rgbaToHex(l.text.color)} oninput={(e) => { const c = hexToRgba(e.currentTarget.value); if (c) setText({ color: c }, true); }} label="Text color" /></span></div>
         <div class="row"><span class="lbl">Style</span><span class="val tools"><button type="button" class="tb" class:on={l.text.bold} onclick={() => setText({ bold: !l.text.bold })}><b>B</b></button><button type="button" class="tb" class:on={l.text.italic} onclick={() => setText({ italic: !l.text.italic })}><i>I</i></button><label class="chk"><input type="checkbox" checked={l.text.antialias} onchange={(e) => setText({ antialias: e.currentTarget.checked })} /> Anti-alias</label></span></div>
       </section>
       <section>
@@ -345,8 +348,8 @@
       </section>
       <section>
         <h4>Appearance</h4>
-        <div class="row"><span class="lbl">Fill</span><span class="val tools"><input type="color" class="swatch" value={l.fill && l.fill.type === "solid" ? rgbaToHex(l.fill.color) : "#000000"} disabled={!l.fill} oninput={(e) => setShapeFill(e.currentTarget.value)} aria-label="Fill color" /><label class="chk"><input type="checkbox" checked={!!l.fill} onchange={(e) => setShapeFill(e.currentTarget.checked ? rgbaToHex(toolStore.fg) : null)} /> On</label></span></div>
-        <div class="row"><span class="lbl">Stroke</span><span class="val tools"><input type="color" class="swatch" value={l.stroke && l.stroke.fill.type === "solid" ? rgbaToHex(l.stroke.fill.color) : "#000000"} disabled={!l.stroke} oninput={(e) => setStroke({ color: e.currentTarget.value })} aria-label="Stroke color" /><label class="chk"><input type="checkbox" checked={!!l.stroke} onchange={(e) => setStroke({ enabled: e.currentTarget.checked, width: 2 })} /> On</label></span></div>
+        <div class="row"><span class="lbl">Fill</span><span class="val tools"><ColorSwatchInput color={l.fill && l.fill.type === "solid" ? l.fill.color : "#000000"} value={l.fill && l.fill.type === "solid" ? rgbaToHex(l.fill.color) : "#000000"} disabled={!l.fill} oninput={(e) => setShapeFill(e.currentTarget.value)} label="Fill color" /><label class="chk"><input type="checkbox" checked={!!l.fill} onchange={(e) => setShapeFill(e.currentTarget.checked ? rgbaToHex(toolStore.fg) : null)} /> On</label></span></div>
+        <div class="row"><span class="lbl">Stroke</span><span class="val tools"><ColorSwatchInput color={l.stroke && l.stroke.fill.type === "solid" ? l.stroke.fill.color : "#000000"} value={l.stroke && l.stroke.fill.type === "solid" ? rgbaToHex(l.stroke.fill.color) : "#000000"} disabled={!l.stroke} oninput={(e) => setStroke({ color: e.currentTarget.value })} label="Stroke color" /><label class="chk"><input type="checkbox" checked={!!l.stroke} onchange={(e) => setStroke({ enabled: e.currentTarget.checked, width: 2 })} /> On</label></span></div>
         <div class="row"><span class="lbl">Width</span><ScrubbyNumber unit="px" min={0} max={200} value={l.stroke?.width ?? 0} disabled={!l.stroke} width={48} onchange={(v) => setStroke({ width: v })} /></div>
         <div class="row"><span class="lbl">Align</span><PsSelect value={l.stroke?.position ?? "center"} choices={STROKE_POS} width={90} disabled={!l.stroke} onchange={(v) => setStroke({ position: v as "inside" | "outside" | "center" })} /></div>
         <div class="row"><span class="lbl">Path</span><span class="val mono">{l.path.subpaths.length} subpath{l.path.subpaths.length === 1 ? "" : "s"}, {l.path.subpaths.reduce((n, s) => n + s.anchors.length, 0)} anchors</span></div>
@@ -470,14 +473,6 @@
     align-items: center;
     gap: 5px;
     min-height: 20px;
-  }
-  .swatch {
-    width: 40px;
-    height: 18px;
-    padding: 0;
-    border: 1px solid var(--ps-border-dark);
-    background: none;
-    vertical-align: middle;
   }
   .gbar {
     display: inline-block;

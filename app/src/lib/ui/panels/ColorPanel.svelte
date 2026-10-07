@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Swatch from "$lib/ui/controls/Swatch.svelte";
   /**
    * Color panel (PS CC): fg/bg swatch pair at the top-left, then either the Hue Cube /
    * Brightness Cube (square + strip) or a slider mode (Grayscale, RGB, HSB) with the
@@ -57,7 +58,7 @@
   function write(c: RGB, h?: HSB): void {
     lastRgb = { ...c };
     if (h) hsb = h;
-    const rgba: RGBA = { r: c.r, g: c.g, b: c.b, a: 255 };
+    const rgba: RGBA = { r: c.r, g: c.g, b: c.b, a: (target === "fg" ? toolStore.fg : toolStore.bg).a };
     if (target === "fg") toolStore.setFg(rgba);
     else toolStore.setBg(rgba);
   }
@@ -81,7 +82,10 @@
       return;
     }
     const r = await openColorPicker(which === "fg" ? toolStore.fg : toolStore.bg, { title: which === "fg" ? "Color Picker (Foreground Color)" : "Color Picker (Background Color)" });
-    if (r) write(r);
+    if (r) {
+      if (which === "fg") toolStore.setFg(r);
+      else toolStore.setBg(r);
+    }
   }
   function pickRamp(e: PointerEvent): void {
     const el = e.currentTarget as HTMLElement;
@@ -129,8 +133,8 @@
 
 <div class="color" class:cubes={mode === "cube" || mode === "bcube"}>
   <div class="swatches">
-    <button type="button" class="sw bg" class:on={target === "bg"} style:background={rgbToHex(toolStore.bg)} aria-label="Background color" title="Background Color" onclick={() => void clickSwatch("bg")}></button>
-    <button type="button" class="sw fg" class:on={target === "fg"} style:background={rgbToHex(toolStore.fg)} aria-label="Foreground color" title="Foreground Color" onclick={() => void clickSwatch("fg")}></button>
+    <button type="button" class="sw bg" class:on={target === "bg"} aria-label="Background color" title="Background Color" onclick={() => void clickSwatch("bg")}><Swatch color={toolStore.bg} /></button>
+    <button type="button" class="sw fg" class:on={target === "fg"} aria-label="Foreground color" title="Foreground Color" onclick={() => void clickSwatch("fg")}><Swatch color={toolStore.fg} /></button>
   </div>
 
   {#if mode === "cube" || mode === "bcube"}

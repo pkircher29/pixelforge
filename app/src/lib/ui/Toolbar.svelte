@@ -1,11 +1,12 @@
 <script lang="ts">
+  import Swatch from "$lib/ui/controls/Swatch.svelte";
   /**
    * Photoshop single-column toolbar: 24 px buttons with a fly-out triangle, long-press
    * (300 ms) or right-click opens the fly-out (icon · name · key, current one checked),
    * the last-used tool becomes the group's face. Below: fg/bg swatches with default (D)
    * and swap (X) mini glyphs, Quick Mask (Q), Screen Mode (F).
    */
-  import { toolStore, rgbaToHex } from "$lib/stores/tool.svelte";
+  import { toolStore } from "$lib/stores/tool.svelte";
   import { settings } from "$lib/stores/settings.svelte";
   import { toolbarSlots, toolGlyph, type ToolbarSlot, type ToolSlotMember } from "$lib/tools";
   import { canvasHost } from "./canvas/host.svelte";
@@ -154,8 +155,8 @@
       <Icon name="swap-colors" size={11} />
     </button>
     <!-- PS: clicking a swatch opens the Color Picker dialog (not the OS picker). -->
-    <button type="button" class="sw bg" data-tip="Set background color" aria-label="Background color" style:background={rgbaToHex(toolStore.bg)} onclick={() => void runCommand("color.pickBackground")}></button>
-    <button type="button" class="sw fg" data-tip="Set foreground color" aria-label="Foreground color" style:background={rgbaToHex(toolStore.fg)} onclick={() => void runCommand("color.pick")}></button>
+    <button type="button" class="sw bg" data-tip="Set background color" aria-label="Background color" onclick={() => void runCommand("color.pickBackground")}><Swatch color={toolStore.bg} /></button>
+    <button type="button" class="sw fg" data-tip="Set foreground color" aria-label="Foreground color" onclick={() => void runCommand("color.pick")}><Swatch color={toolStore.fg} /></button>
   </div>
 
   <div class="modes">

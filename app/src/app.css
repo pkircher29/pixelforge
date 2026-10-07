@@ -10,6 +10,8 @@
  */
 :root,
 :root[data-theme="dark"] {
+  --ps-swatch-light: #ffffff;
+  --ps-swatch-dark: #bcbcbc;
   color-scheme: dark;
 
   --ps-app: #323232; /* window chrome, menu bar, options bar, toolbar, panels */

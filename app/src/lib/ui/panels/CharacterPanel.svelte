@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Swatch from "$lib/ui/controls/Swatch.svelte";
   /**
    * Character panel (PS): font family / style, size, leading, tracking, color, faux
    * bold / italic, All Caps. Bound to the live type session, else the active text layer,
@@ -44,7 +45,7 @@
   </div>
   <div class="row">
     <span class="lbl">Color:</span>
-    <span class="swatch" style:background={rgbaToHex(s.color)}>
+    <span class="swatch"><Swatch color={s.color} />
       <input type="color" value={rgbaToHex(s.color)} aria-label="Text color" oninput={(e) => { const c = hexToRgba(e.currentTarget.value); if (c) applyTypePatch({ color: c }); }} />
     </span>
   </div>

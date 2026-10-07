@@ -1,4 +1,7 @@
 <script lang="ts">
+  import Swatch from "$lib/ui/controls/Swatch.svelte";
+  import { swatchCss } from "$lib/ui/controls/swatch";
+  import ColorSwatchInput from "$lib/ui/controls/ColorSwatchInput.svelte";
   /**
    * Layer Style dialog — Photoshop layout: effect list with checkboxes on the left,
    * the selected effect's PS parameter groups in the middle, OK / Cancel / New Style /
@@ -231,7 +234,7 @@
     <span class="inline">
       <PsSelect value={mode} choices={BLEND_CHOICES} width={120} onchange={(v) => onmode(v as BlendMode)} />
       {#if col && oncolor}
-        <input type="color" class="swatch" value={color(col)} oninput={(e) => { const c = hexToRgba(e.currentTarget.value); if (c) oncolor(c); }} aria-label="Color" />
+        <ColorSwatchInput color={col} value={color(col)} oninput={(e) => { const c = hexToRgba(e.currentTarget.value); if (c) oncolor(c); }} label="Color" />
       {/if}
     </span>
   </div>
@@ -393,9 +396,9 @@
           <div class="srow">
             <span class="sl">Gradient:</span>
             <span class="inline">
-              <input type="color" class="swatch" value={color(first)} oninput={(ev) => { const c = hexToRgba(ev.currentTarget.value); if (c) patch("gradientOverlay", { gradient: { stops: [{ pos: 0, color: c }, { pos: 1, color: last }] } }); }} aria-label="Start color" />
-              <span class="gbar" style:background="linear-gradient(90deg, {color(first)}, {color(last)})"></span>
-              <input type="color" class="swatch" value={color(last)} oninput={(ev) => { const c = hexToRgba(ev.currentTarget.value); if (c) patch("gradientOverlay", { gradient: { stops: [{ pos: 0, color: first }, { pos: 1, color: c }] } }); }} aria-label="End color" />
+              <ColorSwatchInput color={first} value={color(first)} oninput={(ev) => { const c = hexToRgba(ev.currentTarget.value); if (c) patch("gradientOverlay", { gradient: { stops: [{ pos: 0, color: c }, { pos: 1, color: last }] } }); }} label="Start color" />
+              <span class="gbar"><Swatch background={`linear-gradient(90deg,${swatchCss(first)},${swatchCss(last)})`} /></span>
+              <ColorSwatchInput color={last} value={color(last)} oninput={(ev) => { const c = hexToRgba(ev.currentTarget.value); if (c) patch("gradientOverlay", { gradient: { stops: [{ pos: 0, color: first }, { pos: 1, color: c }] } }); }} label="End color" />
               <label class="chk"><input type="checkbox" checked={e.reverse} onchange={(ev) => patch("gradientOverlay", { reverse: ev.currentTarget.checked })} /> Reverse</label>
             </span>
           </div>
@@ -418,14 +421,14 @@
           <legend>Fill</legend>
           <div class="srow"><span class="sl">Fill Type:</span><PsSelect value={e.fillType} choices={FILL_TYPES} width={100} onchange={(v) => patch("stroke", { fillType: v as "color" | "gradient", gradient: v === "gradient" ? (e.gradient ?? { stops: [{ pos: 0, color: { r: 0, g: 0, b: 0, a: 255 } }, { pos: 1, color: { r: 255, g: 255, b: 255, a: 255 } }] }) : e.gradient })} /></div>
           {#if e.fillType === "color"}
-            <div class="srow"><span class="sl">Color:</span><input type="color" class="swatch" value={color(e.color)} oninput={(ev) => { const c = hexToRgba(ev.currentTarget.value); if (c) patch("stroke", { color: c }); }} aria-label="Stroke color" /></div>
+            <div class="srow"><span class="sl">Color:</span><ColorSwatchInput color={e.color} value={color(e.color)} oninput={(ev) => { const c = hexToRgba(ev.currentTarget.value); if (c) patch("stroke", { color: c }); }} label="Stroke color" /></div>
           {:else}
             <div class="srow">
               <span class="sl">Gradient:</span>
               <span class="inline">
-                <input type="color" class="swatch" value={color(gfirst)} oninput={(ev) => { const c = hexToRgba(ev.currentTarget.value); if (c) patch("stroke", { gradient: { stops: [{ pos: 0, color: c }, { pos: 1, color: glast }] } }); }} aria-label="Start color" />
-                <span class="gbar" style:background="linear-gradient(90deg, {color(gfirst)}, {color(glast)})"></span>
-                <input type="color" class="swatch" value={color(glast)} oninput={(ev) => { const c = hexToRgba(ev.currentTarget.value); if (c) patch("stroke", { gradient: { stops: [{ pos: 0, color: gfirst }, { pos: 1, color: c }] } }); }} aria-label="End color" />
+                <ColorSwatchInput color={gfirst} value={color(gfirst)} oninput={(ev) => { const c = hexToRgba(ev.currentTarget.value); if (c) patch("stroke", { gradient: { stops: [{ pos: 0, color: c }, { pos: 1, color: glast }] } }); }} label="Start color" />
+                <span class="gbar"><Swatch background={`linear-gradient(90deg,${swatchCss(gfirst)},${swatchCss(glast)})`} /></span>
+                <ColorSwatchInput color={glast} value={color(glast)} oninput={(ev) => { const c = hexToRgba(ev.currentTarget.value); if (c) patch("stroke", { gradient: { stops: [{ pos: 0, color: gfirst }, { pos: 1, color: c }] } }); }} label="End color" />
               </span>
             </div>
             <div class="srow"><span class="sl">Style:</span><PsSelect value={e.gradientStyle} choices={GRADIENT_STYLES} width={100} onchange={(v) => patch("stroke", { gradientStyle: v as typeof e.gradientStyle })} /></div>
@@ -557,13 +560,6 @@
     align-items: center;
     gap: 5px;
     white-space: nowrap;
-  }
-  .swatch {
-    width: 40px;
-    height: 18px;
-    padding: 0;
-    border: 1px solid var(--ps-border-dark);
-    background: none;
   }
   .gbar {
     display: inline-block;

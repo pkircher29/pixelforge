@@ -200,12 +200,12 @@ class ToolStore {
   }
 
   setFg(c: RGBA): void {
-    this.fg = { ...c, a: 255 };
+    this.fg = { ...c };
     this.persist();
   }
 
   setBg(c: RGBA): void {
-    this.bg = { ...c, a: 255 };
+    this.bg = { ...c };
     this.persist();
   }
 
