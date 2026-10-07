@@ -98,6 +98,26 @@ it("copies bounded regions without materializing source tiles", () => {
   expect(sparse.readPixels(Rect.make(-3, -4, 10, 10))).toEqual(new Uint8ClampedArray(400));
 });
 
+it("writes clipped regions without detaching unchanged snapshot tiles", () => {
+  const tiled = new TiledRaster(530, 270), dense = new Raster(530, 270);
+  for (const rect of [Rect.make(-2, -3, 7, 8), Rect.make(254, 254, 8, 8), Rect.make(528, 268, 8, 8)]) {
+    const bytes = new Uint8ClampedArray(rect.w * rect.h * 4);
+    for (let i = 0; i < bytes.length; i++) bytes[i] = i % 251;
+    tiled.writePixels(rect, bytes);
+    dense.writePixels(rect, bytes);
+  }
+  expect(tiled.readPixels(tiled.bounds())).toEqual(dense.data);
+  const snapshot = tiled.clone();
+  const bytesBefore = tiled.byteLength();
+  tiled.writePixels(tiled.bounds(), tiled.readPixels(tiled.bounds()));
+  expect(TiledRaster.retainedPixelBytes([tiled, snapshot])).toBe(bytesBefore);
+  tiled.writePixels(tiled.bounds(), new Uint8ClampedArray(530 * 270 * 4));
+  expect(tiled.byteLength()).toBe(0);
+  expect(snapshot.readPixels(snapshot.bounds())).toEqual(dense.data);
+  expect(tiled.storageMode).toBe("tiled");
+  expect(() => tiled.writePixels(Rect.make(0, 0, 2, 2), new Uint8ClampedArray(3))).toThrow(RangeError);
+});
+
 it("matches contiguous over/replace blits with clipping, offsets and opacity", () => {
   const source = new Raster(280, 270);
   source.fill(rgba(30, 170, 80, 90), Rect.make(2, 4, 275, 260));

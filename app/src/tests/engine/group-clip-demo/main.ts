@@ -2,6 +2,7 @@ import { BlendMode, GlCompositor, Raster, Rect, TiledRaster, Viewport, addLayer,
 import { CanvasCompositor } from "../../../lib/engine/composite/CanvasCompositor";
 import { documentFromProjectFrame, projectFrameParts, type ProjectHeader } from "../../../lib/io/convert";
 import { decodeFrame, encodeFrame } from "../../../lib/io/frame";
+import { BrushStroke, DEFAULT_BRUSH_SETTINGS } from "../../../lib/tools/brush-engine";
 
 const result = document.querySelector<HTMLPreElement>("#result")!;
 const comp = new GlCompositor(document.querySelector<HTMLCanvasElement>("#canvas")!);
@@ -75,7 +76,13 @@ try {
     const stats = comp.render(tiledDoc, tiledView, { showSelection: false, showPixelGrid: false });
     const gpu = comp.readComposite()!, cpu = compositeToRaster(tiledDoc);
     const a = gpu.data, b = cpu.data;
-    if (a.some((v, i) => Math.abs(v - b[i]!) > 2)) throw new Error(`${label}: GPU/CPU tile mismatch`);
+    // GPU readback unpremultiplies RGBA8; low-alpha straight RGB amplifies rounding.
+    const mismatch = a.findIndex((v, i) => {
+      if (i % 4 === 3) return Math.abs(v - b[i]!) > 2;
+      const alphaIndex = i - i % 4 + 3;
+      return Math.abs(v * a[alphaIndex]! / 255 - b[i]! * b[alphaIndex]! / 255) > 2;
+    });
+    if (mismatch >= 0) throw new Error(`${label}: GPU/CPU tile mismatch at byte ${mismatch}: ${a.slice(mismatch - mismatch % 4, mismatch - mismatch % 4 + 4)} / ${b.slice(mismatch - mismatch % 4, mismatch - mismatch % 4 + 4)}`);
     if (tiled.storageMode !== "tiled") throw new Error(`${label}: source was materialized`);
     checks.push(`${label}: pixel parity; source remains tiled; ${stats.uploads} uploads`);
     return stats;
@@ -97,6 +104,19 @@ try {
   checkTiles("removed edge tile clears GPU pixels");
   tiled.clear(); comp.markDirty(tiledLayer.id);
   checkTiles("full sparse clear resets texture");
+  const stroke = new BrushStroke(tiled, {
+    settings: { ...DEFAULT_BRUSH_SETTINGS, size: 24 },
+    blend: { mode: "color", color: rgba(230, 60, 110) },
+    opacity: 0.7, flow: 0.5, selection: null, offset: { x: 0, y: 0 }, seed: 1,
+  });
+  stroke.moveTo({ x: 250, y: 250 });
+  stroke.moveTo({ x: 270, y: 260 });
+  comp.markDirty(tiledLayer.id, Rect.make(230, 230, 60, 40));
+  checkTiles("brush crosses tile boundary");
+  const restored = stroke.abort();
+  if (restored) comp.markDirty(tiledLayer.id, restored);
+  checkTiles("brush cancellation restores GPU pixels");
+  if (tiled.byteLength() !== 0) throw new Error("cancelled brush retained painted tiles");
   result.textContent = `PASS\n${checks.join("\n")}`;
 } catch (e) { result.textContent = `FAIL: ${e}`; throw e; }
 finally { comp.dispose(); }

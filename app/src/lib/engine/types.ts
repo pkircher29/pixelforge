@@ -58,6 +58,8 @@ export interface IRaster {
   readonly data: Uint8ClampedArray<ArrayBuffer>;
   /** Detached RGBA bytes for a region; out-of-bounds pixels are transparent black. */
   readPixels(rect: Rect): Uint8ClampedArray<ArrayBuffer>;
+  /** Replace a region from tightly packed RGBA bytes; clip writes to bounds. */
+  writePixels(rect: Rect, data: Uint8ClampedArray<ArrayBuffer>): void;
   /** `{ 0, 0, width, height }`. */
   bounds(): Rect;
   /** Deep copy. */

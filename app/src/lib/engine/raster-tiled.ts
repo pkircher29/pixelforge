@@ -107,6 +107,31 @@ export class TiledRaster extends Raster {
     return result;
   }
 
+  override writePixels(rect: Rect, data: Uint8ClampedArray<ArrayBuffer>): void {
+    if (!Number.isInteger(rect.w) || !Number.isInteger(rect.h) || rect.w < 0 || rect.h < 0) throw new RangeError("TiledRaster: invalid region size");
+    if (data.length !== rect.w * rect.h * 4) throw new RangeError("TiledRaster: region byte count mismatch");
+    if (this.denseData) { super.writePixels(rect, data); return; }
+    const area = Rect.intersect(rect, this.bounds());
+    if (Rect.isEmpty(area)) return;
+    for (let ty = Math.floor(area.y / RASTER_TILE_SIZE); ty <= Math.floor((area.y + area.h - 1) / RASTER_TILE_SIZE); ty++) {
+      for (let tx = Math.floor(area.x / RASTER_TILE_SIZE); tx <= Math.floor((area.x + area.w - 1) / RASTER_TILE_SIZE); tx++) {
+        const key = ty * this.columns + tx;
+        const part = Rect.intersect(area, Rect.make(tx * RASTER_TILE_SIZE, ty * RASTER_TILE_SIZE, RASTER_TILE_SIZE, RASTER_TILE_SIZE));
+        let tile = this.tiles.get(key), detached = false;
+        for (let y = part.y; y < part.y + part.h; y++) for (let x = part.x; x < part.x + part.w; x++) {
+          const si = ((y - rect.y) * rect.w + x - rect.x) * 4;
+          const width = tile?.width ?? Math.min(RASTER_TILE_SIZE, this.width - tx * RASTER_TILE_SIZE);
+          const di = ((y - ty * RASTER_TILE_SIZE) * width + x - tx * RASTER_TILE_SIZE) * 4;
+          if ((tile?.bytes[di] ?? 0) === data[si] && (tile?.bytes[di + 1] ?? 0) === data[si + 1] &&
+              (tile?.bytes[di + 2] ?? 0) === data[si + 2] && (tile?.bytes[di + 3] ?? 0) === data[si + 3]) continue;
+          if (!detached) { tile = this.writable(key); detached = true; }
+          this.write(tile!, di, data, si);
+        }
+        if (tile && !tile.populated) this.tiles.delete(key);
+      }
+    }
+  }
+
   override blit(src: IRaster, dx: number, dy: number, srcRect?: Rect, opts?: BlitOptions): void {
     if (this.denseData) { super.blit(src === this ? this.clone() : src, dx, dy, srcRect, opts); return; }
     const sr = srcRect ? Rect.intersect(srcRect, src.bounds()) : src.bounds();
@@ -192,10 +217,10 @@ export class TiledRaster extends Raster {
     return result;
   }
 
-  private write(tile: Tile, i: number, color: ArrayLike<number>): void {
+  private write(tile: Tile, i: number, color: ArrayLike<number>, offset = 0): void {
     const d = tile.bytes;
     const before = !!(d[i] || d[i + 1] || d[i + 2] || d[i + 3]);
-    d[i] = color[0]!; d[i + 1] = color[1]!; d[i + 2] = color[2]!; d[i + 3] = color[3]!;
+    d[i] = color[offset]!; d[i + 1] = color[offset + 1]!; d[i + 2] = color[offset + 2]!; d[i + 3] = color[offset + 3]!;
     const after = !!(d[i] || d[i + 1] || d[i + 2] || d[i + 3]);
     tile.populated += Number(after) - Number(before);
   }

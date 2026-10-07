@@ -191,6 +191,17 @@ All 700 tests, Svelte checks and the frontend build pass. Browser GPU checks con
 project-frame reopen pixel parity with both live and restored sources remaining tiled.
 The existing file/IPC format still requires contiguous transfer blobs, so save-time
 peak allocation is not resolved by this change.
+The shared BrushStroke engine now keeps coverage in sparse float tiles, reads only
+the current dab region and writes changed pixels without expanding the live raster
+or pre-stroke snapshot. Target effects read only the current region of their cache;
+smudge uses bounded readback too. Seven added tests cover dense/tiled parity for
+color, erase, source, target and smudge, selection and edge clipping, cancellation,
+unchanged shared tiles and small-stroke allocation on a 4000×3000 canvas. All 707
+tests, Svelte checks and the frontend build pass. Real-browser GL checks verify a
+boundary-crossing stroke and cancellation while storage stays tiled, comparing alpha
+and premultiplied color to account for RGBA8 GPU rounding. Native brush verification
+is still pending. Legacy healing coverage readback still allocates a full float array;
+this is not completion of the application memory gate.
 Legacy pixel writers, remaining bulk operations, sparse GPU allocation, workers, non-destructive
 cropping and the full 1.5 GB benchmark gate remain open.
 

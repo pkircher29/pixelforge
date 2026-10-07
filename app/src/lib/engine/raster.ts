@@ -98,6 +98,10 @@ export class Raster implements IRaster {
     return result;
   }
 
+  writePixels(rect: Rect, data: Uint8ClampedArray<ArrayBuffer>): void {
+    this.blit(new Raster(rect.w, rect.h, data), rect.x, rect.y, undefined, { mode: "replace" });
+  }
+
   fill(color: RGBA, rect?: Rect): void {
     const d = this.data;
     const area = rect ? Rect.intersect(rect, this.bounds()) : this.bounds();
