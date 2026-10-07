@@ -4,7 +4,7 @@
  * scaling and the "Aa" preview raster. No Svelte.
  */
 import {
-  BLEND_MODES,
+  BLEND_MODES_MENU,
   BLEND_MODE_LABEL,
   DEFAULT_GLOBAL_LIGHT_ALTITUDE,
   DEFAULT_GLOBAL_LIGHT_ANGLE,
@@ -48,7 +48,7 @@ export const DISABLED_PAGES: readonly { after: StyleKey; label: string }[] = [
   { after: "gradientOverlay", label: "Pattern Overlay" },
 ];
 
-export const BLEND_CHOICES = BLEND_MODES.map((m) => ({ value: m, label: BLEND_MODE_LABEL[m] }));
+export const BLEND_CHOICES = BLEND_MODES_MENU.map((m) => ({ value: m, label: BLEND_MODE_LABEL[m] }));
 
 export function defaultEffect(key: StyleKey): NonNullable<LayerEffects[StyleKey]> {
   switch (key) {

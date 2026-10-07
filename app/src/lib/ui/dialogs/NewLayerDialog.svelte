@@ -4,7 +4,7 @@
   import PsSelect from "../controls/PsSelect.svelte";
   import ScrubbyNumber from "../controls/ScrubbyNumber.svelte";
   import type { Resolver } from "./dialogs.svelte";
-  import { BLEND_MODES, BLEND_MODE_LABEL, type BlendMode, type LayerColor } from "$lib/engine";
+  import { BLEND_MODES_MENU, BLEND_MODE_LABEL, type BlendMode, type LayerColor } from "$lib/engine";
 
   export interface NewLayerResult {
     name: string;
@@ -46,7 +46,7 @@
     { value: "violet", label: "Violet" },
     { value: "gray", label: "Gray" },
   ];
-  const MODES = BLEND_MODES.map((m) => ({ value: m, label: BLEND_MODE_LABEL[m] }));
+  const MODES = BLEND_MODES_MENU.map((m) => ({ value: m, label: BLEND_MODE_LABEL[m] }));
 
   function submit() {
     resolve({ name: name.trim() || initialName, clip, color: color === "none" ? null : (color as LayerColor), blendMode: mode, opacity: Math.max(0, Math.min(100, opacity)) / 100 });

@@ -335,7 +335,7 @@ export function toolForKey(
   // Photoshop default ("Use Shift Key for Tool Switch"): the letter selects the group's
   // visible tool; Shift+letter cycles through the group.
   // Explicit copy: spreading a DOM KeyboardEvent copies no (prototype) properties.
-  const plain = { key: e.key, code: e.code, ctrlKey: e.ctrlKey, metaKey: e.metaKey, altKey: e.altKey, shiftKey: false };
+  const plain = { key: e.key, ...(e.code !== undefined ? { code: e.code } : {}), ctrlKey: e.ctrlKey, metaKey: e.metaKey, altKey: e.altKey, shiftKey: false };
   const matches = tools.filter((t) => {
     const acc = parseAccelerator(t.shortcut);
     return acc ? matchesAccelerator(acc, plain, IS_MAC) : false;

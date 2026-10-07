@@ -31,6 +31,29 @@ export const BLEND_MODES: readonly BlendMode[] = [
   BlendMode.Luminosity,
 ];
 
+/**
+ * Menu order as Photoshop groups them (Normal | darken | lighten | contrast |
+ * inversion | component). UI lists use this; `BLEND_MODES` keeps the shader indices.
+ */
+export const BLEND_MODES_MENU: readonly BlendMode[] = [
+  BlendMode.Normal,
+  BlendMode.Darken,
+  BlendMode.Multiply,
+  BlendMode.ColorBurn,
+  BlendMode.Lighten,
+  BlendMode.Screen,
+  BlendMode.ColorDodge,
+  BlendMode.Overlay,
+  BlendMode.SoftLight,
+  BlendMode.HardLight,
+  BlendMode.Difference,
+  BlendMode.Exclusion,
+  BlendMode.Hue,
+  BlendMode.Saturation,
+  BlendMode.Color,
+  BlendMode.Luminosity,
+];
+
 /** Mode -> integer used by the GLSL `switch`. */
 export const BLEND_MODE_INDEX: Readonly<Record<BlendMode, number>> = Object.fromEntries(
   BLEND_MODES.map((m, i) => [m, i]),

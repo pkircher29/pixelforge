@@ -1,6 +1,6 @@
 <script lang="ts">
   /** Edit ▸ Fill… (Shift+F5): Contents, Blending (mode, opacity, preserve transparency). */
-  import { BLEND_MODES, BLEND_MODE_LABEL, type BlendMode } from "$lib/engine";
+  import { BLEND_MODES_MENU, BLEND_MODE_LABEL, type BlendMode } from "$lib/engine";
   import { builtinPatterns } from "$lib/tools/patterns";
   import Dialog from "./Dialog.svelte";
   import type { Resolver } from "./dialogs.svelte";
@@ -21,7 +21,7 @@
 
   const patterns = [...builtinPatterns().map((p) => ({ value: p.id, label: p.name })), ...getUserPatterns().map((p) => ({ value: p.id, label: p.name }))];
   const contents = FILL_CONTENTS.map((c) => ({ value: c.id, label: c.label }));
-  const modes = BLEND_MODES.map((m) => ({ value: m, label: BLEND_MODE_LABEL[m] }));
+  const modes = BLEND_MODES_MENU.map((m) => ({ value: m, label: BLEND_MODE_LABEL[m] }));
 
   async function setContents(v: string): Promise<void> {
     o.contents = v as FillContents;

@@ -117,12 +117,6 @@
     border-radius: 2px;
     color: #fff;
   }
-  .name {
-    font-weight: 600;
-    font-size: var(--fs-sm);
-    color: var(--ps-text);
-    letter-spacing: 0.02em;
-  }
   .title {
     position: absolute;
     left: 50%;

@@ -25,6 +25,7 @@ export { Raster, rgba } from "./raster";
 export { Selection } from "./selection";
 export {
   BLEND_MODES,
+  BLEND_MODES_MENU,
   BLEND_MODE_INDEX,
   BLEND_MODE_LABEL,
   BLEND_GLSL,

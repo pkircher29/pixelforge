@@ -9,7 +9,7 @@
    */
   import { untrack } from "svelte";
   import {
-    BLEND_MODES,
+    BLEND_MODES_MENU,
     BLEND_MODE_LABEL,
     DuplicateLayerCommand,
     SetLayerEffectsCommand,
@@ -106,7 +106,7 @@
     return !entry.doc.selection.isEmpty;
   });
 
-  const BLEND_CHOICES = BLEND_MODES.map((m) => ({ value: m, label: BLEND_MODE_LABEL[m] }));
+  const BLEND_CHOICES = BLEND_MODES_MENU.map((m) => ({ value: m, label: BLEND_MODE_LABEL[m] }));
   const PASS_THROUGH = { value: "pass-through", label: "Pass Through" };
   const FILTER_MODES: { value: FilterMode; label: string }[] = [
     { value: "kind", label: "Kind" },

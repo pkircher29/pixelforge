@@ -1,6 +1,6 @@
 /** Gradient (G): drag a line to fill the layer / selection / mask with the chosen gradient. */
 import { Rainbow } from "@lucide/svelte";
-import { BLEND_MODE_LABEL, BLEND_MODES, BlendMode, Rect, type GradientStyle, type Point } from "$lib/engine";
+import { BLEND_MODE_LABEL, BLEND_MODES_MENU, BlendMode, Rect, type GradientStyle, type Point } from "$lib/engine";
 import type { Tool, ToolContext, ToolEvent, ToolOption } from "./types";
 import { constrainAngle } from "./brush-engine";
 import { resolvePaintTarget } from "./paint-target";
@@ -33,7 +33,7 @@ export class GradientTool implements Tool {
   readonly options: readonly ToolOption[] = [
     { kind: "custom", key: "gradient", renderer: "gradient-picker", label: "", default: "fg-bg" },
     { kind: "custom", key: "style", renderer: "icon-select", label: "", default: "linear", props: { items: GRADIENT_STYLE_ITEMS } },
-    { kind: "select", key: "mode", label: "Mode", choices: BLEND_MODES.map((m) => ({ value: m, label: BLEND_MODE_LABEL[m] })), default: BlendMode.Normal },
+    { kind: "select", key: "mode", label: "Mode", choices: BLEND_MODES_MENU.map((m) => ({ value: m, label: BLEND_MODE_LABEL[m] })), default: BlendMode.Normal },
     { kind: "number", key: "opacity", label: "Opacity", min: 1, max: 100, step: 1, default: 100, unit: "%" },
     { kind: "toggle", key: "reverse", label: "Reverse", default: false },
     { kind: "toggle", key: "dither", label: "Dither", default: true },

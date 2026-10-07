@@ -1,6 +1,6 @@
 <script lang="ts">
   /** Edit ▸ Stroke…: Stroke (width, color), Location (inside/center/outside), Blending. */
-  import { BLEND_MODES, BLEND_MODE_LABEL, type BlendMode } from "$lib/engine";
+  import { BLEND_MODES_MENU, BLEND_MODE_LABEL, type BlendMode } from "$lib/engine";
   import Dialog from "./Dialog.svelte";
   import type { Resolver } from "./dialogs.svelte";
   import PsSelect from "../controls/PsSelect.svelte";
@@ -15,7 +15,7 @@
   let { initial, resolve }: Props = $props();
   // svelte-ignore state_referenced_locally
   let o = $state<StrokeOptions>({ ...initial });
-  const modes = BLEND_MODES.map((m) => ({ value: m, label: BLEND_MODE_LABEL[m] }));
+  const modes = BLEND_MODES_MENU.map((m) => ({ value: m, label: BLEND_MODE_LABEL[m] }));
   const locations: { id: StrokeLocation; label: string }[] = [
     { id: "inside", label: "Inside" },
     { id: "center", label: "Center" },
