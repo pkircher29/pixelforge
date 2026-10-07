@@ -34,6 +34,24 @@ export function constrainRatio(anchor: Point, cur: Point, ratio: number): Rect {
   return Rect.make(dx < 0 ? anchor.x - w : anchor.x, dy < 0 ? anchor.y - h : anchor.y, w, h);
 }
 
+/**
+ * Largest axis-aligned rectangle inside a `w × h` rectangle rotated by `angle` (radians),
+ * centred on it — the area Straighten keeps without transparent corners.
+ */
+export function largestInscribedRect(w: number, h: number, angle: number): { w: number; h: number } {
+  if (w <= 0 || h <= 0) return { w: 0, h: 0 };
+  const sinA = Math.abs(Math.sin(angle));
+  const cosA = Math.abs(Math.cos(angle));
+  const longer = Math.max(w, h);
+  const shorter = Math.min(w, h);
+  if (shorter <= 2 * sinA * cosA * longer || Math.abs(sinA - cosA) < 1e-10) {
+    const x = 0.5 * shorter;
+    return w >= h ? { w: x / sinA, h: x / cosA } : { w: x / cosA, h: x / sinA };
+  }
+  const cos2a = cosA * cosA - sinA * sinA;
+  return { w: (w * cosA - h * sinA) / cos2a, h: (h * cosA - w * sinA) / cos2a };
+}
+
 export class CropTool implements Tool {
   readonly id = "crop";
   readonly name = "Crop";
@@ -188,15 +206,23 @@ export class CropTool implements Tool {
     if (d.kind === "straighten") {
       this.straightenArmed = false;
       const m = measureLine(d.a.x, d.a.y, d.b.x, d.b.y);
+      let inner: Rect | null = null;
       if (m.length >= 4) {
         const deg = straightenAngle(m);
         if (Math.abs(deg) > 0.01) {
+          const w0 = ctx.doc.width;
+          const h0 = ctx.doc.height;
           ctx.exec(new RotateCanvasCommand(deg), { noMerge: true });
           ctx.compositor?.invalidateAll();
           ctx.notify("success", `Straightened by ${deg.toFixed(2)}°`);
+          // PS: the crop box shrinks to the largest rectangle with no transparent corners.
+          const r = largestInscribedRect(w0, h0, (deg * Math.PI) / 180);
+          const W = ctx.doc.width;
+          const H = ctx.doc.height;
+          inner = Rect.make(Math.ceil((W - r.w) / 2), Math.ceil((H - r.h) / 2), Math.floor(r.w), Math.floor(r.h));
         }
       }
-      this.rect = Rect.ofSize(ctx.doc.width, ctx.doc.height);
+      this.rect = inner ?? Rect.ofSize(ctx.doc.width, ctx.doc.height);
       ctx.hint(this.hint);
       ctx.invalidateOverlay();
       return;

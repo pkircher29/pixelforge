@@ -9,6 +9,17 @@ import { backgroundEraseWeight, mapRegion } from "./retouch-math";
 import { toolStore } from "$lib/stores/tool.svelte";
 import { clearThroughMask } from "./paint/fill";
 
+/**
+ * Photoshop's "Background" layer: the bottom, top-level pixel layer named Background
+ * (what New Document / Flatten create). It has no transparency, so the Eraser paints
+ * the background color there.
+ */
+export function isBackgroundLayer(ctx: ToolContext, target: PaintTarget): boolean {
+  const l = target.layer;
+  if (!l || target.kind !== "layer" || l.kind !== "raster" || l.name !== "Background" || l.parentId) return false;
+  return ctx.doc.layers[0]?.id === l.id;
+}
+
 export class EraserTool extends BrushBasedTool {
   constructor() {
     super({
@@ -60,6 +71,8 @@ export class EraserTool extends BrushBasedTool {
       }
       return { mode: "source", sourceAt: (x, y, out) => src.getPixel(x, y, out) };
     }
+    // PS: on the Background layer the Eraser paints the background color.
+    if (isBackgroundLayer(ctx, target)) return { mode: "color", color: ctx.bg() };
     return { mode: "erase" };
   }
 
