@@ -17,6 +17,7 @@
   import { typeSession } from "$lib/tools/type-session.svelte";
   import { canvasHost, type CanvasImpl } from "./canvas/host.svelte";
   import { paintRuler } from "./rulers";
+  import GenerativeFillBar from "./GenerativeFillBar.svelte";
 
   interface Props {
     entry: OpenDoc;
@@ -409,6 +410,9 @@
       <div class="frame" aria-hidden="true" style:left="{frame.x}px" style:top="{frame.y}px" style:width="{frame.w}px" style:height="{frame.h}px"></div>
     {/if}
     <canvas class="overlay" bind:this={overlay} aria-hidden="true"></canvas>
+    {#if active && !typing}
+      <GenerativeFillBar {entry} width={cssW} height={cssH} />
+    {/if}
     {#if typing}
       <TypeEditor {entry} />
     {/if}

@@ -1,7 +1,11 @@
 # Generative Fill
 
-Make a partial selection, choose **AI → Generative Fill…**, enter a prompt, select
-a provider, and click **Run**. The operation requests three variants and uses the
+Make a partial selection, enter a prompt in the floating **Generative Fill** task
+bar, select a provider, and click **Generate**. The bar shows the estimated cost
+for three variants and uses the provider's default editing model and Auto size.
+**More options…** opens the AI panel for model, size and other controls; the
+**AI → Generative Fill…** menu command opens that panel directly.
+The operation requests three variants and uses the
 existing native-mask or mask-emulation pipeline. Normal provider image charges apply.
 The panel's cost estimate uses three variants. A missing selection or a provider
 that supports fewer than three variants prevents this operation.
@@ -22,17 +26,21 @@ resized while the request ran, results are not applied to a differently sized ca
 Receiving fewer than three results is reported rather than silently creating an
 incomplete Generative Fill group.
 
-Windows verification (2026-10-07): 717 frontend tests passed, followed by a passing
-targeted test for an incomplete provider response; Svelte check reported no errors
-or warnings. The rebuilt native app sent a three-result mask request to the local
-fixture server. Properties switching changed the rendered selection, undo/redo
+Windows verification (2026-10-07): 720 frontend tests passed; Svelte check reported
+no errors or warnings. The rebuilt native app's inline prompt sent a three-result
+mask request to the local fixture server. Hide/reselection restored the bar,
+typing preserved its position, and a simulated quota failure appeared inline with
+no retry. Immediate cancellation returned the bar to an idle state without changing
+the canvas. Properties switching changed the rendered selection, undo/redo
 restored exact captured pixels, and native Save As → close → Open preserved both the
 selected variant and the other switchable result pixels. No vendor image request
 was involved.
 
-![Generative Fill variants in the native app](screenshots/generative-fill-native.png)
+![Generative Fill task bar and variants in the native app](screenshots/generative-fill-contextual-native.png)
 
-The selection contextual task bar and its inline prompt workflow remain to be
-implemented. This command-and-panel workflow is not completion of the full
-`PLAN-v3.md` Generative Fill UX requirement. Live vendor generation and OAuth
-verification also remain separate gates.
+The task bar follows the selection as the viewport moves, stays within the canvas
+view, and hides for empty, full-canvas or wholly offscreen selections. Its close
+button hides it until the selection changes. An active job exposes Cancel and
+prevents another submission from the bar. Provider errors appear beside the prompt.
+The broader contextual actions for active layers remain unfinished. Live vendor
+generation and OAuth verification also remain separate gates.
