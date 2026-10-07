@@ -19,6 +19,15 @@ Implemented on `feat/v03-oauth-polish`:
 - Existing ChatGPT and Grok sign-in paths retained. ChatGPT plan image restrictions
   and the requirement for an xAI-issued Pixelforge client ID still apply.
 - Polish item 13: Ctrl+F opens Search, Ctrl+K remains an alias, Last Filter uses Ctrl+Alt+F.
+- Polish item 12: font permission requests start directly from the picker gesture;
+  native `fonts_list` uses font-kit on a blocking worker to enumerate installed families.
+  Successful discovery lists installed families instead of merging uninstalled fallback
+  names. Failures remain retryable, and Refresh installed fonts picks up changes.
+  Linux build workflows include Fontconfig/FreeType development packages. Frontend
+  tests cover permission rejection, native fallback and refresh; all 673 tests and
+  Svelte/Rust checks pass. The rebuilt Windows picker displays 87 installed families;
+  search and refresh pass without page errors. Screenshot:
+  `docs/screenshots/installed-fonts-native.png`. macOS/Linux runtime checks remain open.
 - Polish item 14: `npm run build:release` builds frontend assets before the native app.
 - Polish item 1: app-root tooltips flip/shift inside the viewport, wrap long labels,
   honor Show Tool Tips, and support focus/Escape with `aria-describedby` cleanup.

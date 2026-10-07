@@ -31,6 +31,7 @@ pub fn run() {
     builder
         .manage(AppState::default())
         .invoke_handler(tauri::generate_handler![
+            commands::fonts::fonts_list,
             commands::ai::ai_list_providers,
             commands::ai::ai_submit_generate,
             commands::ai::ai_submit_edit,
