@@ -173,10 +173,17 @@ isolated test retains 50 MiB of unique pixel buffers; it is **not** an app memor
 benchmark. Region readback, dense/sparse and sparse/sparse blits, opacity, replacement,
 overlapping self-copy, imports and filled construction now preserve sparse storage.
 Full-bounds captures share tiles; tests exercise actual PaintCommand capture/finish/
-undo/redo on an explicitly supplied tiled layer. Ordinary document factories still
-create contiguous layers. All 696 tests and Svelte checks pass; real-browser CPU/GL
-clipping, channel and alpha-overlay checks retain pixel parity. Document factories,
-production history integration, remaining bulk operations, per-tile GL uploads, workers, non-destructive
+undo/redo on a tiled layer. New pixel layers now default to tiled storage. Edge tiles
+allocate only valid pixels, so tiny history patches retain their expected byte cost.
+CPU blending, clipping alpha and thumbnails preserve sparse sources. GL full uploads
+reset the texture then transfer populated tiles; dirty uploads transfer only intersected
+tile regions, including zero bytes when a tile was cleared. GPU textures are still
+layer-sized. All 697 tests and Svelte checks pass. Real-browser CPU/GL checks verify
+edge tiles, four-region boundary edits, tile deletion and full clears with pixel parity
+and source storage remaining tiled; existing clipping/channel/overlay checks pass too.
+The Windows native build passes; its fill/define-pattern/define-brush flow, shared-tip
+rename/delete and full-process-restart persistence smoke test pass without runtime errors.
+Legacy pixel writers/import paths, remaining bulk operations, sparse GPU allocation, workers, non-destructive
 cropping and the full 1.5 GB benchmark gate remain open.
 
 1. Tooltips clip at panel/window edges → one tooltip layer at app root with edge-aware placement (flip/shift).

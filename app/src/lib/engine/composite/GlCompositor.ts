@@ -35,6 +35,7 @@
 
 import { Rect } from "../rect";
 import { Raster } from "../raster";
+import { TiledRaster, RASTER_TILE_SIZE } from "../raster-tiled";
 import type { Selection } from "../selection";
 import { BLEND_MODE_INDEX } from "../blend";
 import { topLevelLayers, childrenOf, compositeToRaster } from "../document";
@@ -447,6 +448,14 @@ export class GlCompositor implements ICompositor {
     const gl = this.gl;
     gl.bindTexture(gl.TEXTURE_2D, tex);
     gl.pixelStorei(gl.UNPACK_ALIGNMENT, 4);
+    if (raster instanceof TiledRaster && raster.storageMode === "tiled") {
+      // Clear old pixels (including tiles removed since the previous upload), then
+      // transfer only populated tiles. GPU allocation is still layer-sized for now.
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, raster.width, raster.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+      this.stats.uploads++;
+      for (const rect of raster.populatedTileRects()) this.uploadRect(tex, raster, rect);
+      return;
+    }
     if (realloc) {
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, raster.width, raster.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, raster.data);
     } else {
@@ -462,6 +471,16 @@ export class GlCompositor implements ICompositor {
     if (Rect.isEmpty(r)) return;
     gl.bindTexture(gl.TEXTURE_2D, tex);
     gl.pixelStorei(gl.UNPACK_ALIGNMENT, 4);
+    if (raster instanceof TiledRaster && raster.storageMode === "tiled") {
+      for (let ty = Math.floor(r.y / RASTER_TILE_SIZE); ty <= Math.floor((r.y + r.h - 1) / RASTER_TILE_SIZE); ty++) {
+        for (let tx = Math.floor(r.x / RASTER_TILE_SIZE); tx <= Math.floor((r.x + r.w - 1) / RASTER_TILE_SIZE); tx++) {
+          const part = Rect.intersect(r, Rect.make(tx * RASTER_TILE_SIZE, ty * RASTER_TILE_SIZE, RASTER_TILE_SIZE, RASTER_TILE_SIZE));
+          gl.texSubImage2D(gl.TEXTURE_2D, 0, part.x, part.y, part.w, part.h, gl.RGBA, gl.UNSIGNED_BYTE, raster.readPixels(part));
+          this.stats.uploads++;
+        }
+      }
+      return;
+    }
     gl.pixelStorei(gl.UNPACK_ROW_LENGTH, raster.width);
     gl.pixelStorei(gl.UNPACK_SKIP_PIXELS, r.x);
     gl.pixelStorei(gl.UNPACK_SKIP_ROWS, r.y);
@@ -599,8 +618,8 @@ export class GlCompositor implements ICompositor {
       const docRect = isAdj ? full : layerVisualRect(doc, layer);
       if (!e) {
         const uploaded = src ? src.raster : new Raster(1, 1);
-        const tex = createTexture(gl, uploaded.width, uploaded.height, gl.RGBA8, gl.RGBA, uploaded.data);
-        st.uploads++;
+        const tex = createTexture(gl, 1, 1, gl.RGBA8, gl.RGBA);
+        this.uploadFull(tex, uploaded, true);
         e = {
           tex,
           w: uploaded.width,
@@ -743,8 +762,8 @@ export class GlCompositor implements ICompositor {
         this.uploadFull(e.maskTex, mask, false);
       } else {
         if (e.maskTex) gl.deleteTexture(e.maskTex);
-        e.maskTex = createTexture(gl, mask.width, mask.height, gl.RGBA8, gl.RGBA, mask.data);
-        this.stats.uploads++;
+        e.maskTex = createTexture(gl, 1, 1, gl.RGBA8, gl.RGBA);
+        this.uploadFull(e.maskTex, mask, true);
       }
     } else if (e.maskTex) {
       gl.deleteTexture(e.maskTex);

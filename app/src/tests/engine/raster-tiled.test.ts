@@ -1,5 +1,6 @@
 import { expect, it } from "vitest";
-import { PaintCommand, Raster, Rect, TiledRaster, addLayer, createDocument, createRasterLayer, rgba } from "../../lib/engine";
+import { PaintCommand, Raster, Rect, TiledRaster, addLayer, compositeToRaster, createDocument, createRasterLayer, rgba } from "../../lib/engine";
+import { sampleRaster } from "../../lib/ui/panels/thumbnail";
 
 it("allocates only populated tiles, including hidden RGB, and releases cleared tiles", () => {
   const raster = new TiledRaster(4000, 3000);
@@ -150,4 +151,25 @@ it("uses sparse captures and restores sparse pixels through real paint commands"
   expect(raster.getPixel(1, 1)).toEqual(rgba(50, 60, 70));
   expect(raster.storageMode).toBe("tiled");
   expect(command.byteSize()).toBeLessThan(600 * 300 * 4);
+});
+
+it("keeps default layers sparse through CPU composition, clipping and thumbnails", () => {
+  const doc = createDocument({ width: 520, height: 270, background: "transparent" });
+  const base = doc.layers[0]!;
+  if (base.kind !== "raster") throw new Error("Expected a pixel layer");
+  expect(base.raster).toBeInstanceOf(TiledRaster);
+  expect(base.raster.byteLength()).toBe(0);
+  base.raster.fill(rgba(255, 0, 0), Rect.make(256, 256, 8, 8));
+  const clipped = createRasterLayer(doc, { clipToBelow: true });
+  clipped.raster.fill(rgba(0, 255, 0));
+  addLayer(doc, clipped);
+  expect(compositeToRaster(doc).getPixel(257, 257)).toEqual(rgba(0, 255, 0));
+  const thumb = new Uint8ClampedArray(32 * 32 * 4);
+  sampleRaster(base.raster, base.offset, Rect.make(256, 256, 8, 8), thumb, 32, 32);
+  expect(thumb[0]).toBe(255);
+  expect((base.raster as TiledRaster).storageMode).toBe("tiled");
+  expect((clipped.raster as TiledRaster).storageMode).toBe("tiled");
+  const tiny = TiledRaster.filled(2, 2, rgba(1, 2, 3));
+  expect(tiny.byteLength()).toBe(16);
+  expect(tiny.readTile(0, 0)?.length).toBe(16);
 });

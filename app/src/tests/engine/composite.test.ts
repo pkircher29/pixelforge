@@ -181,7 +181,7 @@ describe("GlCompositor bookkeeping (mock GL)", () => {
     const s1 = comp.render(doc, vp);
     expect(s1.drawn).toBe(true);
     expect(s1.recomposited).toBe(true);
-    expect(s1.uploads).toBe(3);
+    expect(s1.uploads).toBe(5); // Two layer allocations, two populated tiles, selection.
     expect(s1.passes).toBe(3);
     expect(s1.compositedArea).toBe(64 * 48);
     expect(comp.debugState().layers).toBe(3);
@@ -249,7 +249,7 @@ describe("GlCompositor bookkeeping (mock GL)", () => {
     expect(comp.render(doc, vp).recomposited).toBe(true);
     if (layer.kind === "raster") layer.raster = layer.raster.clone();
     const swapped = comp.render(doc, vp);
-    expect(swapped.uploads).toBe(1);
+    expect(swapped.uploads).toBe(2); // Texture reset plus one populated tile.
     expect(swapped.recomposited).toBe(true);
     // Selection change re-uploads the mask but does not re-composite.
     const subBefore = m.count("texSubImage2D");
@@ -274,7 +274,7 @@ describe("GlCompositor bookkeeping (mock GL)", () => {
     expect(isolated.passes).toBe(3); // bottom + child into group buffer + group onto stack
     comp.invalidateAll();
     const inv = comp.render(doc, vp);
-    expect(inv.uploads).toBe(2);
+    expect(inv.uploads).toBe(3); // Two texture resets and one populated tile.
     expect(inv.compositedArea).toBe(64 * 48);
   });
 

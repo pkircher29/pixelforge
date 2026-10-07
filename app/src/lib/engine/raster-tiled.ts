@@ -3,8 +3,7 @@ import { Rect } from "./rect";
 import type { BlitOptions, IRaster, RGBA } from "./types";
 
 export const RASTER_TILE_SIZE = 256;
-const TILE_BYTES = RASTER_TILE_SIZE * RASTER_TILE_SIZE * 4;
-interface Tile { bytes: Uint8ClampedArray<ArrayBuffer>; populated: number }
+interface Tile { bytes: Uint8ClampedArray<ArrayBuffer>; populated: number; width: number; height: number }
 // Once shared, a tile is immutable. A writer detaches only that tile.
 const shared = new WeakSet<Tile>();
 
@@ -43,6 +42,15 @@ export class TiledRaster extends Raster {
   get storageMode(): "tiled" | "contiguous" { return this.denseData ? "contiguous" : "tiled"; }
   get allocatedTileCount(): number { return this.tiles.size; }
 
+  /** Populated tile regions, clipped to the raster's edge. Does not expose mutable storage. */
+  *populatedTileRects(): IterableIterator<Rect> {
+    if (this.denseData) { yield this.bounds(); return; }
+    for (const key of this.tiles.keys()) {
+      const x = (key % this.columns) * RASTER_TILE_SIZE, y = Math.floor(key / this.columns) * RASTER_TILE_SIZE;
+      yield Rect.make(x, y, Math.min(RASTER_TILE_SIZE, this.width - x), Math.min(RASTER_TILE_SIZE, this.height - y));
+    }
+  }
+
   override get data(): Uint8ClampedArray<ArrayBuffer> {
     if (!this.denseData) {
       const data = super.data;
@@ -52,7 +60,7 @@ export class TiledRaster extends Raster {
         const rowBytes = Math.min(RASTER_TILE_SIZE, this.width - x) * 4;
         const rows = Math.min(RASTER_TILE_SIZE, this.height - y);
         for (let row = 0; row < rows; row++) {
-          const start = row * RASTER_TILE_SIZE * 4;
+          const start = row * tile.width * 4;
           data.set(tile.bytes.subarray(start, start + rowBytes), ((y + row) * this.width + x) * 4);
         }
       }
@@ -61,7 +69,12 @@ export class TiledRaster extends Raster {
     return this.denseData!;
   }
 
-  override byteLength(): number { return this.denseData?.byteLength ?? this.tiles.size * TILE_BYTES; }
+  override byteLength(): number {
+    if (this.denseData) return this.denseData.byteLength;
+    let bytes = 0;
+    for (const tile of this.tiles.values()) bytes += tile.bytes.byteLength;
+    return bytes;
+  }
 
   override readPixels(rect: Rect): Uint8ClampedArray<ArrayBuffer> {
     if (this.denseData) return super.readPixels(rect);
@@ -74,7 +87,7 @@ export class TiledRaster extends Raster {
         if (!tile) continue;
         const part = Rect.intersect(area, Rect.make(tx * RASTER_TILE_SIZE, ty * RASTER_TILE_SIZE, RASTER_TILE_SIZE, RASTER_TILE_SIZE));
         for (let y = part.y; y < part.y + part.h; y++) {
-          const start = ((y - ty * RASTER_TILE_SIZE) * RASTER_TILE_SIZE + part.x - tx * RASTER_TILE_SIZE) * 4;
+          const start = ((y - ty * RASTER_TILE_SIZE) * tile.width + part.x - tx * RASTER_TILE_SIZE) * 4;
           result.set(tile.bytes.subarray(start, start + part.w * 4), ((y - rect.y) * rect.w + part.x - rect.x) * 4);
         }
       }
@@ -104,7 +117,7 @@ export class TiledRaster extends Raster {
         }
         if (!this.tiles.has(key) && !pixels.some(v => v !== 0)) continue;
         const tile = this.writable(key);
-        const view = new Raster(RASTER_TILE_SIZE, RASTER_TILE_SIZE, tile.bytes);
+        const view = new Raster(tile.width, tile.height, tile.bytes);
         view.blit(new Raster(part.w, part.h, pixels), part.x - tx * RASTER_TILE_SIZE, part.y - ty * RASTER_TILE_SIZE, undefined, opts);
         let populated = 0;
         for (let i = 0; i < tile.bytes.length; i += 4) if (tile.bytes[i] || tile.bytes[i + 1] || tile.bytes[i + 2] || tile.bytes[i + 3]) populated++;
@@ -133,17 +146,12 @@ export class TiledRaster extends Raster {
     return result;
   }
 
-  /** A detached tile copy for upload/readback. An absent tile means transparent black. */
+  /** Detached, tightly packed tile bytes (edge tiles use their valid width/height). */
   readTile(column: number, row: number): Uint8ClampedArray<ArrayBuffer> | null {
     if (!Number.isInteger(column) || !Number.isInteger(row) || column < 0 || row < 0 || column >= this.columns || row * RASTER_TILE_SIZE >= this.height) return null;
     if (this.denseData) {
-      const tile = new Uint8ClampedArray(TILE_BYTES);
       const x = column * RASTER_TILE_SIZE, y = row * RASTER_TILE_SIZE;
-      const rowBytes = Math.min(RASTER_TILE_SIZE, this.width - x) * 4;
-      for (let r = 0; r < Math.min(RASTER_TILE_SIZE, this.height - y); r++) {
-        const start = ((y + r) * this.width + x) * 4;
-        tile.set(this.denseData.subarray(start, start + rowBytes), r * RASTER_TILE_SIZE * 4);
-      }
+      const tile = this.readPixels(Rect.make(x, y, Math.min(RASTER_TILE_SIZE, this.width - x), Math.min(RASTER_TILE_SIZE, this.height - y)));
       return tile.some(v => v !== 0) ? tile : null;
     }
     return this.tiles.get(row * this.columns + column)?.bytes.slice() ?? null;
@@ -151,8 +159,12 @@ export class TiledRaster extends Raster {
 
   private writable(key: number): Tile {
     let tile = this.tiles.get(key);
-    if (!tile) { tile = { bytes: new Uint8ClampedArray(TILE_BYTES), populated: 0 }; this.tiles.set(key, tile); }
-    else if (shared.has(tile)) { tile = { bytes: tile.bytes.slice(), populated: tile.populated }; this.tiles.set(key, tile); }
+    if (!tile) {
+      const width = Math.min(RASTER_TILE_SIZE, this.width - (key % this.columns) * RASTER_TILE_SIZE);
+      const height = Math.min(RASTER_TILE_SIZE, this.height - Math.floor(key / this.columns) * RASTER_TILE_SIZE);
+      tile = { bytes: new Uint8ClampedArray(width * height * 4), populated: 0, width, height };
+      this.tiles.set(key, tile);
+    } else if (shared.has(tile)) { tile = { ...tile, bytes: tile.bytes.slice() }; this.tiles.set(key, tile); }
     return tile;
   }
 
@@ -163,7 +175,7 @@ export class TiledRaster extends Raster {
     if (!Number.isInteger(x) || !Number.isInteger(y) || x < 0 || y < 0 || x >= this.width || y >= this.height) return result;
     const tile = this.tiles.get(Math.floor(y / RASTER_TILE_SIZE) * this.columns + Math.floor(x / RASTER_TILE_SIZE));
     if (!tile) return result;
-    const i = ((y % RASTER_TILE_SIZE) * RASTER_TILE_SIZE + x % RASTER_TILE_SIZE) * 4;
+    const i = ((y % RASTER_TILE_SIZE) * tile.width + x % RASTER_TILE_SIZE) * 4;
     result.r = tile.bytes[i]!; result.g = tile.bytes[i + 1]!; result.b = tile.bytes[i + 2]!; result.a = tile.bytes[i + 3]!;
     return result;
   }
@@ -184,7 +196,7 @@ export class TiledRaster extends Raster {
     bytes[0] = color.r; bytes[1] = color.g; bytes[2] = color.b; bytes[3] = color.a;
     if (!this.tiles.has(key) && !bytes.some(v => v !== 0)) return;
     const tile = this.writable(key);
-    this.write(tile, ((y % RASTER_TILE_SIZE) * RASTER_TILE_SIZE + x % RASTER_TILE_SIZE) * 4, bytes);
+    this.write(tile, ((y % RASTER_TILE_SIZE) * tile.width + x % RASTER_TILE_SIZE) * 4, bytes);
     if (!tile.populated) this.tiles.delete(key);
   }
 
@@ -202,7 +214,7 @@ export class TiledRaster extends Raster {
         const tile = this.writable(key);
         const part = Rect.intersect(area, Rect.make(tx * RASTER_TILE_SIZE, ty * RASTER_TILE_SIZE, RASTER_TILE_SIZE, RASTER_TILE_SIZE));
         for (let y = part.y; y < part.y + part.h; y++) for (let x = part.x; x < part.x + part.w; x++) {
-          this.write(tile, ((y % RASTER_TILE_SIZE) * RASTER_TILE_SIZE + x % RASTER_TILE_SIZE) * 4, bytes);
+          this.write(tile, ((y % RASTER_TILE_SIZE) * tile.width + x % RASTER_TILE_SIZE) * 4, bytes);
         }
         if (!tile.populated) this.tiles.delete(key);
       }
@@ -221,7 +233,7 @@ export class TiledRaster extends Raster {
       const tileX = (key % this.columns) * RASTER_TILE_SIZE, tileY = Math.floor(key / this.columns) * RASTER_TILE_SIZE;
       const part = Rect.intersect(Rect.intersect(rect, this.bounds()), Rect.make(tileX, tileY, RASTER_TILE_SIZE, RASTER_TILE_SIZE));
       for (let y = part.y; y < part.y + part.h; y++) for (let x = part.x; x < part.x + part.w; x++) {
-        const i = ((y - tileY) * RASTER_TILE_SIZE + x - tileX) * 4;
+        const i = ((y - tileY) * tile.width + x - tileX) * 4;
         if (!(tile.bytes[i] || tile.bytes[i + 1] || tile.bytes[i + 2] || tile.bytes[i + 3])) continue;
         color.r = tile.bytes[i]!; color.g = tile.bytes[i + 1]!; color.b = tile.bytes[i + 2]!; color.a = tile.bytes[i + 3]!;
         result.setPixel(x - rect.x, y - rect.y, color);
@@ -237,7 +249,7 @@ export class TiledRaster extends Raster {
     for (const [key, tile] of this.tiles) {
       const tx = (key % this.columns) * RASTER_TILE_SIZE, ty = Math.floor(key / this.columns) * RASTER_TILE_SIZE;
       for (let y = 0; y < Math.min(RASTER_TILE_SIZE, this.height - ty); y++) for (let x = 0; x < Math.min(RASTER_TILE_SIZE, this.width - tx); x++) {
-        if (!(tile.bytes[(y * RASTER_TILE_SIZE + x) * 4 + 3]! > threshold)) continue;
+        if (!(tile.bytes[(y * tile.width + x) * 4 + 3]! > threshold)) continue;
         x0 = Math.min(x0, tx + x); y0 = Math.min(y0, ty + y); x1 = Math.max(x1, tx + x); y1 = Math.max(y1, ty + y);
       }
     }

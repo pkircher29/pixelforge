@@ -191,13 +191,14 @@ export class StyleCache {
       const r = src.raster;
       const m = this.mask(base);
       const area = Rect.intersect(Rect.make(src.offset.x, src.offset.y, r.width, r.height), Rect.ofSize(doc.width, doc.height));
+      const pixel = { r: 0, g: 0, b: 0, a: 0 };
       for (let y = area.y; y < area.y + area.h; y++) {
         for (let x = area.x; x < area.x + area.w; x++) {
           const lx = x - src.offset.x;
           const ly = y - src.offset.y;
-          let a = r.data[(ly * r.width + lx) * 4 + 3]!;
+          let a = r.getPixel(lx, ly, pixel).a;
           if (m) {
-            const mv = lx < m.width && ly < m.height ? m.data[(ly * m.width + lx) * 4]! : 255;
+            const mv = lx < m.width && ly < m.height ? m.getPixel(lx, ly, pixel).r : 255;
             a = (a * mv) / 255;
           }
           alpha[y * doc.width + x] = a;

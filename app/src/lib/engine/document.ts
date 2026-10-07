@@ -22,6 +22,7 @@
 
 import { Rect, type Point } from "./rect";
 import { Raster } from "./raster";
+import { TiledRaster } from "./raster-tiled";
 import { Selection } from "./selection";
 import { blendRgb, compositeStraight } from "./blend";
 import {
@@ -190,7 +191,7 @@ export function createRasterLayer(doc: Document, opts: CreateLayerOptions = {}):
   return {
     ...baseFields(opts.id ?? newId("layer"), "raster", opts.name ?? nextLayerName(doc), opts),
     kind: "raster",
-    raster: opts.raster ?? new Raster(doc.width, doc.height),
+    raster: opts.raster ?? new TiledRaster(doc.width, doc.height),
   };
 }
 
@@ -846,18 +847,23 @@ export function blendRasterInto(
   const area = Rect.intersect(rect, Rect.make(offset.x, offset.y, src.width, src.height));
   if (Rect.isEmpty(area) || opacity <= 0) return;
   const d = dst.data;
-  const s = src.data;
-  const m = mask ? mask.data : null;
+  const s = src instanceof TiledRaster && src.storageMode === "tiled" ? null : src.data;
+  const m = mask && !(mask instanceof TiledRaster && mask.storageMode === "tiled") ? mask.data : null;
   const dw = dst.width;
   const sw = src.width;
   const inv = 1 / 255;
   for (let y = area.y; y < area.y + area.h; y++) {
+    const rowRect = Rect.make(area.x - offset.x, y - offset.y, area.w, 1);
+    const source = s ?? src.readPixels(rowRect);
+    const maskRow = mask && !m ? mask.readPixels(rowRect) : null;
     let di = (y * dw + area.x) * 4;
     let si = ((y - offset.y) * sw + (area.x - offset.x)) * 4;
     let ci = y * dw + area.x;
     for (let x = 0; x < area.w; x++, di += 4, si += 4, ci++) {
-      let as = s[si + 3]! * inv * opacity;
+      const ri = s ? si : x * 4;
+      let as = source[ri + 3]! * inv * opacity;
       if (m) as *= m[si]! * inv;
+      else if (maskRow) as *= maskRow[x * 4]! * inv;
       if (clip) as *= clip[ci]! * inv;
       if (as <= 0) continue;
       const ab = d[di + 3]! * inv;
@@ -866,13 +872,13 @@ export function blendRasterInto(
         const ao = as + ab * (1 - as);
         const wd = (ab * (1 - as)) / ao;
         const ws = as / ao;
-        d[di] = s[si]! * ws + d[di]! * wd;
-        d[di + 1] = s[si + 1]! * ws + d[di + 1]! * wd;
-        d[di + 2] = s[si + 2]! * ws + d[di + 2]! * wd;
+        d[di] = source[ri]! * ws + d[di]! * wd;
+        d[di + 1] = source[ri + 1]! * ws + d[di + 1]! * wd;
+        d[di + 2] = source[ri + 2]! * ws + d[di + 2]! * wd;
         d[di + 3] = ao * 255;
         continue;
       }
-      compositeStraight(mode, d[di]! * inv, d[di + 1]! * inv, d[di + 2]! * inv, ab, s[si]! * inv, s[si + 1]! * inv, s[si + 2]! * inv, as, px);
+      compositeStraight(mode, d[di]! * inv, d[di + 1]! * inv, d[di + 2]! * inv, ab, source[ri]! * inv, source[ri + 1]! * inv, source[ri + 2]! * inv, as, px);
       d[di] = px[0]! * 255;
       d[di + 1] = px[1]! * 255;
       d[di + 2] = px[2]! * 255;

@@ -1,4 +1,4 @@
-import { BlendMode, GlCompositor, Raster, Rect, Viewport, addLayer, compositeToRaster, createDocument, createRasterLayer, groupLayers, rgba } from "../../../lib/engine";
+import { BlendMode, GlCompositor, Raster, Rect, TiledRaster, Viewport, addLayer, compositeToRaster, createDocument, createRasterLayer, groupLayers, rgba } from "../../../lib/engine";
 import { CanvasCompositor } from "../../../lib/engine/composite/CanvasCompositor";
 
 const result = document.querySelector<HTMLPreElement>("#result")!;
@@ -63,6 +63,30 @@ try {
   if ([50, 75, 228].some((value, i) => Math.abs(value - cpuPixel[i]!) > 1)) throw new Error(`Canvas alpha tint: ${cpuPixel}`);
   checks.push(`Canvas alpha tint: ${cpuPixel.slice(0, 3)}`);
   cpuDisplay.dispose();
+  const tiledDoc = createDocument({ width: 530, height: 270, background: "transparent" });
+  const tiledLayer = tiledDoc.layers[0]!;
+  const tiled = tiledLayer.raster as TiledRaster;
+  tiled.fill(rgba(25, 150, 230), Rect.make(250, 250, 20, 20));
+  tiled.setPixel(529, 269, rgba(255, 90, 20));
+  const tiledView = new Viewport().fitToView(320, 240, 530, 270);
+  function checkTiles(label: string) {
+    const stats = comp.render(tiledDoc, tiledView, { showSelection: false, showPixelGrid: false });
+    const gpu = comp.readComposite()!, cpu = compositeToRaster(tiledDoc);
+    const a = gpu.data, b = cpu.data;
+    if (a.some((v, i) => Math.abs(v - b[i]!) > 2)) throw new Error(`${label}: GPU/CPU tile mismatch`);
+    if (tiled.storageMode !== "tiled") throw new Error(`${label}: source was materialized`);
+    checks.push(`${label}: pixel parity; source remains tiled; ${stats.uploads} uploads`);
+    return stats;
+  }
+  checkTiles("sparse edge-tile upload");
+  tiled.fill(rgba(240, 10, 30), Rect.make(254, 254, 4, 4));
+  comp.markDirty(tiledLayer.id, Rect.make(254, 254, 4, 4));
+  if (checkTiles("cross-tile dirty update").uploads !== 4) throw new Error("dirty update must upload four intersected tile regions");
+  tiled.clear(Rect.make(512, 256, 18, 14));
+  comp.markDirty(tiledLayer.id, Rect.make(512, 256, 18, 14));
+  checkTiles("removed edge tile clears GPU pixels");
+  tiled.clear(); comp.markDirty(tiledLayer.id);
+  checkTiles("full sparse clear resets texture");
   result.textContent = `PASS\n${checks.join("\n")}`;
 } catch (e) { result.textContent = `FAIL: ${e}`; throw e; }
 finally { comp.dispose(); }
