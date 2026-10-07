@@ -12,6 +12,7 @@
   import CommandPalette from "./lib/ui/CommandPalette.svelte";
   import ContextMenu from "./lib/ui/ContextMenu.svelte";
   import Toast from "./lib/ui/Toast.svelte";
+  import TooltipLayer from "./lib/ui/TooltipLayer.svelte";
   import Welcome from "./lib/ui/Welcome.svelte";
   import DialogHost from "./lib/ui/dialogs/DialogHost.svelte";
   import ContactSheet from "./lib/ui/icons/ContactSheet.svelte";
@@ -163,6 +164,7 @@
 <ContextMenu />
 <DialogHost />
 <Toast />
+<TooltipLayer />
 
 <style>
   .app {

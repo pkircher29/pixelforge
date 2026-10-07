@@ -447,42 +447,7 @@ input[type="range"]:disabled {
   opacity: 0.4;
 }
 
-/* Tooltips: data-tip on any element. */
-[data-tip] {
-  position: relative;
-}
-[data-tip]::after {
-  content: attr(data-tip);
-  position: absolute;
-  left: 50%;
-  top: calc(100% + 4px);
-  transform: translateX(-50%);
-  z-index: 400;
-  padding: 2px 6px;
-  border-radius: 2px;
-  background: #1e1e1e;
-  border: 1px solid #474747;
-  color: #e6e6e6;
-  font-size: var(--fs-sm);
-  font-weight: 400;
-  white-space: pre;
-  pointer-events: none;
-  opacity: 0;
-  transition: opacity 0ms linear 600ms;
-}
-[data-tip]:hover::after {
-  opacity: 1;
-}
-aside[aria-label="Tools"] [data-tip]::after {
-  left: calc(100% + 6px);
-  top: 50%;
-  transform: translateY(-50%);
-}
-footer [data-tip]::after,
-[data-tip].tip-up::after {
-  top: auto;
-  bottom: calc(100% + 4px);
-}
+/* data-tip help is rendered by the app-root TooltipLayer. */
 
 ::-webkit-scrollbar {
   width: 9px;

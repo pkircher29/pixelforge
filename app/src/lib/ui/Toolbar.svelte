@@ -231,7 +231,7 @@
   .tool:disabled {
     color: var(--ps-text-disabled);
   }
-  /* ::before, because ::after is the shared tooltip pseudo-element (data-tip). */
+  /* Tool-group disclosure corner. */
   .tool.group::before {
     content: "";
     position: absolute;
@@ -240,10 +240,6 @@
     border: 2.5px solid transparent;
     border-right-color: currentColor;
     border-bottom-color: currentColor;
-  }
-  /* PS hides the tool tooltip while a fly-out is open. */
-  .toolbar.flyopen :global([data-tip]::after) {
-    display: none;
   }
   .flyout {
     position: absolute;

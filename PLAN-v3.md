@@ -10,7 +10,7 @@
 
 ---
 
-## Continuation status (2026-10-06)
+## Continuation status (2026-10-07)
 
 Implemented on `feat/v03-oauth-polish`:
 - Google OAuth for Gemini using a registered Desktop app, loopback PKCE, protected
@@ -20,6 +20,11 @@ Implemented on `feat/v03-oauth-polish`:
   and the requirement for an xAI-issued Pixelforge client ID still apply.
 - Polish item 13: Ctrl+F opens Search, Ctrl+K remains an alias, Last Filter uses Ctrl+Alt+F.
 - Polish item 14: `npm run build:release` builds frontend assets before the native app.
+- Polish item 1: app-root tooltips flip/shift inside the viewport, wrap long labels,
+  honor Show Tool Tips, and support focus/Escape with `aria-describedby` cleanup.
+  Browser verification checked all 84 visible tooltip controls at 1000×720, including
+  right/bottom edges; no page errors. Screenshot: `docs/screenshots/tooltips-edge-aware.png`.
+  Svelte check and frontend build pass. Native/cross-OS checks remain part of Wave 11.
 
 The remaining Wave 8–11 work and cross-OS/live-provider release gates below remain open.
 See `docs/oauth-setup.md` for configuration and verification boundaries.
