@@ -25,6 +25,10 @@
     return contextualPosition(selection.bbox, entry.viewport, width, height, barWidth, barHeight);
   });
   const provider = $derived(aiUi.provider);
+  const expanding = $derived.by(() => {
+    void entry.version;
+    return aiUi.expansion?.docId === entry.id && aiUi.expansion.selection === entry.doc.selection;
+  });
   const model = $derived(provider?.editModel || provider?.defaultModel || "");
   const activeJob = $derived(jobStore.active.find((j) => j.docId === entry.id));
   const compatible = $derived(Boolean(provider && provider.capabilities.instructEdit && provider.capabilities.maxVariants >= 3));
@@ -55,7 +59,7 @@
     notice = "";
     const req = {
       provider, model, prompt: aiUi.prompt.trim(), n: 3, refs: [], newDocument: false,
-      forcedMode: "mask" as const, generativeFill: true, feather: 2,
+      forcedMode: "mask" as const, generativeFill: true, feather: expanding ? 0 : 2,
       selection: entry.doc.selection.clone(),
     };
     aiUi.lastRun = req;
@@ -90,7 +94,7 @@
     onkeydown={(e) => e.stopPropagation()}
     onsubmit={(e) => { e.preventDefault(); void generate(); }}>
     <div class="top">
-      <strong>Generative Fill</strong>
+      <strong>{expanding ? "Generative Expand" : "Generative Fill"}</strong>
       <span class="details" title={cost?.note ?? "Provider billing and account limits apply"}>3 variants · {cost ? formatUsd(cost.usd, cost.approx) : provider && onSubscription(provider) ? "Plan access" : "Provider pricing"}</span>
       <button type="button" class="icon-btn" aria-label="Hide selection task bar" title="Hide until the selection changes" onclick={() => (dismissed = entry.doc.selection)}>×</button>
     </div>

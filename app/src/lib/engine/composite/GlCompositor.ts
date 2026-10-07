@@ -405,6 +405,9 @@ export class GlCompositor implements ICompositor {
     this.docW = w;
     this.docH = h;
     this.result = createFbo(gl, w, h);
+    // A resized result texture starts with NEAREST, regardless of the old texture's
+    // cached filter. Let present() restore LINEAR when the image is zoomed out.
+    this.resultFilterNearest = true;
     this.ping = [createFbo(gl, w, h), createFbo(gl, w, h)];
     if (this.selTex) gl.deleteTexture(this.selTex);
     this.selBuf = new Uint8Array(w * h);

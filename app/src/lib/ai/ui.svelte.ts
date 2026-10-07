@@ -4,7 +4,7 @@
  * "Edit prompt & re-run" refills the form).
  */
 
-import type { Raster } from "$lib/engine";
+import type { Raster, Selection } from "$lib/engine";
 import { ui } from "$lib/stores/ui.svelte";
 import { listProviders, hasTauri } from "./client";
 import { toFriendlyError } from "./errors";
@@ -51,6 +51,7 @@ class AiUiState {
   newDocument = $state(false);
   forcedMode = $state<AiMode | undefined>(undefined);
   generativeFill = $state(false);
+  expansion = $state.raw<{ docId: string; selection: Selection } | null>(null);
   showAdvanced = $state(false);
 
   /** Bumped by commands that want the prompt focused. */
@@ -120,6 +121,13 @@ class AiUiState {
     this.focusPrompt("mask");
     this.generativeFill = true;
     this.n = 3;
+  }
+
+  focusGenerativeExpand(docId: string, selection: Selection): void {
+    this.expansion = { docId, selection };
+    this.prompt = "Extend the image naturally into the empty area, matching its lighting, perspective and style.";
+    this.feather = 0;
+    this.focusGenerativeFill();
   }
 }
 

@@ -217,3 +217,26 @@ export class CropCanvasCommand extends StructuralCommand {
     reframeDocument(doc, r.w, r.h, -r.x, -r.y);
   }
 }
+
+/** Extend the canvas and select only the new area for outpainting, in one undo step. */
+export class PrepareExpandCommand extends StructuralCommand {
+  readonly label = "Prepare Generative Expand";
+  private readonly rect: Rect;
+
+  constructor(rect: Rect) {
+    super();
+    checkSize(rect.w, rect.h);
+    if (!Number.isInteger(rect.x) || !Number.isInteger(rect.y)) throw new RangeError("Expansion origin must use whole pixels");
+    this.rect = { ...rect };
+  }
+
+  protected apply(doc: Document): void {
+    const r = this.rect;
+    if (r.x > 0 || r.y > 0 || r.x + r.w < doc.width || r.y + r.h < doc.height || (r.w === doc.width && r.h === doc.height)) {
+      throw new RangeError("Extend the crop beyond the canvas while keeping the original image inside");
+    }
+    const original = { x: -r.x, y: -r.y, w: doc.width, h: doc.height };
+    reframeDocument(doc, r.w, r.h, -r.x, -r.y);
+    doc.selection = Selection.fromRect(r.w, r.h, original).invert();
+  }
+}

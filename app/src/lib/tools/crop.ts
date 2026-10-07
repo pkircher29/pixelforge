@@ -5,6 +5,8 @@
  */
 import { Crop } from "@lucide/svelte";
 import { CropCanvasCommand, Rect, type Point } from "$lib/engine";
+import { PrepareExpandCommand } from "$lib/engine/commands/canvas";
+import { aiUi } from "$lib/ai/ui.svelte";
 import { RotateCanvasCommand } from "$lib/filters/transform/commands";
 import type { Tool, ToolContext, ToolEvent, ToolOption } from "./types";
 import { clampDocRect, docRectToScreen, drawHandle, strokeOutline } from "./util";
@@ -79,6 +81,7 @@ export class CropTool implements Tool {
       default: "thirds",
     },
     { kind: "toggle", key: "deletePixels", label: "Delete Cropped Pixels", default: true },
+    { kind: "select", key: "fill", label: "Fill", choices: [{ value: "transparent", label: "Transparent" }, { value: "generative", label: "Generative Expand" }], default: "transparent" },
     { kind: "button", key: "cancel", label: "Cancel", action: (ctx) => this.cancel(ctx) },
     { kind: "button", key: "commit", label: "Commit", primary: true, action: (ctx) => this.commit(ctx) },
   ];
@@ -169,13 +172,15 @@ export class CropTool implements Tool {
       if (ratio) r = constrainRatio(d.anchor, { x: e.x, y: e.y }, ratio);
       else if (e.shiftKey) r = constrainRatio(d.anchor, { x: e.x, y: e.y }, 1);
       else r = Rect.fromPoints(d.anchor, { x: e.x, y: e.y });
-      this.rect = Rect.intersect(r, docBounds);
+      this.rect = ctx.opt<string>("fill") === "generative" ? Rect.union(r, docBounds) : Rect.intersect(r, docBounds);
     } else if (d.kind === "move") {
       const dx = e.x - d.start.x;
       const dy = e.y - d.start.y;
       const x = Math.max(0, Math.min(ctx.doc.width - d.origin.w, d.origin.x + dx));
       const y = Math.max(0, Math.min(ctx.doc.height - d.origin.h, d.origin.y + dy));
-      this.rect = Rect.make(x, y, d.origin.w, d.origin.h);
+      this.rect = ctx.opt<string>("fill") === "generative"
+        ? Rect.union(Rect.make(d.origin.x + dx, d.origin.y + dy, d.origin.w, d.origin.h), docBounds)
+        : Rect.make(x, y, d.origin.w, d.origin.h);
     } else {
       const o = d.origin;
       let x0 = o.x;
@@ -194,7 +199,8 @@ export class CropTool implements Tool {
         if (d.handle.includes("n")) y0 = y1 - h;
         else y1 = y0 + h;
       }
-      this.rect = Rect.intersect(Rect.make(x0, y0, x1 - x0, y1 - y0), docBounds);
+      const candidate = Rect.make(x0, y0, x1 - x0, y1 - y0);
+      this.rect = ctx.opt<string>("fill") === "generative" ? Rect.union(candidate, docBounds) : Rect.intersect(candidate, docBounds);
     }
     ctx.invalidateOverlay();
   }
@@ -228,7 +234,7 @@ export class CropTool implements Tool {
       return;
     }
     if (this.rect) {
-      const r = clampDocRect(ctx.doc, this.rect);
+      const r = ctx.opt<string>("fill") === "generative" ? Rect.roundOut(this.rect) : clampDocRect(ctx.doc, this.rect);
       this.rect = Rect.isEmpty(r) || r.w < 2 || r.h < 2 ? Rect.ofSize(ctx.doc.width, ctx.doc.height) : r;
     }
     ctx.setCursor("crosshair");
@@ -253,11 +259,27 @@ export class CropTool implements Tool {
       ctx.notify("info", "Drag the area to keep first.");
       return;
     }
-    const r = clampDocRect(ctx.doc, this.rect);
+    const expanding = ctx.opt<string>("fill") === "generative";
+    const r = expanding ? Rect.roundOut(Rect.union(this.rect, Rect.ofSize(ctx.doc.width, ctx.doc.height))) : clampDocRect(ctx.doc, this.rect);
     this.drag = null;
     if (Rect.isEmpty(r)) return;
     if (r.w === ctx.doc.width && r.h === ctx.doc.height) {
+      if (expanding) ctx.notify("info", "Drag a crop handle beyond the canvas to expand it.");
       ctx.invalidateOverlay();
+      return;
+    }
+    if (expanding) {
+      try {
+        ctx.exec(new PrepareExpandCommand(r));
+      } catch (e) {
+        ctx.notify("error", e instanceof Error ? e.message : String(e));
+        return;
+      }
+      ctx.compositor?.invalidateAll();
+      ctx.selectTool("marquee-rect");
+      aiUi.focusGenerativeExpand(ctx.entry.id, ctx.doc.selection);
+      ctx.invalidateOverlay();
+      ctx.notify("info", "Canvas expanded. Review the prompt and provider, then Generate to fill the new area.");
       return;
     }
     // "Delete Cropped Pixels" off would keep pixels outside the canvas; v1 layer buffers are
@@ -358,7 +380,7 @@ export class CropTool implements Tool {
     }
     const pts = this.handlePoints(ctx)!;
     for (const h of HANDLES) drawHandle(g, pts[h].x, pts[h].y);
-    const r = clampDocRect(ctx.doc, this.rect);
+    const r = ctx.opt<string>("fill") === "generative" ? Rect.roundOut(this.rect) : clampDocRect(ctx.doc, this.rect);
     const label = `${r.w} × ${r.h}`;
     g.save();
     g.font = "11px Segoe UI, sans-serif";

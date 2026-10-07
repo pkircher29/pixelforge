@@ -129,6 +129,7 @@ function mockGl(): MockGl {
     createFramebuffer: () => ({}),
     createVertexArray: () => ({}),
     getExtension: () => null,
+    texParameteri: (_target, _param, value) => { if (value === gl.LINEAR) record("linearFilter"); },
   };
   const target: Record<string, unknown> = {};
   const gl = new Proxy(target, {
@@ -173,6 +174,17 @@ function threeLayerDoc() {
 }
 
 describe("GlCompositor bookkeeping (mock GL)", () => {
+  it("restores smooth sampling after replacing a zoomed-out document texture", () => {
+    const m = mockGl();
+    const comp = new GlCompositor(fakeCanvas(), { gl: m.gl });
+    const vp = new Viewport({ zoom: 0.5 });
+    comp.render(createDocument({ width: 64, height: 48 }), vp);
+    expect(m.count("linearFilter")).toBe(2);
+    comp.render(createDocument({ width: 64, height: 60 }), vp);
+    expect(m.count("linearFilter")).toBe(4);
+    comp.dispose();
+  });
+
   it("uploads every layer and composites fully on the first frame, then does nothing on the second", () => {
     const m = mockGl();
     const { doc } = threeLayerDoc();
