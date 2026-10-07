@@ -36,7 +36,7 @@ import { Raster } from "../raster";
 import type { Selection } from "../selection";
 import { BLEND_MODE_INDEX } from "../blend";
 import { topLevelLayers, childrenOf } from "../document";
-import { StyleCache, layerVisualRect, maskActive } from "../layer-source";
+import { StyleCache, bindDocStyleCache, layerVisualRect, maskActive } from "../layer-source";
 import { opById } from "../ops/registry";
 import { buildOpFragmentSource } from "../ops/glsl";
 import type { GlslPass, UniformValue } from "../ops/types";
@@ -485,6 +485,7 @@ export class GlCompositor implements ICompositor {
   // ------------------------------------------------------------------ render
 
   render(doc: Document, viewport: Viewport, opts: RenderOptions = {}): RenderStats {
+    bindDocStyleCache(doc, this.styles);
     const st = this.stats;
     st.drawn = false;
     st.recomposited = false;

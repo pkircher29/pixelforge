@@ -10,7 +10,7 @@ import { Rect } from "../rect";
 import { Raster } from "../raster";
 import type { Selection } from "../selection";
 import { compositeToRaster } from "../document";
-import { StyleCache, layerVisualRect } from "../layer-source";
+import { StyleCache, bindDocStyleCache, layerVisualRect } from "../layer-source";
 import { effectExtent } from "../ops/effects";
 import { channelViewRaster, overlayQuickMask } from "../channels";
 import type { Document, ICompositor, Layer, LayerId, RenderOptions, RenderStats } from "../types";
@@ -122,6 +122,7 @@ export class CanvasCompositor implements ICompositor {
   }
 
   render(doc: Document, viewport: Viewport, opts: RenderOptions = {}): RenderStats {
+    bindDocStyleCache(doc, this.styles);
     const st = this.stats;
     st.drawn = false;
     st.recomposited = false;

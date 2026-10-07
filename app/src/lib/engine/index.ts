@@ -101,7 +101,7 @@ export type {
   CreateTextOptions,
   CompositeOptions,
 } from "./document";
-export { StyleCache, layerSource, layerRaster, layerHasPixels, maskActive, fillLayerRaster, invalidateFillLayer, layerVisualRect } from "./layer-source";
+export { StyleCache, layerSource, layerRaster, layerHasPixels, maskActive, fillLayerRaster, invalidateFillLayer, layerVisualRect, bindDocStyleCache, docStyleCache } from "./layer-source";
 export type { LayerSource, StyledSource } from "./layer-source";
 export { History, DEFAULT_HISTORY_BUDGET, SnapshotCommand } from "./history";
 export type { HistoryOptions, PushOptions } from "./history";

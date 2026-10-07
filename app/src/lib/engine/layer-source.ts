@@ -192,6 +192,24 @@ export class StyleCache {
   }
 }
 
+/**
+ * Per-document shared style cache. The live compositor binds its own (which it keeps
+ * coherent through `markDirty`), so CPU composites of the same document — Info panel
+ * readouts, eyedropper, wand, Navigator fallback, AI inputs — reuse the rendered layer
+ * styles instead of re-rendering every effect (seconds on a styled document).
+ */
+const docCaches = new WeakMap<Document, StyleCache>();
+
+/** Bind `cache` as the shared style cache of `doc` (compositors call this on render). */
+export function bindDocStyleCache(doc: Document, cache: StyleCache): void {
+  if (docCaches.get(doc) !== cache) docCaches.set(doc, cache);
+}
+
+/** The shared style cache bound to `doc`, if a compositor is rendering it. */
+export function docStyleCache(doc: Document): StyleCache | undefined {
+  return docCaches.get(doc);
+}
+
 /** Document-space rect a layer can touch, including its effect extent. */
 export function layerVisualRect(doc: Document, layer: Layer): Rect {
   const src = layerSource(doc, layer);

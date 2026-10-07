@@ -59,7 +59,7 @@ import { cloneEffects } from "./ops/effects";
 import { cloneFill } from "./ops/fill";
 import { clonePath, pathCoverage, strokePathCoverage, coverageToRaster } from "./ops/vector";
 import { rasterizeText } from "./ops/text";
-import { StyleCache, fillLayerRaster, layerSource, maskActive } from "./layer-source";
+import { StyleCache, docStyleCache, fillLayerRaster, layerSource, maskActive } from "./layer-source";
 
 let idCounter = 0;
 
@@ -632,7 +632,7 @@ export function setLayerProps(doc: Document, id: LayerId, props: Partial<LayerPr
  */
 export function compositeLayers(doc: Document, layers: readonly Layer[], rect?: Rect, cache?: StyleCache): Raster {
   const out = new Raster(doc.width, doc.height);
-  compositeSiblings(doc, layers, out, rect ?? Rect.ofSize(doc.width, doc.height), { ignoreVisibility: false, cache: cache ?? new StyleCache() });
+  compositeSiblings(doc, layers, out, rect ?? Rect.ofSize(doc.width, doc.height), { ignoreVisibility: false, cache: cache ?? docStyleCache(doc) ?? new StyleCache() });
   return out;
 }
 
@@ -1059,7 +1059,7 @@ export function compositeToRaster(doc: Document, opts: CompositeOptions = {}): R
   out.clear(rect);
   let layers = topLevelLayers(doc);
   if (opts.layerIds) layers = layers.filter((l) => opts.layerIds!.includes(l.id));
-  compositeSiblings(doc, layers, out, rect, { ignoreVisibility: opts.ignoreVisibility ?? false, cache: opts.cache ?? new StyleCache() });
+  compositeSiblings(doc, layers, out, rect, { ignoreVisibility: opts.ignoreVisibility ?? false, cache: opts.cache ?? docStyleCache(doc) ?? new StyleCache() });
   return out;
 }
 

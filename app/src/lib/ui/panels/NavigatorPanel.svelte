@@ -5,11 +5,10 @@
    * centre), and the zoom row: `[ 66.7% ] [−] ───●─── [+]`.
    */
   import { untrack } from "svelte";
-  import { compositeToRaster, formatZoom, clampZoom, MIN_ZOOM, MAX_ZOOM, Rect, type Raster } from "$lib/engine";
+  import { compositeToRaster, formatZoom, clampZoom, MIN_ZOOM, MAX_ZOOM, type Raster } from "$lib/engine";
   import { docStore } from "$lib/stores/doc.svelte";
   import { canvasHost } from "../canvas/host.svelte";
   import Icon from "../icons/Icon.svelte";
-  import { sampleRaster } from "./thumbnail";
   import { navigatorUi } from "./Navigator.store.svelte";
   import { clipBox, panByDrag, panToPoint, parseZoomPercent, showsWholeDoc, sliderToZoom, thumbLayout, viewBox, zoomToSlider } from "./navigator-math";
 
@@ -65,6 +64,7 @@
   let timer: ReturnType<typeof setTimeout> | null = null;
   let lastAt = 0;
   let scratch: Raster | null = null;
+  let cpuFallback = false;
 
   function paint(): void {
     const e = docStore.active;
@@ -72,11 +72,33 @@
     const lay = layout;
     if (!e || !cv || !lay) return;
     const doc = e.doc;
-    if (!scratch || scratch.width !== doc.width || scratch.height !== doc.height) scratch = null;
-    const full = compositeToRaster(doc, scratch ? { into: scratch } : {});
-    scratch = full;
-    const tw = lay.w;
-    const th = lay.h;
+    // Prefer the GPU compositor's cached result (a ~15 ms readback); the CPU
+    // `compositeToRaster` re-renders every effect and takes seconds on styled docs,
+    // which froze the UI and left the thumbnail blank meanwhile.
+    let full: Raster | null = null;
+    const comp = e.compositor as { readComposite?: () => Raster | null } | null;
+    try {
+      const r = comp?.readComposite?.() ?? null;
+      if (r && r.width === doc.width && r.height === doc.height) full = r;
+    } catch {
+      full = null;
+    }
+    if (!full) {
+      if (comp?.readComposite && !cpuFallback) {
+        // GL result not ready yet (first frame) — try again shortly.
+        cpuFallback = true;
+        lastAt = performance.now();
+        schedule();
+        return;
+      }
+      if (!scratch || scratch.width !== doc.width || scratch.height !== doc.height) scratch = null;
+      full = compositeToRaster(doc, scratch ? { into: scratch } : {});
+      scratch = full;
+    }
+    cpuFallback = false;
+    const dpr = Math.max(1, globalThis.devicePixelRatio || 1);
+    const tw = Math.max(1, Math.round(lay.w * dpr));
+    const th = Math.max(1, Math.round(lay.h * dpr));
     if (cv.width !== tw || cv.height !== th) {
       cv.width = tw;
       cv.height = th;
@@ -84,20 +106,22 @@
     const g = cv.getContext("2d");
     if (!g) return;
     // Checkerboard under transparency, PS-style.
+    const cell = Math.round(4 * dpr);
     g.fillStyle = "#ffffff";
     g.fillRect(0, 0, tw, th);
     g.fillStyle = "#cbcbcb";
-    for (let y = 0; y < th; y += 4) for (let x = ((y / 4) & 1) * 4; x < tw; x += 8) g.fillRect(x, y, 4, 4);
-    const img = g.createImageData(tw, th);
-    sampleRaster(full, { x: 0, y: 0 }, Rect.ofSize(doc.width, doc.height), img.data, tw, th);
-    const tmp = document.createElement("canvas");
-    tmp.width = tw;
-    tmp.height = th;
-    tmp.getContext("2d")?.putImageData(img, 0, 0);
-    g.drawImage(tmp, 0, 0);
+    for (let y = 0; y < th; y += cell) for (let x = (Math.floor(y / cell) & 1) * cell; x < tw; x += cell * 2) g.fillRect(x, y, cell, cell);
+    // Full-res image → high-quality downscale (smooth, unlike nearest sampling).
+    const src = document.createElement("canvas");
+    src.width = full.width;
+    src.height = full.height;
+    src.getContext("2d")?.putImageData(full.toImageData(), 0, 0);
+    g.imageSmoothingEnabled = true;
+    g.imageSmoothingQuality = "high";
+    g.drawImage(src, 0, 0, tw, th);
     lastPainted = e.pixelVersion;
     lastDocId = e.id;
-    lastSizeKey = `${tw}x${th}`;
+    lastSizeKey = `${lay.w}x${lay.h}`;
     lastAt = performance.now();
   }
 

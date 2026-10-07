@@ -6,7 +6,9 @@
  */
 import type { LayerId } from "$lib/engine";
 
-const LS_KEY = "pixelforge.layers.v1";
+// v2: default Thumbnail Contents became "Layer Bounds" (PS CC default); v1 prefs migrate without it.
+const LS_KEY = "pixelforge.layers.v2";
+const LS_KEY_V1 = "pixelforge.layers.v1";
 
 export type ThumbSize = "none" | "small" | "medium" | "large";
 export type ThumbContents = "bounds" | "document";
@@ -32,7 +34,12 @@ interface Persisted {
 function load(): Partial<Persisted> {
   try {
     const raw = globalThis.localStorage?.getItem(LS_KEY);
-    return raw ? (JSON.parse(raw) as Partial<Persisted>) : {};
+    if (raw) return JSON.parse(raw) as Partial<Persisted>;
+    const old = globalThis.localStorage?.getItem(LS_KEY_V1);
+    if (!old) return {};
+    const { thumbContents: _drop, ...rest } = JSON.parse(old) as Partial<Persisted>;
+    void _drop;
+    return rest;
   } catch {
     return {};
   }
@@ -45,7 +52,8 @@ class LayersUiStore {
   selectionDocId = $state<string | null>(null);
   /** Panel Options: thumbnail size (PS Medium default). */
   thumbSize = $state<ThumbSize>("medium");
-  thumbContents = $state<ThumbContents>("document");
+  /** PS CC default: "Layer Bounds" — small shapes / text read clearly in the thumb. */
+  thumbContents = $state<ThumbContents>("bounds");
   /** Filter row. */
   filterOn = $state(true);
   filterMode = $state<FilterMode>("kind");
