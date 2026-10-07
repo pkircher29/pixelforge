@@ -50,6 +50,7 @@ class AiUiState {
   feather = $state(2);
   newDocument = $state(false);
   forcedMode = $state<AiMode | undefined>(undefined);
+  generativeFill = $state(false);
   showAdvanced = $state(false);
 
   /** Bumped by commands that want the prompt focused. */
@@ -107,11 +108,18 @@ class AiUiState {
   }
 
   focusPrompt(forced?: AiMode): void {
+    this.generativeFill = false;
     ui.placePanel("ai", "history");
     ui.activateTab("ai");
     if (ui.workspace.iconized) ui.setIconized(false);
     this.forcedMode = forced;
     this.focusRequest++;
+  }
+
+  focusGenerativeFill(): void {
+    this.focusPrompt("mask");
+    this.generativeFill = true;
+    this.n = 3;
   }
 }
 

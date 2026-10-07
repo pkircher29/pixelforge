@@ -515,7 +515,8 @@ export function cloneLayer(layer: Layer, newLayerId?: LayerId, name?: string): L
   const base = { ...layerBaseOf(layer, { id: newLayerId ?? newId(layer.kind === "group" ? "group" : "layer"), name: name ?? layer.name }), linkedTo: [] as LayerId[] };
   switch (layer.kind) {
     case "group":
-      return { ...base, kind: "group", raster: null, collapsed: layer.collapsed, passThrough: layer.passThrough };
+      return { ...base, kind: "group", raster: null, collapsed: layer.collapsed, passThrough: layer.passThrough,
+        ...(layer.generative ? { generative: { ...layer.generative, variantIds: layer.generative.variantIds.slice() } } : {}) };
     case "raster":
       return { ...base, kind: "raster", raster: layer.raster.clone() };
     case "adjustment":
@@ -548,6 +549,9 @@ export function duplicateLayer(doc: Document, id: LayerId): Layer[] {
     return cloneLayer(l, nid, l.id === id ? `${l.name} copy` : l.name);
   });
   for (const c of copies) if (c.parentId && idMap.has(c.parentId)) c.parentId = idMap.get(c.parentId)!;
+  for (const c of copies) if (c.kind === "group" && c.generative) {
+    c.generative.variantIds = c.generative.variantIds.map((id) => idMap.get(id) ?? id);
+  }
   doc.layers.splice(end, 0, ...copies);
   doc.activeLayerId = copies[0]!.id;
   touch(doc);

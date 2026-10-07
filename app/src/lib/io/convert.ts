@@ -14,6 +14,7 @@ import {
   Selection,
   createDocument,
   createGroupLayer,
+  generativeFromFile,
   createRasterLayer,
   createAdjustmentLayer,
   createFillLayer,
@@ -462,6 +463,8 @@ export function documentFromProjectFrame(frame: Frame<ProjectHeader>): Document 
     let layer: Layer;
     if (kind === "group") {
       layer = createGroupLayer(doc, { ...common, passThrough: e.pass_through !== false });
+      const generative = generativeFromFile(e.generative);
+      if (generative) { layer.generative = generative; layer.collapsed = true; }
     } else if (kind === "adjustment" && e.adjustment && typeof e.adjustment.op === "string") {
       layer = createAdjustmentLayer(doc, { ...common, op: e.adjustment.op, params: (e.adjustment.params ?? {}) as ParamValues });
     } else if (kind === "fill" && fillFromFile(e.fill)) {
@@ -548,7 +551,7 @@ function grayToRaster(bytes: Uint8Array, w: number, h: number): Raster {
 function layerSpec(l: Layer): Partial<ManifestLayer> {
   switch (l.kind) {
     case "group":
-      return { pass_through: l.passThrough };
+      return { pass_through: l.passThrough, ...(l.generative ? { generative: { ...l.generative, variantIds: l.generative.variantIds.slice() } } : {}) };
     case "adjustment":
       return { adjustment: { op: l.op, params: JSON.parse(JSON.stringify(l.params)) as ParamValues } };
     case "fill":

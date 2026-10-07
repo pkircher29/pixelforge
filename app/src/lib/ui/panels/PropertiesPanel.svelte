@@ -17,6 +17,8 @@
     SetLayerPropsCommand,
     SetMaskEnabledCommand,
     SetSelectionCommand,
+    SelectGenerativeVariantCommand,
+    generativeVariants,
     SetShapeLayerCommand,
     SetTextLayerCommand,
     SetClipToBelowCommand,
@@ -53,7 +55,8 @@
     void entry.pixelVersion; // bounds / thumbnails follow pixel edits (transform, paint)
     const l = docStore.activeLayer;
     const ctx = propertiesContext(doc, l, layersUi.maskTargeted);
-    return { ctx, layer: l, title: ctx === "adjustment" && l?.kind === "adjustment" ? (opById(l.op)?.label ?? l.name) : CONTEXT_TITLE[ctx], tick: entry.version };
+    const variants = l?.kind === "group" ? generativeVariants(doc, l).map((v) => ({ id: v.id, visible: v.visible })) : [];
+    return { ctx, layer: l, variants, title: ctx === "adjustment" && l?.kind === "adjustment" ? (opById(l.op)?.label ?? l.name) : CONTEXT_TITLE[ctx], tick: entry.version };
   });
 
   // ---------------------------------------------------------------- pixel / transform
@@ -197,6 +200,20 @@
       </span>
       <span class="htitle">{view.title}</span>
     </header>
+
+    {#if view.layer?.kind === "group" && view.layer.generative}
+      {@const group = view.layer}
+      <section aria-label="Generative Fill variants">
+        <h3>Generative Fill</h3>
+        <p class="hint">{group.generative!.prompt}</p>
+        <div class="btns">
+          {#each view.variants as variant, i (variant.id)}
+            <button type="button" class="btn" aria-pressed={variant.visible} onclick={() => docStore.exec(new SelectGenerativeVariantCommand(group.id, variant.id))}>Variant {i + 1}{variant.visible ? " ✓" : ""}</button>
+          {/each}
+        </div>
+        <p class="hint">Expand this group in Layers to edit a variant's pixels.</p>
+      </section>
+    {/if}
 
     {#if view.ctx === "document"}
       <section>

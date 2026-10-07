@@ -74,6 +74,7 @@
   const effectiveModel = $derived(aiUi.model || (isEdit ? (provider?.editModel ?? "") : (provider?.defaultModel ?? "")));
   const maxRefs = $derived(Math.max(0, (caps?.maxRefs ?? 1) - 1));
   const maxN = $derived(Math.min(4, caps?.maxVariants ?? 1));
+  const variantCount = $derived(aiUi.generativeFill ? 3 : aiUi.n);
 
   const qualityOptions = $derived.by((): string[] => {
     if (!provider) return [];
@@ -124,11 +125,11 @@
     provider && onSubscription(provider)
       ? { usd: 0, perImage: 0, approx: false, note: "Uses your subscription plan: no per-request API charge (counts toward the plan's limits)." }
       : provider
-      ? estimateCost({ provider: provider.id, model: effectiveModel, mode, size: chosenSize, quality: aiUi.quality || undefined, n: aiUi.n, local: provider.local })
+      ? estimateCost({ provider: provider.id, model: effectiveModel, mode, size: chosenSize, quality: aiUi.quality || undefined, n: variantCount, local: provider.local })
       : null,
   );
 
-  const canRun = $derived(Boolean(provider && aiUi.prompt.trim().length > 0 && !busy && ((provider ? isReady(provider) : false) || !hasTauri())));
+  const canRun = $derived(Boolean(provider && aiUi.prompt.trim().length > 0 && !busy && (!aiUi.generativeFill || (mode === "mask" && maxN >= 3)) && ((provider ? isReady(provider) : false) || !hasTauri())));
   const assistants = $derived(assistProviders(aiUi.providers));
   let improving = $state(false);
 
@@ -278,7 +279,8 @@
       prompt: aiUi.prompt,
       negativePrompt: aiUi.negativePrompt.trim() || undefined,
       size: chosenSize,
-      n: aiUi.n,
+      n: variantCount,
+      generativeFill: aiUi.generativeFill,
       quality: aiUi.quality || undefined,
       transparent: aiUi.transparent && provider.capabilities.transparentBg,
       refs: aiUi.refs.map((r) => r.raster),
@@ -291,7 +293,9 @@
     busy = true;
     try {
       const r = await runAi(req);
-      if (r.job.state === "completed" && r.job.results && r.job.results.length > 1) {
+      if (r.job.state === "completed" && req.generativeFill) {
+        notice = { kind: "info", text: "Generative Fill added three editable variants. Select the group and choose a variant in Properties." };
+      } else if (r.job.state === "completed" && r.job.results && r.job.results.length > 1) {
         previews[r.job.id] = await resultPreviews(r.job);
         notice = { kind: "info", text: `${r.job.results.length} variants ready. Click one to add it as a layer.` };
       } else if (r.job.state === "completed") {
@@ -368,7 +372,7 @@
     {/if}
     <div class="frow">
       <span class="flbl">Mode:</span>
-      <select class="input" aria-label="AI mode" value={aiUi.forcedMode ?? "auto"} onchange={(e) => { aiUi.forcedMode = e.currentTarget.value === "auto" ? undefined : e.currentTarget.value as AiMode; aiUi.model = ""; }}>
+      <select class="input" aria-label="AI mode" value={aiUi.forcedMode ?? "auto"} onchange={(e) => { aiUi.forcedMode = e.currentTarget.value === "auto" ? undefined : e.currentTarget.value as AiMode; aiUi.model = ""; aiUi.generativeFill = false; }}>
         <option value="auto">Auto</option>
         <option value="generate">Generate new image</option>
         <option value="instruct">Edit whole image</option>
@@ -379,6 +383,9 @@
       <span class="mode" title={modeTooltip(resolution.reason, resolution.emulated)}>{modeLabel}{resolution.emulated ? " (emulated)" : ""}</span>
     </div>
     <div class="flow" title="Every result lands on a new layer, so providers can be chained.">{flow}</div>
+    {#if aiUi.generativeFill}
+      <p class="hint">Generative Fill · three editable variants. {mode !== "mask" ? "Make a partial selection to continue." : maxN < 3 ? "Choose a provider that supports three variants." : "Switch variants in Properties after generation."}</p>
+    {/if}
   </div>
 
   {#if aiUi.providersError}
@@ -460,7 +467,7 @@
           <span class="grow-field"><PsSelect value={aiUi.sizeKey} choices={sizeChoices} onchange={(v) => (aiUi.sizeKey = v)} /></span>
         </div>
         <div class="frow">
-          <ScrubbyNumber label="Variants" value={aiUi.n} min={1} max={Math.max(1, maxN)} disabled={maxN <= 1} width={32} onchange={(v) => (aiUi.n = Math.round(v))} />
+          <ScrubbyNumber label="Variants" value={variantCount} min={1} max={Math.max(1, maxN)} disabled={maxN <= 1 || aiUi.generativeFill} width={32} onchange={(v) => (aiUi.n = Math.round(v))} />
           {#if qualityOptions.length}
             <span class="flbl q">Quality:</span>
             <PsSelect value={aiUi.quality} choices={qualityChoices} width={80} onchange={(v) => (aiUi.quality = v)} />
@@ -555,7 +562,7 @@
               </details>
             {/if}
           {/if}
-          {#if job.state === "completed" && job.results && job.results.length > 1}
+          {#if job.state === "completed" && job.results && job.results.length > 1 && !runFor(job.id)?.req.generativeFill}
             <div class="variants">
               {#each previews[job.id] ?? [] as url, i (i)}
                 <button type="button" class="variant" class:added={job.applied.includes(i)} title="Add variant {i + 1} as a layer" onclick={() => void addVariant(job, i)}>

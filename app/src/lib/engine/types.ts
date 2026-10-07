@@ -209,6 +209,15 @@ export interface GroupLayer extends LayerBase {
   raster: null;
   collapsed: boolean;
   passThrough: boolean;
+  /** Generative results are editable child rasters; only one variant is shown. */
+  generative?: GenerativeVariants;
+}
+
+export interface GenerativeVariants {
+  prompt: string;
+  provider: string;
+  model: string;
+  variantIds: LayerId[];
 }
 
 /**

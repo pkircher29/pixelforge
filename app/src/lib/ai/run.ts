@@ -6,6 +6,7 @@
 
 import {
   AddLayerCommand,
+  AddGenerativeLayerCommand,
   Raster,
   Rect,
   Selection,
@@ -62,6 +63,8 @@ export interface AiRunRequest {
   noHistory?: boolean | undefined;
   /** Default true: a single result is added as a layer as soon as the job completes. */
   autoApply?: boolean | undefined;
+  /** Three masked results retained as one generative group. */
+  generativeFill?: boolean | undefined;
 }
 
 /** Everything needed to turn a result PNG into a layer, computed before submitting. */
@@ -297,6 +300,9 @@ export interface StartedRun extends ActiveRun {
 export async function startAi(req: AiRunRequest): Promise<StartedRun> {
   const open = docStore.active;
   const prepared = await prepareRun(req, open);
+  if (req.generativeFill && (prepared.resolution.mode !== "mask" || req.n !== 3 || req.provider.capabilities.maxVariants < 3)) {
+    throw new Error("Generative Fill needs a partial selection and a provider supporting three variants.");
+  }
   const doc = open?.doc ?? null; // the live document (history entries go here)
   const { mode, emulated } = prepared.resolution;
   const cost = estimateCost({ provider: req.provider.id, model: req.model, mode, size: req.size, quality: req.quality, n: req.n, local: req.provider.local });
@@ -365,7 +371,23 @@ export async function startAi(req: AiRunRequest): Promise<StartedRun> {
       });
       if (open) open.version++;
     }
-    if (req.autoApply !== false && finished.state === "completed" && finished.results && finished.results.length === 1) {
+    if (req.generativeFill && finished.state === "completed") {
+      if (finished.results?.length !== 3) throw new Error("The provider did not return all three Generative Fill variants.");
+      if (!open || !docStore.docs.includes(open) || open.doc.width !== prepared.docW || open.doc.height !== prepared.docH) {
+        throw new Error("The document was closed or resized. Generative Fill results were not applied.");
+      }
+      const rasters = await Promise.all(finished.results.map((r) => decodeImage(r.png)));
+      if (!docStore.docs.includes(open) || open.doc.width !== prepared.docW || open.doc.height !== prepared.docH) {
+        throw new Error("The document was closed or resized while decoding Generative Fill results.");
+      }
+      const variants = rasters.map((r, i) => buildResultLayer(open.doc, prepared, r, `Variant ${i + 1}`));
+      const cmd = new AddGenerativeLayerCommand(open.doc, variants, { prompt: req.prompt, provider: req.provider.name, model: req.model });
+      open.history.push(cmd);
+      open.version++;
+      if (docStore.activeId === open.id) docStore.setActiveLayer(cmd.group.id);
+      finished.applied = [0, 1, 2];
+      if (historyId) updateEntry(open.doc, historyId, { resultLayerIds: [cmd.group.id], resultThumbs: await Promise.all(rasters.map((r) => safeThumb(r, true).then((s) => s ?? ""))) });
+    } else if (req.autoApply !== false && finished.state === "completed" && finished.results && finished.results.length === 1) {
       await applyResult(finished, prepared, 0, req);
     }
     return finished;
