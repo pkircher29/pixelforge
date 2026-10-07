@@ -4,6 +4,7 @@ import "./edit";
 import "./layer";
 import "./select";
 import "./view";
+import "./sample";
 
 export { syncRecentCommands, openPaths, closeDocument, newDocument } from "./file";
 export { syncWindowPanelCommands } from "./view";
