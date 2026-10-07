@@ -5,6 +5,11 @@ Open **Edit → AI Providers** and choose a provider and authentication method.
 To make an image, use **AI → Generate with AI…**, enter a prompt in the AI panel,
 choose the provider, then click **Run**. The command now reveals the panel and opens
 the prompt section even when History was selected or the dock was collapsed.
+The **Mode** picker lets you choose Generate, whole-image edit, selection edit, or
+Auto. An explicit choice stays selected after success or failure and when switching
+providers; Run no longer silently resets Generate to an edit. Auto uses the current
+document and selection. The mode description below the picker shows the resolved
+operation, including when an edit falls back because no editable image is available.
 The connection test checks authentication only; it does not generate an image or
 prove that the account has image-model access, billing or sufficient quota.
 The panel-reveal fix passes 99 AI tests and a rebuilt Windows UI check: both OpenAI
@@ -54,7 +59,12 @@ An isolated native app using a loopback fixture server added an OpenAI-generated
 image layer, then Gemini and Grok edited-image layers. A simulated project spending
 limit produced an actionable error, no extra layer, and no automatic retry. Failed
 jobs now offer **Provider details** so the returned message can be read and copied.
-These fixture results verify application plumbing, not live model access or billing.
+After the mode-picker fix, a second native check generated through all three adapters
+without attaching the document composite, switched explicitly to a Grok edit with an
+image input, and preserved Generate after a simulated quota failure. All four
+successful fixture responses added layers. The 100 frontend AI tests and Svelte
+check passed; the Windows native build succeeded. These fixture results verify
+application plumbing, not live model access or billing.
 
 ![Local fixture generation and quota diagnostics](screenshots/ai-local-pipeline.png)
 

@@ -270,7 +270,6 @@
       feather: aiUi.feather,
     };
     aiUi.lastRun = req;
-    aiUi.forcedMode = undefined;
     busy = true;
     try {
       const r = await runAi(req);
@@ -348,10 +347,15 @@
     </div>
     <div class="frow">
       <span class="flbl">Mode:</span>
+      <select class="input" aria-label="AI mode" value={aiUi.forcedMode ?? "auto"} onchange={(e) => { aiUi.forcedMode = e.currentTarget.value === "auto" ? undefined : e.currentTarget.value as AiMode; aiUi.model = ""; }}>
+        <option value="auto">Auto</option>
+        <option value="generate">Generate new image</option>
+        <option value="instruct">Edit whole image</option>
+        <option value="mask">Edit selection</option>
+      </select>
+    </div>
+    <div class="frow">
       <span class="mode" title={modeTooltip(resolution.reason, resolution.emulated)}>{modeLabel}{resolution.emulated ? " (emulated)" : ""}</span>
-      {#if aiUi.forcedMode}
-        <button type="button" class="textbtn" title="Pick the mode from the selection again" onclick={() => (aiUi.forcedMode = undefined)}>Auto</button>
-      {/if}
     </div>
     <div class="flow" title="Every result lands on a new layer, so providers can be chained.">{flow}</div>
   </div>
