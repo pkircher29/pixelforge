@@ -25,6 +25,11 @@ Implemented on `feat/v03-oauth-polish`:
   Browser verification checked all 84 visible tooltip controls at 1000×720, including
   right/bottom edges; no page errors. Screenshot: `docs/screenshots/tooltips-edge-aware.png`.
   Svelte check and frontend build pass. Native/cross-OS checks remain part of Wave 11.
+- Polish item 2: panel registrations declare minimum group heights; Navigator reserves
+  180 px including its zoom row. Dock weights distribute the remaining space; crowded
+  docks scroll. Browser checks cover expand, divider shrinking/growing, window resize,
+  reload and collapse/reopen. Screenshot: `docs/screenshots/navigator-min-height.png`.
+  This also fixes tooltip focusout during removal of a focused panel control.
 
 The remaining Wave 8–11 work and cross-OS/live-provider release gates below remain open.
 See `docs/oauth-setup.md` for configuration and verification boundaries.

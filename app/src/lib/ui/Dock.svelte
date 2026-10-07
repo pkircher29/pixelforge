@@ -26,13 +26,14 @@
     layout: PanelGroupLayout;
     panels: PanelDef[];
     active: PanelDef | null;
+    minHeight: number;
   }
   const groups = $derived.by((): GroupView[] =>
     ui.workspace.groups
       .map((g) => {
         const panels = g.panels.map((id) => getPanel(id)).filter((p): p is PanelDef => !!p && ui.isPanelVisible(p.id));
         const active = panels.find((p) => p.id === g.active) ?? panels[0] ?? null;
-        return { layout: g, panels, active };
+        return { layout: g, panels, active, minHeight: Math.max(72, ...panels.map((p) => p.minSize ?? 72)) };
       })
       .filter((g) => g.panels.length > 0),
   );
@@ -58,21 +59,26 @@
   function startDividerDrag(e: PointerEvent, above: GroupView, below: GroupView) {
     if (!dock) return;
     const startY = e.clientY;
-    const wa = above.layout.weight;
-    const wb = below.layout.weight;
-    const total = wa + wb;
     const aEl = dock.querySelector<HTMLElement>(`[data-group="${above.layout.id}"]`);
     const bEl = dock.querySelector<HTMLElement>(`[data-group="${below.layout.id}"]`);
-    const px = (aEl?.offsetHeight ?? 150) + (bEl?.offsetHeight ?? 150);
+    const startHeight = aEl?.offsetHeight ?? above.minHeight;
+    const px = startHeight + (bEl?.offsetHeight ?? below.minHeight);
+    const flexible = px - above.minHeight - below.minHeight;
+    if (flexible <= 0) return;
     const el = e.currentTarget as HTMLElement;
     el.setPointerCapture(e.pointerId);
-    const move = (ev: PointerEvent) => ui.setPairWeights(above.layout.id, below.layout.id, wa / total + (ev.clientY - startY) / Math.max(1, px));
+    const move = (ev: PointerEvent) => {
+      const height = Math.max(above.minHeight, Math.min(px - below.minHeight, startHeight + ev.clientY - startY));
+      ui.setPairWeights(above.layout.id, below.layout.id, (height - above.minHeight) / flexible);
+    };
     const up = () => {
       el.removeEventListener("pointermove", move);
       el.removeEventListener("pointerup", up);
+      el.removeEventListener("pointercancel", up);
     };
     el.addEventListener("pointermove", move);
     el.addEventListener("pointerup", up);
+    el.addEventListener("pointercancel", up);
   }
 
   // ---------------------------------------------------------------- tab drag (pointer based)
@@ -172,13 +178,14 @@
       {/each}
     </div>
   {:else}
+    <div class="groups">
     {#each groups as g, i (g.layout.id)}
       {@const prev = groups[i - 1]}
       {#if i > 0 && prev && !prev.layout.collapsed && !g.layout.collapsed}
         <!-- svelte-ignore a11y_no_static_element_interactions -->
         <div class="divider" onpointerdown={(e) => startDividerDrag(e, prev, g)}></div>
       {/if}
-      <section class="group" class:collapsed={g.layout.collapsed} data-group={g.layout.id} style:flex={g.layout.collapsed ? "0 0 auto" : `${g.layout.weight} 1 0px`}>
+      <section class="group" class:collapsed={g.layout.collapsed} data-group={g.layout.id} style:min-height={g.layout.collapsed ? undefined : `${g.minHeight}px`} style:flex={g.layout.collapsed ? "0 0 auto" : `${g.layout.weight} 0 ${g.minHeight}px`}>
         <!-- svelte-ignore a11y_no_static_element_interactions -->
         <header class="strip" class:dropping={drag?.over === g.layout.id} data-strip={g.layout.id} ondblclick={(e) => { if (!(e.target as HTMLElement).closest(".menu")) ui.toggleGroupCollapsed(g.layout.id); }}>
           {#if g.layout.collapsed}
@@ -214,6 +221,7 @@
     {:else}
       <div class="empty">All panels are hidden. Use the Window menu to show them.</div>
     {/each}
+    </div>
     {#if drag}
       <div class="newzone" class:dropping={drag.over === "__new__"} data-newgroup>Drop here for a new group</div>
     {/if}
@@ -296,6 +304,14 @@
     gap: 4px;
     padding: 2px 0;
   }
+  .groups {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
   .igroup {
     display: flex;
     flex-direction: column;
@@ -339,9 +355,6 @@
     background: var(--ps-panel);
     border-bottom: 1px solid var(--ps-border-dark);
     margin-bottom: 2px;
-  }
-  .group:not(.collapsed) {
-    min-height: 72px;
   }
   .strip {
     flex: none;

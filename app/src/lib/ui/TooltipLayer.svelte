@@ -67,11 +67,17 @@
       if (anchor && !(e.relatedTarget instanceof Node && anchor.contains(e.relatedTarget))) hide();
     };
     const focus = (e: FocusEvent) => schedule(e.target, true);
+    // Removing a focused control fires focusout during Svelte's DOM update.
+    // Defer state writes, and do not dismiss a new anchor focused meanwhile.
+    const blur = () => {
+      const previous = anchor;
+      queueMicrotask(() => { if (anchor === previous) hide(); });
+    };
     const key = (e: KeyboardEvent) => { if (e.key === "Escape") hide(); };
     document.addEventListener("pointerover", over);
     document.addEventListener("pointerout", out);
     document.addEventListener("focusin", focus);
-    document.addEventListener("focusout", hide);
+    document.addEventListener("focusout", blur);
     document.addEventListener("pointerdown", hide, true);
     document.addEventListener("keydown", key);
     document.addEventListener("scroll", hide, true);
@@ -82,7 +88,7 @@
       document.removeEventListener("pointerover", over);
       document.removeEventListener("pointerout", out);
       document.removeEventListener("focusin", focus);
-      document.removeEventListener("focusout", hide);
+      document.removeEventListener("focusout", blur);
       document.removeEventListener("pointerdown", hide, true);
       document.removeEventListener("keydown", key);
       document.removeEventListener("scroll", hide, true);
