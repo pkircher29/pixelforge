@@ -109,6 +109,14 @@ Implemented on `feat/v03-oauth-polish`:
   The Windows native build and the same paragraph-control, visible-justification and
   wrapped-line navigation checks pass without runtime errors. Screenshot:
   `docs/screenshots/text-paragraph-formatting.png`.
+  Image Size now scales paragraph width and horizontal indents by the width ratio,
+  and paragraph spacing by the height ratio, preserving point-type defaults and
+  em-relative tracking. Structural undo snapshots now retain editable TextSpec,
+  shape geometry/stroke and independent saved paths as well as rendered pixels.
+  Regression tests verify wrapping and line positions after uniform resize,
+  nonuniform paragraph scaling, text undo/redo and shape/path restoration across
+  resize branches. All 710 tests and Svelte checks pass. Native UI verification
+  of this resize integration remains pending.
 - Polish item 9, drag portion: dragging a selected row moves the full selection in
   stack order, carries group children once, and excludes every moved row as a target.
   Multi-layer reparenting is one undoable move; pointer cancellation no longer commits.

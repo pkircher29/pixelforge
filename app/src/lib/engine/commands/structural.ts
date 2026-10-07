@@ -8,9 +8,13 @@
 import type { Point } from "../rect";
 import type { Raster } from "../raster";
 import type { Selection } from "../selection";
-import type { AlphaChannel, BlendMode, Command, Document, Layer, LayerEffects, LayerId, LayerLock, Path } from "../types";
+import type { AlphaChannel, BlendMode, Command, Document, Layer, LayerEffects, LayerId, LayerLock, Path, TextSpec, StrokeSpec } from "../types";
+import { clonePath } from "../ops/vector";
 
 interface LayerState {
+  text: TextSpec | null;
+  path: Path | null;
+  stroke: StrokeSpec | null;
   raster: Raster | null;
   offset: Point;
   mask: Raster | null;
@@ -46,6 +50,9 @@ function snapshot(doc: Document): DocSnapshot {
   const states = new Map<LayerId, LayerState>();
   for (const l of doc.layers) {
     states.set(l.id, {
+      text: l.kind === "text" ? { ...l.text, color: { ...l.text.color } } : null,
+      path: l.kind === "shape" ? clonePath(l.path) : null,
+      stroke: l.kind === "shape" && l.stroke ? { ...l.stroke, dash: l.stroke.dash?.slice() ?? null } : null,
       raster: l.raster,
       offset: { x: l.offset.x, y: l.offset.y },
       mask: l.mask,
@@ -72,7 +79,7 @@ function snapshot(doc: Document): DocSnapshot {
     selection: doc.selection,
     states,
     alphaChannels: doc.alphaChannels.map((c) => ({ ...c })),
-    paths: doc.paths.slice(),
+    paths: doc.paths.map(clonePath),
     workPathId: doc.workPathId,
     quickMaskRaster: doc.quickMask.raster,
   };
@@ -85,12 +92,17 @@ function restore(doc: Document, s: DocSnapshot): void {
   doc.activeLayerId = s.activeLayerId;
   doc.selection = s.selection;
   doc.alphaChannels = s.alphaChannels.map((c) => ({ ...c }));
-  doc.paths = s.paths.slice();
+  doc.paths = s.paths.map(clonePath);
   doc.workPathId = s.workPathId;
   doc.quickMask.raster = s.quickMaskRaster;
   for (const l of doc.layers) {
     const st = s.states.get(l.id);
     if (!st) continue;
+    if (l.kind === "text" && st.text) l.text = { ...st.text, color: { ...st.text.color } };
+    if (l.kind === "shape" && st.path) {
+      l.path = clonePath(st.path);
+      l.stroke = st.stroke ? { ...st.stroke, dash: st.stroke.dash?.slice() ?? null } : null;
+    }
     if ((l.kind === "raster" || l.kind === "shape" || l.kind === "text") && st.raster) l.raster = st.raster;
     l.offset = { x: st.offset.x, y: st.offset.y };
     l.mask = st.mask;

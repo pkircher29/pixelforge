@@ -1,5 +1,46 @@
 import { expect, it } from "vitest";
 import { layoutText, lineCaretX, moveLayoutCaret, textSpec } from "../../lib/engine/ops/text";
+import { History, ResizeImageCommand, addLayer, createDocument, createTextLayer } from "../../lib/engine";
+
+it("keeps paragraph wrapping and relative line positions through image resize and undo", () => {
+  const doc = createDocument({ width: 180, height: 120, noBackgroundLayer: true });
+  const spec = textSpec("aa bb cc dd\nZZ", 12, 20, {
+    size: 10, leading: 14, paragraphWidth: 60, indentLeft: 6, indentRight: 6,
+    firstLineIndent: -3, spaceBefore: 3, spaceAfter: 4, tracking: 25,
+  });
+  const layer = createTextLayer(doc, { text: spec });
+  addLayer(doc, layer);
+  const before = layoutText(layer.text);
+  const history = new History(doc);
+  history.push(new ResizeImageCommand(360, 240, "nearest"));
+  const after = layoutText(layer.text);
+  expect(after.map(line => [line.start, line.end])).toEqual(before.map(line => [line.start, line.end]));
+  for (let i = 0; i < before.length; i++) {
+    expect(after[i]!.x).toBeCloseTo(before[i]!.x * 2);
+    expect(after[i]!.y).toBeCloseTo(before[i]!.y * 2);
+    expect(after[i]!.width).toBeCloseTo(before[i]!.width * 2);
+  }
+  expect(layer.text.tracking).toBe(25); // em-relative values do not scale.
+  const resized = { ...layer.text };
+  history.undo();
+  expect(layer.text).toEqual(spec);
+  expect(layoutText(layer.text)).toEqual(before);
+  history.redo();
+  expect(layer.text).toEqual(resized);
+});
+
+it("scales paragraph distances along their axes and preserves point type", () => {
+  const doc = createDocument({ width: 100, height: 100, noBackgroundLayer: true });
+  const layer = createTextLayer(doc, { text: textSpec("Text", 10, 20, {
+    paragraphWidth: 50, indentLeft: 2, indentRight: 3, firstLineIndent: -4, spaceBefore: 5, spaceAfter: 6,
+  }) });
+  const point = createTextLayer(doc, { text: textSpec("Point", 10, 20) });
+  addLayer(doc, layer); addLayer(doc, point);
+  new ResizeImageCommand(200, 300, "nearest").do(doc);
+  expect(layer.text).toMatchObject({ paragraphWidth: 100, indentLeft: 4, indentRight: 6, firstLineIndent: -8, spaceBefore: 15, spaceAfter: 18 });
+  expect(point.text.paragraphWidth).toBeNull();
+  expect(point.text.leading).toBeNull();
+});
 
 it("wraps at words and keeps paragraph indents, spacing and source positions", () => {
   const spec = textSpec("aa bb cc dd\nZZ", 0, 10, { size: 10, paragraphWidth: 60, indentLeft: 6, indentRight: 6, firstLineIndent: 12, spaceBefore: 3, spaceAfter: 4 });

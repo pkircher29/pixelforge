@@ -173,7 +173,20 @@ export class ResizeImageCommand extends StructuralCommand {
         continue;
       }
       if (layer.kind === "text") {
-        layer.text = { ...layer.text, x: layer.text.x * sx, y: layer.text.y * sy, size: layer.text.size * Math.sqrt(sx * sy), leading: layer.text.leading === null ? null : layer.text.leading * sy };
+        const text = layer.text;
+        layer.text = {
+          ...text, x: text.x * sx, y: text.y * sy,
+          size: text.size * Math.sqrt(sx * sy),
+          leading: text.leading === null ? null : text.leading * sy,
+        };
+        for (const key of ["paragraphWidth", "indentLeft", "indentRight", "firstLineIndent"] as const) {
+          const value = text[key];
+          if (value != null) layer.text[key] = value * sx;
+        }
+        for (const key of ["spaceBefore", "spaceAfter"] as const) {
+          const value = text[key];
+          if (value !== undefined) layer.text[key] = value * sy;
+        }
         layer.offset = { x: Math.round(layer.offset.x * sx), y: Math.round(layer.offset.y * sy) };
         if (layer.mask) layer.mask = layer.mask.resize(this.w, this.h, this.method);
         rerasterizeText(doc, layer);
