@@ -328,16 +328,25 @@ export function toolForKey(
   e: { key: string; code?: string; ctrlKey: boolean; metaKey: boolean; shiftKey: boolean; altKey: boolean },
   currentId: string,
   tools: readonly Tool[] = TOOLS,
+  /** Last-used tool per flyout group (the one the toolbar shows). */
+  remembered?: (group: string) => string | undefined,
 ): Tool | null {
   if (e.ctrlKey || e.metaKey || e.altKey) return null;
+  // Photoshop default ("Use Shift Key for Tool Switch"): the letter selects the group's
+  // visible tool; Shift+letter cycles through the group.
+  // Explicit copy: spreading a DOM KeyboardEvent copies no (prototype) properties.
+  const plain = { key: e.key, code: e.code, ctrlKey: e.ctrlKey, metaKey: e.metaKey, altKey: e.altKey, shiftKey: false };
   const matches = tools.filter((t) => {
     const acc = parseAccelerator(t.shortcut);
-    return acc ? matchesAccelerator(acc, e, IS_MAC) : false;
+    return acc ? matchesAccelerator(acc, plain, IS_MAC) : false;
   });
   if (matches.length === 0) return null;
   if (matches.length === 1) return matches[0]!;
   const i = matches.findIndex((t) => t.id === currentId);
-  return matches[(i + 1) % matches.length]!;
+  if (e.shiftKey) return matches[(i + 1) % matches.length]!;
+  if (i >= 0) return matches[i]!;
+  const want = remembered?.(matches[0]!.group ?? "");
+  return matches.find((t) => t.id === want) ?? matches[0]!;
 }
 
 /** True for the Type tool family (the canvas lets clicks through to them while editing text). */

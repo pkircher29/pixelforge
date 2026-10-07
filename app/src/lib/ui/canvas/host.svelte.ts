@@ -144,7 +144,7 @@ class CanvasHost {
       toolStore.resetColors();
       return true;
     }
-    const t = toolForKey(e, toolStore.activeToolId);
+    const t = toolForKey(e, toolStore.activeToolId, undefined, (g) => ui.toolbarFlyoutChoice[g]);
     if (!t) return false;
     this.activateTool(t.id);
     const group = t.group;

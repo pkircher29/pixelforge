@@ -208,11 +208,15 @@ describe("tool registry", () => {
     const k = (key: string, shift = false) => ({ key, ctrlKey: false, metaKey: false, altKey: false, shiftKey: shift });
     expect(toolForKey(k("v"), "brush")?.id).toBe("move");
     expect(toolForKey(k("m"), "move")?.id).toBe("marquee-rect");
-    expect(toolForKey(k("m"), "marquee-rect")?.id).toBe("marquee-ellipse");
-    expect(toolForKey(k("m"), "marquee-column")?.id).toBe("marquee-rect");
-    // PS: G selects the Gradient tool first, pressing again cycles to the Paint Bucket.
+    // PS default "Use Shift Key for Tool Switch": the letter keeps the group's tool,
+    // Shift+letter cycles.
+    expect(toolForKey(k("m"), "marquee-ellipse")?.id).toBe("marquee-ellipse");
+    expect(toolForKey(k("M", true), "marquee-rect")?.id).toBe("marquee-ellipse");
+    expect(toolForKey(k("M", true), "marquee-column")?.id).toBe("marquee-rect");
     expect(toolForKey(k("g"), "move")?.id).toBe("gradient");
-    expect(toolForKey(k("g"), "gradient")?.id).toBe("bucket");
+    expect(toolForKey(k("G", true), "gradient")?.id).toBe("bucket");
+    // From outside the group, the letter picks the group's last-used (visible) tool.
+    expect(toolForKey(k("g"), "move", undefined, () => "bucket")?.id).toBe("bucket");
     expect(toolForKey({ ...k("v"), ctrlKey: true }, "move")).toBeNull();
     expect(toolForKey(k("q"), "move")).toBeNull();
   });
