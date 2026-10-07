@@ -37,6 +37,14 @@
     x = Math.max(12, Math.round((vw - 300 - r.width) / 2));
     y = Math.max(52, Math.round((vh - r.height) / 3));
     placed = true;
+    // Like PS: focus the first field with its value selected so typing replaces it.
+    queueMicrotask(() => {
+      const first = el.querySelector<HTMLInputElement>("input[type=text], input[type=number], input:not([type])");
+      if (first) {
+        first.focus();
+        first.select();
+      } else el.focus();
+    });
   });
 
   let drag: { dx: number; dy: number } | null = null;

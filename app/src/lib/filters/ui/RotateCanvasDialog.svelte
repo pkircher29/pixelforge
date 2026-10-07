@@ -56,7 +56,7 @@
   {#snippet footer()}
     <span class="grow"></span>
     <button class="btn" type="button" onclick={onclose}>Cancel</button>
-    <button class="btn primary" type="button" onclick={ok} disabled={!valid}>Rotate</button>
+    <button class="btn primary" type="button" onclick={ok} disabled={!valid}>OK</button>
   {/snippet}
 </Modal>
 

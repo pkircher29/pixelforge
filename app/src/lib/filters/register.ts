@@ -149,7 +149,7 @@ export function registerFilterCommands(): void {
     registerCommand({
       id,
       label,
-      menu: "Layer/Transform",
+      // Palette-only: PS keeps layer transforms under Edit ▸ Transform (no Layer ▸ Transform).
       order,
       keywords: ["layer", "flip", "rotate"],
       enabled: rasterLayerEnabled,

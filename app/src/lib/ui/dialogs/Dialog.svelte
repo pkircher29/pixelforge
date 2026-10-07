@@ -33,7 +33,8 @@
     if (!el) return;
     const first = el.querySelector<HTMLElement>("[data-autofocus], input:not([type=checkbox]):not([type=radio]), select, textarea, button.primary");
     (first ?? el).focus();
-    if (first instanceof HTMLInputElement && first.type === "text") first.select();
+    // PS selects the first field's value so typing replaces it (number fields too).
+    if (first instanceof HTMLInputElement && (first.type === "text" || first.type === "number")) first.select();
   });
 
   function onkeydown(e: KeyboardEvent) {
