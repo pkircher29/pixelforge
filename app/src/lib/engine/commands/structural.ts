@@ -12,6 +12,7 @@ import type { AlphaChannel, BlendMode, Command, Document, Layer, LayerEffects, L
 import { clonePath } from "../ops/vector";
 
 interface LayerState {
+  renderSize: Layer["renderSize"];
   text: TextSpec | null;
   path: Path | null;
   stroke: StrokeSpec | null;
@@ -50,6 +51,7 @@ function snapshot(doc: Document): DocSnapshot {
   const states = new Map<LayerId, LayerState>();
   for (const l of doc.layers) {
     states.set(l.id, {
+      renderSize: l.renderSize ? { ...l.renderSize } : undefined,
       text: l.kind === "text" ? { ...l.text, color: { ...l.text.color } } : null,
       path: l.kind === "shape" ? clonePath(l.path) : null,
       stroke: l.kind === "shape" && l.stroke ? { ...l.stroke, dash: l.stroke.dash?.slice() ?? null } : null,
@@ -97,6 +99,7 @@ function restore(doc: Document, s: DocSnapshot): void {
   doc.quickMask.raster = s.quickMaskRaster;
   for (const l of doc.layers) {
     const st = s.states.get(l.id);
+    if (st) l.renderSize = st.renderSize ? { ...st.renderSize } : undefined;
     if (!st) continue;
     if (l.kind === "text" && st.text) l.text = { ...st.text, color: { ...st.text.color } };
     if (l.kind === "shape" && st.path) {

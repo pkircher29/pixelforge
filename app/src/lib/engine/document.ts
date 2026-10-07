@@ -137,6 +137,7 @@ export function createDocument(opts: CreateDocumentOptions): Document {
 }
 
 export interface CreateLayerOptions {
+  renderSize?: { width: number; height: number } | undefined;
   name?: string;
   /** Defaults to a transparent raster the size of the document. */
   raster?: Raster;
@@ -167,6 +168,7 @@ function baseFields(id: LayerId, kind: Layer["kind"], name: string, opts: Create
     kind,
     name,
     offset: opts.offset ? { x: opts.offset.x, y: opts.offset.y } : { x: 0, y: 0 },
+    renderSize: opts.renderSize ? { ...opts.renderSize } : undefined,
     opacity: opts.opacity ?? 1,
     blendMode: opts.blendMode ?? BlendMode.Normal,
     visible: opts.visible ?? true,
@@ -204,7 +206,7 @@ export interface CreateGroupOptions extends Omit<CreateLayerOptions, "raster"> {
 /** Build a group layer object (not yet inserted). */
 export function createGroupLayer(doc: Document, opts: CreateGroupOptions = {}): GroupLayer {
   return {
-    ...baseFields(opts.id ?? newId("group"), "group", opts.name ?? `Group ${doc.layers.filter((l) => l.kind === "group").length + 1}`, { ...opts, offset: { x: 0, y: 0 } }),
+    ...baseFields(opts.id ?? newId("group"), "group", opts.name ?? `Group ${doc.layers.filter((l) => l.kind === "group").length + 1}`, opts),
     kind: "group",
     raster: null,
     collapsed: opts.collapsed ?? false,
@@ -227,7 +229,7 @@ export function createAdjustmentLayer(doc: Document, opts: CreateAdjustmentOptio
   if (def?.groupSelector) params[def.groupSelector.id] = def.groupSelector.default;
   Object.assign(params, opts.params ?? {});
   return {
-    ...baseFields(opts.id ?? newId("adj"), "adjustment", opts.name ?? (def?.label ?? opts.op), { ...opts, offset: { x: 0, y: 0 } }),
+    ...baseFields(opts.id ?? newId("adj"), "adjustment", opts.name ?? (def?.label ?? opts.op), opts),
     kind: "adjustment",
     raster: null,
     op: opts.op,
@@ -295,8 +297,8 @@ export function createTextLayer(doc: Document, opts: CreateTextOptions): TextLay
  * `path`, `fill` or `stroke`.
  */
 export function rerasterizeShape(doc: Document, layer: ShapeLayer): Raster {
-  const w = doc.width;
-  const h = doc.height;
+  const w = layer.renderSize?.width ?? doc.width;
+  const h = layer.renderSize?.height ?? doc.height;
   const fillCov = pathCoverage(layer.path, w, h, { rule: layer.fillRule, aa: true });
   let out = layer.fill ? coverageToRaster(fillCov, w, h, layer.fill) : new Raster(w, h);
   const st = layer.stroke;
@@ -315,7 +317,7 @@ export function rerasterizeShape(doc: Document, layer: ShapeLayer): Raster {
 
 /** Re-render a text layer's `TextSpec` into a new document-sized raster (assigned to `layer.raster`). */
 export function rerasterizeText(doc: Document, layer: TextLayer): Raster {
-  layer.raster = rasterizeText(layer.text, doc.width, doc.height);
+  layer.raster = rasterizeText(layer.text, layer.renderSize?.width ?? doc.width, layer.renderSize?.height ?? doc.height);
   return layer.raster;
 }
 
@@ -491,6 +493,7 @@ export function layerBaseOf(layer: Layer, over: { id?: LayerId; name?: string } 
     kind: layer.kind,
     name: over.name ?? layer.name,
     offset: { x: layer.offset.x, y: layer.offset.y },
+    renderSize: layer.renderSize ? { ...layer.renderSize } : undefined,
     opacity: layer.opacity,
     blendMode: layer.blendMode,
     visible: layer.visible,
@@ -1023,7 +1026,13 @@ function compositeGroup(doc: Document, out: Raster, group: GroupLayer, rect: Rec
   }
   const tmp = new Raster(doc.width, doc.height);
   compositeSiblings(doc, children, tmp, rect, ctx);
-  blendRasterInto(out, tmp, { x: 0, y: 0 }, group.opacity, group.blendMode, mask && mask.width === doc.width && mask.height === doc.height ? mask : null, rect, null);
+  if (mask) {
+    for (let y = rect.y; y < rect.y + rect.h; y++) for (let x = rect.x; x < rect.x + rect.w; x++) {
+      const i = (y * doc.width + x) * 4 + 3;
+      tmp.data[i] = tmp.data[i]! * docMaskAt(mask, group.offset, x, y) / 255;
+    }
+  }
+  blendRasterInto(out, tmp, { x: 0, y: 0 }, group.opacity, group.blendMode, null, rect, null);
 }
 
 /** Composite a clipping unit: the base plus its clipped layers, then blend as one. */

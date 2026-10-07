@@ -33,6 +33,8 @@ const fillCache = new WeakMap<FillLayer, { spec: FillLayer["fill"]; w: number; h
 
 /** Document-sized rendering of a fill layer (memoised on the fill spec identity + size). */
 export function fillLayerRaster(layer: FillLayer, w: number, h: number): Raster {
+  w = layer.renderSize?.width ?? w;
+  h = layer.renderSize?.height ?? h;
   const c = fillCache.get(layer);
   const pattern = layer.fill.type === "pattern" ? layer.fill.pattern : null;
   if (c && c.spec === layer.fill && c.w === w && c.h === h && c.pattern === pattern) return c.raster;

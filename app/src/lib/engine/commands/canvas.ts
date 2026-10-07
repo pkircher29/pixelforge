@@ -63,6 +63,7 @@ function scalePathInPlace(p: Path, sx: number, sy: number): void {
 
 /** Shift / re-frame one layer for a canvas change (`dx, dy` = where the old canvas origin lands). */
 function reframeLayer(doc: Document, layer: Layer, w: number, h: number, dx: number, dy: number): void {
+  layer.renderSize = undefined;
   if (layer.kind === "raster") {
     const ox = layer.offset.x + dx;
     const oy = layer.offset.y + dy;
@@ -92,16 +93,22 @@ function reframeLayer(doc: Document, layer: Layer, w: number, h: number, dx: num
   layer.offset = { x: 0, y: 0 };
 }
 
-function reframeDocument(doc: Document, w: number, h: number, dx: number, dy: number): void {
+function reframeDocument(doc: Document, w: number, h: number, dx: number, dy: number, preserve = false): void {
   // Shape / text layers read `doc.width/height` when rasterizing: set the size first.
   const oldW = doc.width;
   const oldH = doc.height;
   doc.width = w;
   doc.height = h;
-  for (const layer of doc.layers) reframeLayer(doc, layer, w, h, dx, dy);
-  const sel = doc.selection.translate(dx, dy);
+  for (const layer of doc.layers) {
+    if (!preserve) { reframeLayer(doc, layer, w, h, dx, dy); continue; }
+    if (layer.kind === "shape" || layer.kind === "text" || layer.kind === "fill") {
+      layer.renderSize ??= { width: layer.raster?.width ?? oldW, height: layer.raster?.height ?? oldH };
+    }
+    layer.offset = { x: layer.offset.x + dx, y: layer.offset.y + dy };
+  }
+  const sel = doc.selection;
   const resized = new Raster(w, h);
-  resized.blit(sel.toLuminanceMask(), 0, 0, undefined, { mode: "replace" });
+  resized.blit(sel.toLuminanceMask(), dx, dy, undefined, { mode: "replace" });
   doc.selection = selectionFromLuminance(resized);
   doc.alphaChannels = doc.alphaChannels.map((c) => ({ ...c, mask: reframeChannel(c.mask, w, h, dx, dy, 0) }));
   if (doc.quickMask.raster) doc.quickMask.raster = reframeChannel(doc.quickMask.raster, w, h, dx, dy, 0);
@@ -156,6 +163,7 @@ export class ResizeImageCommand extends StructuralCommand {
     doc.width = this.w;
     doc.height = this.h;
     for (const layer of doc.layers) {
+      if (layer.renderSize) layer.renderSize = { width: Math.max(1, Math.round(layer.renderSize.width * sx)), height: Math.max(1, Math.round(layer.renderSize.height * sy)) };
       if (layer.kind === "raster") {
         const nw = Math.max(1, Math.round(layer.raster.width * sx));
         const nh = Math.max(1, Math.round(layer.raster.height * sy));
@@ -206,7 +214,7 @@ export class CropCanvasCommand extends StructuralCommand {
   readonly label = "Crop";
   private readonly rect: Rect;
 
-  constructor(rect: Rect) {
+  constructor(rect: Rect, private readonly deletePixels = true) {
     super();
     checkSize(rect.w, rect.h);
     this.rect = { ...rect };
@@ -214,7 +222,7 @@ export class CropCanvasCommand extends StructuralCommand {
 
   protected apply(doc: Document): void {
     const r = this.rect;
-    reframeDocument(doc, r.w, r.h, -r.x, -r.y);
+    reframeDocument(doc, r.w, r.h, -r.x, -r.y, !this.deletePixels);
   }
 }
 

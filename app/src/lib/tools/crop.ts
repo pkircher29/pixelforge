@@ -282,9 +282,7 @@ export class CropTool implements Tool {
       ctx.notify("info", "Canvas expanded. Review the prompt and provider, then Generate to fill the new area.");
       return;
     }
-    // "Delete Cropped Pixels" off would keep pixels outside the canvas; v1 layer buffers are
-    // canvas-sized, so both modes crop the buffers (documented limitation).
-    ctx.exec(new CropCanvasCommand(r));
+    ctx.exec(new CropCanvasCommand(r, ctx.opt<boolean>("deletePixels")));
     ctx.compositor?.invalidateAll();
     this.rect = Rect.ofSize(ctx.doc.width, ctx.doc.height);
     ctx.invalidateOverlay();

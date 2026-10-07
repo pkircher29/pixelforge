@@ -597,6 +597,7 @@ export class GlCompositor implements ICompositor {
       const props = layerProps(layer);
       if (layer.kind === "group") {
         const g = this.groups.get(layer.id);
+        const maskMoved = !g || g.props !== props;
         if (!g) {
           this.groups.set(layer.id, { props });
           change(full, ti);
@@ -606,7 +607,7 @@ export class GlCompositor implements ICompositor {
         }
         // A group's mask is applied at composite time from the CPU raster → treat as a
         // layer texture only when needed (handled in compositeGroup via lerp/blend).
-        if (this.styles.mask(layer) !== (this.layers.get(layer.id)?.mask ?? null) || this.dirty.peek(layer.id) !== undefined) {
+        if (maskMoved || structural || this.styles.mask(layer) !== (this.layers.get(layer.id)?.mask ?? null) || this.dirty.peek(layer.id) !== undefined) {
           this.dirty.take(layer.id);
           this.syncMask(layer, this.ensureGroupEntry(layer));
           change(full, ti);
@@ -615,6 +616,7 @@ export class GlCompositor implements ICompositor {
       }
       const isAdj = layer.kind === "adjustment";
       let e = this.layers.get(layer.id);
+      const maskMoved = !e || e.props !== props;
       const dirtyRegion = this.dirty.take(layer.id);
       if (dirtyRegion !== undefined) this.styles.invalidate(layer.id);
       const src = isAdj ? null : this.styles.styledSource(doc, layer);
@@ -669,7 +671,7 @@ export class GlCompositor implements ICompositor {
       }
       // Layer mask texture (only needed when the source is not already styled).
       if (!e.styled && maskActive(layer)) {
-        if (this.styles.mask(layer) !== e.mask || dirtyRegion !== undefined) {
+        if ((isAdj && (maskMoved || structural)) || this.styles.mask(layer) !== e.mask || dirtyRegion !== undefined) {
           this.syncMask(layer, e);
           change(docRect, ti);
         }
@@ -761,7 +763,12 @@ export class GlCompositor implements ICompositor {
     const gl = this.gl;
     const mask = this.styles.mask(layer);
     if (mask) {
-      if (e.maskTex && e.mask && e.mask.width === mask.width && e.mask.height === mask.height) {
+      if (layer.kind === "group" || layer.kind === "adjustment") {
+        const aligned = Raster.filled(this.docW, this.docH, { r: 255, g: 255, b: 255, a: 255 });
+        aligned.blit(mask, layer.offset.x, layer.offset.y, undefined, { mode: "replace" });
+        if (!e.maskTex) e.maskTex = createTexture(gl, 1, 1, gl.RGBA8, gl.RGBA);
+        this.uploadFull(e.maskTex, aligned, true);
+      } else if (e.maskTex && e.mask && e.mask.width === mask.width && e.mask.height === mask.height) {
         this.uploadFull(e.maskTex, mask, false);
       } else {
         if (e.maskTex) gl.deleteTexture(e.maskTex);
@@ -1016,7 +1023,7 @@ export class GlCompositor implements ICompositor {
     gl.enable(gl.SCISSOR_TEST);
     gl.scissor(rect.x, rect.y, rect.w, rect.h);
     gl.viewport(0, 0, this.docW, this.docH);
-    const maskTex = maskActive(layer) && e?.maskTex && e.mask && e.mask.width === this.docW && e.mask.height === this.docH ? e.maskTex : null;
+    const maskTex = maskActive(layer) && e?.maskTex ? e.maskTex : null;
     this.drawBlend(chain, resultTex, Rect.ofSize(this.docW, this.docH), opacity, mode, maskTex, clipTex, false, "adjust");
   }
 

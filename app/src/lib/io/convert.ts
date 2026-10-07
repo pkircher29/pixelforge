@@ -54,6 +54,12 @@ function unit(v: number): number {
 
 export const PFPROJ_FORMAT = 2;
 
+function validRenderSize(value: unknown): { width: number; height: number } | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const { width, height } = value as Record<string, unknown>;
+  return typeof width === "number" && typeof height === "number" && Number.isInteger(width) && Number.isInteger(height) && width > 0 && height > 0 && width <= 8192 && height <= 8192 ? { width, height } : undefined;
+}
+
 /** `color-dodge` (engine) ↔ `color_dodge` (pfproj / IPC). */
 export function blendToFile(m: BlendMode): string {
   return m.replace(/-/g, "_");
@@ -459,6 +465,7 @@ export function documentFromProjectFrame(frame: Frame<ProjectHeader>): Document 
       color: LAYER_COLORS.includes(e.color as LayerColor) ? (e.color as LayerColor) : null,
       parentId: e.parent ? (idMap.get(e.parent) ?? null) : null,
       offset: { x: e.x ?? 0, y: e.y ?? 0 },
+      renderSize: validRenderSize(e.render_size),
     };
     let layer: Layer;
     if (kind === "group") {
@@ -595,8 +602,10 @@ export function projectFrameParts(
     name: l.name,
     kind: l.kind,
     parent: l.parentId,
-    x: l.kind === "group" ? 0 : l.offset.x,
-    y: l.kind === "group" ? 0 : l.offset.y,
+    x: l.offset.x,
+    y: l.offset.y,
+    ...(l.renderSize ? { render_size: { ...l.renderSize } } : {}),
+    ...(!isPixelLayer(l) && l.mask ? { mask_size: { width: l.mask.width, height: l.mask.height } } : {}),
     width: isPixelLayer(l) ? l.raster.width : 0,
     height: isPixelLayer(l) ? l.raster.height : 0,
     opacity: l.opacity,

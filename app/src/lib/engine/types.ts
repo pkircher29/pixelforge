@@ -154,6 +154,8 @@ export interface LayerBase {
   readonly kind: LayerKind;
   /** Position of the layer's raster origin in document space. */
   offset: Point;
+  /** Retained local rendering bounds after a non-destructive crop. */
+  renderSize?: { width: number; height: number } | undefined;
   /** 0..1 — master opacity: affects pixels *and* effects. */
   opacity: number;
   blendMode: BlendMode;

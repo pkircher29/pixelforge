@@ -218,8 +218,9 @@ changes outside the canvas, and returns on reentry. The rebuilt Windows app pass
 the paint/undo/redo screenshot check with the pointer moved into the toolbar, where
 the stale outline previously remained. Legacy healing coverage readback still allocates a full float array;
 this is not completion of the application memory gate.
-Legacy pixel writers, remaining bulk operations, sparse GPU allocation, workers, non-destructive
-cropping and the full 1.5 GB benchmark gate remain open.
+Legacy pixel writers, remaining bulk operations, sparse GPU allocation, workers
+and the full 1.5 GB benchmark gate remain open. Non-destructive cropping now has
+engine, project-file and native save/reopen coverage (see `docs/crop-preserve.md`).
 
 1. Tooltips clip at panel/window edges → one tooltip layer at app root with edge-aware placement (flip/shift).
 2. Navigator group too short when expanded → per-group min height (Navigator ≥ 180 px incl. zoom row); dock respects mins when distributing.
@@ -228,7 +229,7 @@ cropping and the full 1.5 GB benchmark gate remain open.
 5. Delete History State only steps back → engine `History.dropAfter(index)` and real non-linear history option (PS "Allow Non-Linear History").
 6. Patterns from Define Pattern and tips from Define Brush Preset don't persist → saved to app data (`patterns/`, `brushes/`), managed in a Preset Manager dialog.
 7. Character panel: underline, strikethrough, small caps, real all caps (style flag, not text rewrite); Paragraph: indents, space before/after, justification modes → `TextSpec` v2.
-8. Crop "Delete Cropped Pixels" off → keep hidden pixels (needs tiling: layers may extend beyond the canvas).
+8. Crop "Delete Cropped Pixels" off → keep hidden pixels (implemented locally; native crop, undo/redo and save/reopen verified, see [crop evidence](docs/crop-preserve.md)).
 9. Multi-select drag in Layers moves the whole selection; clipping to a group base.
 10. Mask Density/Feather become non-destructive mask render params.
 11. Channels: two-channel views and alpha-channel overlay tint like PS.
