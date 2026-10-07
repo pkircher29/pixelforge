@@ -35,7 +35,7 @@ import { withoutDiffOverlays } from "$lib/ai/overlay";
 import { clearThroughMask, fillThroughMask } from "$lib/tools/paint/fill";
 import { patternById } from "$lib/tools/patterns";
 import { tipFromRaster } from "$lib/tools/brush-tips";
-import { hydratePresetAssets, persistBrush, persistPattern } from "$lib/tools/preset-assets";
+import { hydratePresetAssets, flushBrushAssetWrites, persistPattern } from "$lib/tools/preset-assets";
 import PresetManagerDialog from "../dialogs/PresetManagerDialog.svelte";
 import { brushStore } from "$lib/tools/brush-store.svelte";
 import { nextUntitledName } from "./file";
@@ -330,10 +330,10 @@ export async function defineBrushPreset(): Promise<void> {
   const name = await askName("Brush Name", `Sampled Brush ${brushStore.userPresets.length + 1}`);
   if (name === null) return;
   const id = `sampled-${Date.now().toString(36)}`;
-  const tip = tipFromRaster(id, name, src);
+  tipFromRaster(id, name, src);
   brushStore.update({ tip: id, size: Math.max(src.width, src.height) });
-  const preset = brushStore.saveAsPreset(name);
-  await persistBrush(tip, preset);
+  brushStore.saveAsPreset(name);
+  await flushBrushAssetWrites();
   toast.success("Brush preset saved", `${name} — ${src.width} × ${src.height} px`);
 }
 

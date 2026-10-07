@@ -9,6 +9,9 @@ import { DEFAULT_BRUSH_SETTINGS, normalizeBrushSettings, type BrushSettings } fr
 import { BUILTIN_PRESETS, type BrushPreset } from "./brush-presets";
 
 const LS_KEY = "pixelforge.brush.v1";
+export type BrushLibraryChange = { type: "save"; preset: BrushPreset } | { type: "delete"; id: string; tip: string };
+let libraryChanged: (change: BrushLibraryChange) => void = () => {};
+export function setBrushLibraryPersistence(handler: (change: BrushLibraryChange) => void): void { libraryChanged = handler; }
 
 interface Persisted {
   settings: BrushSettings;
@@ -87,19 +90,24 @@ class BrushStore {
     this.userPresets = [...this.userPresets, p];
     this.presetId = id;
     this.persist();
+    libraryChanged({ type: "save", preset: $state.snapshot(p) });
     return p;
   }
 
   renamePreset(id: string, name: string): void {
     this.userPresets = this.userPresets.map((p) => (p.id === id ? { ...p, name } : p));
     this.persist();
+    const preset = this.userPresets.find(p => p.id === id);
+    if (preset) libraryChanged({ type: "save", preset: $state.snapshot(preset) });
   }
 
   deletePreset(id: string): boolean {
-    if (!this.userPresets.some((p) => p.id === id)) return false;
+    const preset = this.userPresets.find(p => p.id === id);
+    if (!preset) return false;
     this.userPresets = this.userPresets.filter((p) => p.id !== id);
     if (this.presetId === id) this.presetId = null;
     this.persist();
+    libraryChanged({ type: "delete", id, tip: preset.settings.tip });
     return true;
   }
 

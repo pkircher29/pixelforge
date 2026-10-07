@@ -2,14 +2,14 @@ import { invoke, isTauri } from "@tauri-apps/api/core";
 import { Raster } from "$lib/engine";
 import { toast } from "$lib/stores/toast.svelte";
 import { restorePattern, removePattern, type UserPattern } from "$lib/ui/commands/fill-stroke";
-import { restoreBrushTip, removeBrushTip, type BrushTip } from "./brush-tips";
-import { brushStore } from "./brush-store.svelte";
+import { restoreBrushTip, removeBrushTip, tipById } from "./brush-tips";
+import { brushStore, setBrushLibraryPersistence, type BrushLibraryChange } from "./brush-store.svelte";
 import type { BrushPreset } from "./brush-presets";
 
 export type PresetKind = "patterns" | "brushes";
 export interface PresetAsset {
   id: string; name: string; width: number; height: number;
-  pixels: number[]; settings?: BrushPreset | null;
+  pixels: number[]; settings?: (BrushPreset & { linkedPresets?: BrushPreset[] }) | null;
 }
 export interface PresetList { assets: PresetAsset[]; errors: string[] }
 
@@ -48,28 +48,68 @@ export async function removePresetAsset(kind: PresetKind, id: string): Promise<v
 }
 
 export async function renameUserAsset(kind: PresetKind, asset: PresetAsset, name: string): Promise<void> {
+  if (kind === "brushes" && asset.settings) {
+    brushStore.renamePreset(asset.settings.id, name);
+    await flushBrushAssetWrites();
+    return;
+  }
   const next = { ...asset, name, settings: asset.settings ? { ...asset.settings, name } : null };
   await savePresetAsset(kind, next);
   if (kind === "patterns") restorePattern({ id: next.id, name, raster: new Raster(next.width, next.height, new Uint8ClampedArray(next.pixels)) });
   else if (next.settings) { brushStore.restorePreset(next.settings); brushStore.persist(); }
 }
 export async function deleteUserAsset(kind: PresetKind, asset: PresetAsset): Promise<void> {
+  // Finish queued library saves before deleting their shared raster.
+  if (kind === "brushes") await brushWriteTail;
   await removePresetAsset(kind, asset.id);
   if (kind === "patterns") removePattern(asset.id);
   else {
     removeBrushTip(asset.id);
     for (const preset of [...brushStore.userPresets]) if (preset.settings.tip === asset.id) brushStore.deletePreset(preset.id);
     if (brushStore.settings.tip === asset.id) brushStore.update({ tip: "round" });
+    await flushBrushAssetWrites();
   }
 }
 
 export function persistPattern(pattern: UserPattern): Promise<void> {
   return savePresetAsset("patterns", { id: pattern.id, name: pattern.name, width: pattern.raster.width, height: pattern.raster.height, pixels: Array.from(pattern.raster.data) });
 }
-export function persistBrush(tip: BrushTip, preset: BrushPreset): Promise<void> {
-  if (!tip.raster) return Promise.reject(new Error("A sampled brush must contain a tip raster"));
-  return savePresetAsset("brushes", { id: tip.id, name: preset.name, width: tip.raster.width, height: tip.raster.height, pixels: Array.from(tip.raster.data), settings: preset });
+export function brushPresetsOf(asset: PresetAsset): BrushPreset[] {
+  return asset.settings?.linkedPresets ?? (asset.settings ? [asset.settings] : []);
 }
+
+let brushWriteTail = Promise.resolve();
+let lastBrushWrite = Promise.resolve();
+export function flushBrushAssetWrites(): Promise<void> { return lastBrushWrite; }
+
+async function writeBrushChange(change: BrushLibraryChange): Promise<void> {
+  await hydratePresetAssets();
+  const tipId = change.type === "save" ? change.preset.settings.tip : change.tip;
+  const tip = tipById(tipId);
+  if (change.type === "save" && (tip.kind !== "custom" || !tip.raster)) return;
+  const result = await listPresetAssets("brushes");
+  const asset = result.assets.find(a => a.id === tipId);
+  let presets = asset ? brushPresetsOf(asset) : [];
+  if (change.type === "delete") presets = presets.filter(p => p.id !== change.id);
+  else {
+    const index = presets.findIndex(p => p.id === change.preset.id);
+    if (index < 0) presets = [...presets, change.preset];
+    else presets = presets.map((p, i) => i === index ? change.preset : p);
+  }
+  if (!presets.length) {
+    if (asset) await removePresetAsset("brushes", tipId);
+    return;
+  }
+  const primary = presets[0]!;
+  const base = asset ?? { id: tipId, name: primary.name, width: tip.raster!.width, height: tip.raster!.height, pixels: Array.from(tip.raster!.data) };
+  await savePresetAsset("brushes", { ...base, name: primary.name, settings: { ...primary, linkedPresets: presets } });
+}
+
+setBrushLibraryPersistence(change => {
+  const snapshot = JSON.parse(JSON.stringify(change)) as BrushLibraryChange;
+  lastBrushWrite = brushWriteTail.then(() => writeBrushChange(snapshot));
+  brushWriteTail = lastBrushWrite.catch(error => { toast.error("Could not save brush preset", String(error?.message ?? error)); });
+});
 
 let loading: Promise<void> | null = null;
 export function hydratePresetAssets(): Promise<void> {
@@ -78,7 +118,7 @@ export function hydratePresetAssets(): Promise<void> {
     for (const asset of results[0]!.assets) restorePattern({ id: asset.id, name: asset.name, raster: new Raster(asset.width, asset.height, new Uint8ClampedArray(asset.pixels)) });
     for (const asset of results[1]!.assets) {
       restoreBrushTip({ id: asset.id, name: asset.name, kind: "custom", spacing: asset.settings?.settings.spacing ?? 25, raster: new Raster(asset.width, asset.height, new Uint8ClampedArray(asset.pixels)) });
-      if (asset.settings) brushStore.restorePreset(asset.settings);
+      for (const preset of brushPresetsOf(asset)) brushStore.restorePreset(preset);
     }
     const errors = results.flatMap(r => r.errors);
     if (errors.length) toast.error("Some presets could not be loaded", errors.join("\n"));

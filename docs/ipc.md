@@ -497,6 +497,12 @@ never come back over IPC; only booleans do.
 persists one asset; `presets_remove({ kind, id })` removes one asset (missing is a no-op).
 `kind` is `patterns` or `brushes`. An asset contains `id`, `name`, `width`, `height`,
 RGBA byte-array `pixels`, and optional brush-preset `settings` metadata.
+For sampled brushes, `settings.linkedPresets` holds the presets sharing that tip
+raster; the outer settings object retains the primary preset for compatibility.
+Readers also accept older records with only a single preset. Brushes-panel saves,
+renames and deletions run in order. Removing one preset retains the shared asset
+until its last preset is removed; deleting the asset in Preset Manager removes all
+presets referencing it.
 
 Files live in the corresponding native app-data subdirectory as `<id>.pfpreset`.
 The binary record is `PFPRESET1\n`, a little-endian u32 JSON-header length, the UTF-8
