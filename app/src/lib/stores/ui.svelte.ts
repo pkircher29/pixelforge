@@ -42,6 +42,8 @@ export const ESSENTIALS: readonly { id: string; panels: string[]; weight: number
   { id: "properties", panels: ["properties"], weight: 1.1 },
   { id: "layers", panels: ["layers", "channels", "paths"], weight: 2.2 },
   { id: "history", panels: ["history", "ai", "ai-history"], weight: 1.4 },
+  { id: "brush", panels: ["brush-settings", "brushes"], weight: 1.2, collapsed: true },
+  { id: "type", panels: ["character", "paragraph"], weight: 1, collapsed: true },
 ];
 
 export function essentialsWorkspace(): Workspace {
@@ -166,7 +168,8 @@ class UiStore {
     const gid = groupHint ?? defaultGroupFor(panelId) ?? panelId;
     let g = this.workspace.groups.find((x) => x.id === gid);
     if (!g) {
-      g = { id: gid, panels: [], active: panelId, collapsed: false, weight };
+      const ess = ESSENTIALS.find((e) => e.id === gid);
+      g = { id: gid, panels: [], active: panelId, collapsed: ess?.collapsed ?? false, weight: ess?.weight ?? weight };
       this.workspace.groups.push(g);
     }
     g.panels.push(panelId);
