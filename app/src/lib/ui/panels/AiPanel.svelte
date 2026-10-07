@@ -8,7 +8,7 @@
    * a Run split button ("Run on all" in the caret half), compact job rows with a thin
    * progress bar. Behaviour is unchanged from Wave 3/5.
    */
-  import { onMount } from "svelte";
+  import { onMount, tick } from "svelte";
   import { listen } from "@tauri-apps/api/event";
   import { invoke } from "@tauri-apps/api/core";
   import { Raster } from "$lib/engine";
@@ -165,7 +165,10 @@
 
   $effect(() => {
     void aiUi.focusRequest;
-    if (aiUi.focusRequest > 0) promptEl?.focus();
+    if (aiUi.focusRequest > 0) {
+      aiSections.prompt = true;
+      void tick().then(() => promptEl?.focus());
+    }
   });
 
   $effect(() => {

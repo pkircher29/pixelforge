@@ -2,6 +2,12 @@
 
 Open **Edit → AI Providers** and choose a provider and authentication method.
 
+To make an image, use **AI → Generate with AI…**, enter a prompt in the AI panel,
+choose the provider, then click **Run**. The command now reveals the panel and opens
+the prompt section even when History was selected or the dock was collapsed.
+The connection test checks authentication only; it does not generate an image or
+prove that the account has image-model access, billing or sufficient quota.
+
 ![Google OAuth setup in the native Windows app](screenshots/gemini-oauth.png)
 
 | Provider | Connection | Remaining setup / limits |

@@ -5,6 +5,7 @@
  */
 
 import type { Raster } from "$lib/engine";
+import { ui } from "$lib/stores/ui.svelte";
 import { listProviders, hasTauri } from "./client";
 import { toFriendlyError } from "./errors";
 import type { AiRunRequest } from "./run";
@@ -106,6 +107,9 @@ class AiUiState {
   }
 
   focusPrompt(forced?: AiMode): void {
+    ui.placePanel("ai", "history");
+    ui.activateTab("ai");
+    if (ui.workspace.iconized) ui.setIconized(false);
     this.forcedMode = forced;
     this.focusRequest++;
   }
