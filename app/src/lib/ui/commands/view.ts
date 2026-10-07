@@ -99,7 +99,6 @@ registerCommands([
   { id: "window.paletteAlt", label: "Command palette…", shortcut: "CmdOrCtrl+Shift+P", run: () => { ui.paletteOpen = !ui.paletteOpen; } },
   { id: "window.nextTab", label: "Next document", menu: "Window", order: 200, shortcut: "Ctrl+Tab", enabled: () => docStore.docs.length > 1, run: () => docStore.cycle(1) },
   { id: "window.prevTab", label: "Previous document", menu: "Window", order: 201, shortcut: "Ctrl+Shift+Tab", enabled: () => docStore.docs.length > 1, run: () => docStore.cycle(-1) },
-  { id: "window.resetLayout", label: "Reset layout", menu: "Window", order: 900, run: () => ui.resetLayout() },
 
   // Help
   { id: "help.about", label: "About Pixelforge", menu: "Help", order: 100, run: () => openDialog<{ compositor: string }, void>(AboutDialog, { compositor: canvasHost.compositorKind || "none" }) },

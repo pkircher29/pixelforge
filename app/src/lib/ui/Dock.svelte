@@ -410,8 +410,14 @@
     font-size: var(--fs-sm);
   }
   .newzone {
-    flex: none;
-    margin: 4px 6px;
+    /* Overlay at the bottom of the dock: showing it must not reflow the groups (the
+       drop targets would jump away from the cursor mid-drag). */
+    position: absolute;
+    left: 6px;
+    right: 6px;
+    bottom: 4px;
+    z-index: 5;
+    background: var(--ps-panel);
     padding: 8px;
     text-align: center;
     border: 1px dashed var(--ps-border-light);
