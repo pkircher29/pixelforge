@@ -331,6 +331,7 @@ before they start. Cancelling a running job aborts the HTTP request.
 | `ai_not_configured` | no key stored for that provider | after adding a key |
 | `ai_auth` | provider rejected the key (401/403) | no |
 | `ai_rate_limited` | 429; message may carry `Retry-After` | yes, later |
+| `ai_quota` | Explicit API credit, billing, spend or usage-limit error; retains the provider explanation | no; review API credits/limits first |
 | `ai_moderation_blocked` | safety filter blocked prompt or image | change the prompt |
 | `ai_bad_request` | provider rejected the request (400/422) | fix the request |
 | `ai_invalid_request` | rejected locally before sending (size, limits, framing) | fix the request |

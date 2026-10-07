@@ -49,6 +49,8 @@ export function describeAiError(code: string, message: string): FriendlyError {
       return { ...base, title: "No API key for this provider.", hint: "Add your key in Settings > AI Providers (Edit menu).", retryable: false };
     case "ai_auth":
       return { ...base, title: "The provider rejected the API key.", hint: "Add your key in Settings > AI Providers (Edit menu) and test it.", retryable: false };
+    case "ai_quota":
+      return { ...base, title: "API billing or usage limit reached.", hint: "Check this API project's credits, billing and usage limits in the provider console. Retrying unchanged will not resolve this limit.", retryable: false };
     case "ai_rate_limited": {
       const retryAfterSecs = parseRetryAfter(message);
       return {
