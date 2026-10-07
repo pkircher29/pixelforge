@@ -9,7 +9,7 @@ it("preserves original mixed case and Unicode through style undo and project rou
   const layer = createTextLayer(doc, { text: textSpec("MiXeD Straße", 4, 30, { size: 20 }) });
   addLayer(doc, layer);
   const before = layer.raster.data.slice();
-  const command = new SetTextLayerCommand(layer.id, { allCaps: true, smallCaps: true, underline: true, strikethrough: true });
+  const command = new SetTextLayerCommand(layer.id, { allCaps: true, smallCaps: true, underline: true, strikethrough: true, paragraphWidth: 120, indentLeft: 3, indentRight: 4, firstLineIndent: 5, spaceBefore: 6, spaceAfter: 7, justification: "right" });
   command.do(doc);
   expect(layer.text.text).toBe("MiXeD Straße");
   expect(layer.raster.data).not.toEqual(before);

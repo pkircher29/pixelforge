@@ -6,9 +6,9 @@
  */
 import { Type, TypeOutline } from "@lucide/svelte";
 import { textBounds, type TextSpec } from "$lib/engine";
-import { drawText, measureLine } from "$lib/engine/ops/text";
+import { drawText, layoutText, lineCaretX } from "$lib/engine/ops/text";
 import type { Tool, ToolContext, ToolEvent, ToolOption } from "./types";
-import { linePosOf, lines, selectionSpans } from "./text-session";
+import { selectionSpans } from "./text-session";
 import { specFromOptions, typeSession, type TypeVariant } from "./type-session.svelte";
 import { quoteFamily } from "./fonts";
 import { toolStore } from "$lib/stores/tool.svelte";
@@ -158,16 +158,6 @@ export class TypeTool implements Tool {
 
   // ------------------------------------------------------------------ layout helpers
 
-  /** Measure helper on the overlay context (same glyph-by-glyph metric as the engine). */
-  private measure(g: CanvasRenderingContext2D, spec: TextSpec, s: string): number {
-    return measureLine(spec, s, g);
-  }
-
-  private lineStartX(g: CanvasRenderingContext2D, spec: TextSpec, line: string): number {
-    const w = this.measure(g, spec, line);
-    return spec.align === "left" ? spec.x : spec.align === "center" ? spec.x - w / 2 : spec.x - w;
-  }
-
   private lineHeight(spec: TextSpec): number {
     return spec.leading ?? Math.round(spec.size * 1.2);
   }
@@ -176,7 +166,6 @@ export class TypeTool implements Tool {
   private indexAtPoint(_ctx: ToolContext, x: number, y: number): number | null {
     const spec = typeSession.spec;
     const text = typeSession.model.text;
-    const ls = lines(text);
     const lh = this.lineHeight(spec);
     const g = measureCtx();
     if (!g) return null;
@@ -186,23 +175,12 @@ export class TypeTool implements Tool {
       if (Math.abs(x - spec.x) > spec.size || col < 0 || col >= Math.max(1, text.length)) return null;
       return Math.max(0, Math.min(text.length, col));
     }
-    const line = Math.floor((y - (spec.y - spec.size)) / lh);
-    if (line < 0 || line >= ls.length) return null;
-    const l = ls[line]!;
-    const x0 = this.lineStartX(g, spec, l);
-    const w = this.measure(g, spec, l);
-    if (x < x0 - 6 || x > x0 + w + 6) return null;
-    let acc = x0;
-    let col = 0;
-    for (const ch of Array.from(l)) {
-      const cw = this.measure(g, spec, ch);
-      if (x < acc + cw / 2) break;
-      acc += cw;
-      col += ch.length;
+    const line = layoutText(spec, g).find(l => y >= l.y - spec.size && y < l.y - spec.size + lh);
+    if (!line || x < line.x - 6 || x > line.x + line.width + 6) return null;
+    for (const glyph of line.glyphs) {
+      if (x < glyph.x + glyph.advance / 2) return glyph.start;
     }
-    let idx = 0;
-    for (let i = 0; i < line; i++) idx += ls[i]!.length + 1;
-    return idx + col;
+    return line.end;
   }
 
   drawOverlay(g: CanvasRenderingContext2D, ctx: ToolContext): void {
@@ -212,10 +190,10 @@ export class TypeTool implements Tool {
     const model = typeSession.model;
     const vp = ctx.viewport;
     const zoom = vp.zoom;
-    const ls = lines(model.text);
     const lh = this.lineHeight(spec);
     g.save();
     g.font = cssFontFor(spec);
+    const laidOut = layoutText(spec, g);
     // Mask variants: draw the text itself as a translucent preview (no layer exists).
     if (typeSession.isMask) {
       g.save();
@@ -232,24 +210,23 @@ export class TypeTool implements Tool {
     // Selection highlight.
     const spans = selectionSpans(model);
     g.fillStyle = "rgba(20,115,230,0.35)";
-    for (const sp of spans) {
-      const line = ls[sp.line] ?? "";
-      if (spec.vertical) {
+    if (spec.vertical) for (const sp of spans) {
         const a = vp.docToScreen({ x: spec.x - spec.size / 2, y: spec.y - spec.size + sp.start * lh });
         const b = vp.docToScreen({ x: spec.x + spec.size / 2, y: spec.y - spec.size + sp.end * lh });
         g.fillRect(a.x, a.y, b.x - a.x, b.y - a.y);
-        continue;
-      }
-      const x0 = this.lineStartX(g, spec, line);
-      const xs = x0 + this.measure(g, spec, line.slice(0, sp.start));
-      const xe = x0 + this.measure(g, spec, line.slice(0, sp.end));
-      const top = spec.y + sp.line * lh - spec.size;
+    }
+    else for (const line of laidOut) {
+      const start = Math.max(line.start, Math.min(model.caret, model.anchor));
+      const end = Math.min(line.end, Math.max(model.caret, model.anchor));
+      if (end <= start) continue;
+      const xs = lineCaretX(line, start);
+      const xe = lineCaretX(line, end);
+      const top = line.y - spec.size;
       const a = vp.docToScreen({ x: xs, y: top });
       const b = vp.docToScreen({ x: xe, y: top + lh });
       g.fillRect(a.x, a.y, Math.max(1, b.x - a.x), b.y - a.y);
     }
     // Caret (blinks with wall-clock time; the editor invalidates the overlay periodically).
-    const pos = linePosOf(model.text, model.caret);
     const blinkOn = Math.floor(performance.now() / 530) % 2 === 0;
     if (blinkOn) {
       let a: { x: number; y: number };
@@ -259,9 +236,9 @@ export class TypeTool implements Tool {
         a = vp.docToScreen({ x: spec.x - spec.size / 2, y: yy });
         b = vp.docToScreen({ x: spec.x + spec.size / 2, y: yy });
       } else {
-        const line = ls[pos.line] ?? "";
-        const cx = this.lineStartX(g, spec, line) + this.measure(g, spec, line.slice(0, pos.col));
-        const top = spec.y + pos.line * lh - spec.size;
+        const line = laidOut.reduce((last, l) => l.start <= model.caret ? l : last, laidOut[0]!);
+        const cx = lineCaretX(line, model.caret);
+        const top = line.y - spec.size;
         a = vp.docToScreen({ x: cx, y: top });
         b = vp.docToScreen({ x: cx, y: top + lh });
       }

@@ -27,6 +27,13 @@ export function textSpec(text: string, x: number, y: number, over: Partial<TextS
     smallCaps: false,
     underline: false,
     strikethrough: false,
+    paragraphWidth: null,
+    indentLeft: 0,
+    indentRight: 0,
+    firstLineIndent: 0,
+    spaceBefore: 0,
+    spaceAfter: 0,
+    justification: "none",
     vertical: false,
     antialias: true,
     ...over,
@@ -98,41 +105,151 @@ export function measureLine(spec: TextSpec, line: string, ctx?: Ctx2D | null): n
   return textGlyphs(spec, line).reduce((width, glyph) => width + glyphWidth(spec, glyph, ctx) + track, 0);
 }
 
+export interface TextLayoutGlyph {
+  text: string;
+  size: number;
+  /** UTF-16 offsets into the unchanged source text. */
+  start: number;
+  end: number;
+  x: number;
+  advance: number;
+  inkWidth: number;
+}
+export interface TextLayoutLine {
+  start: number;
+  end: number;
+  x: number;
+  y: number;
+  width: number;
+  paragraphEnd: boolean;
+  glyphs: TextLayoutGlyph[];
+}
+
+export function lineCaretX(line: TextLayoutLine, index: number): number {
+  for (const glyph of line.glyphs) {
+    if (index <= glyph.start) return glyph.x;
+    if (index < glyph.end) return glyph.x;
+  }
+  return line.x + line.width;
+}
+
+export function moveLayoutCaret(spec: TextSpec, index: number, key: "ArrowUp" | "ArrowDown" | "Home" | "End", ctx?: Ctx2D | null): number {
+  const lines = layoutText(spec, ctx);
+  const current = lines.reduce((last, line, i) => line.start <= index ? i : last, 0);
+  const line = lines[current]!;
+  if (key === "Home") return line.start;
+  if (key === "End") return line.paragraphEnd ? line.end : line.glyphs.filter(g => g.advance !== 0).at(-1)?.end ?? line.end;
+  const target = lines[current + (key === "ArrowDown" ? 1 : -1)];
+  if (!target) return key === "ArrowUp" ? 0 : spec.text.length;
+  const x = lineCaretX(line, index);
+  for (const glyph of target.glyphs) if (x < glyph.x + glyph.advance / 2) return glyph.start;
+  return target.paragraphEnd ? target.end : target.glyphs.filter(g => g.advance !== 0).at(-1)?.end ?? target.end;
+}
+
+/** Source-indexed layout shared by painting, selection and hit testing. */
+export function layoutText(spec: TextSpec, ctx?: Ctx2D | null): TextLayoutLine[] {
+  const result: TextLayoutLine[] = [];
+  const track = (spec.tracking / 1000) * spec.size;
+  const lh = lineHeightOf(spec);
+  const boxWidth = !spec.vertical && (spec.paragraphWidth ?? 0) > 0 ? spec.paragraphWidth! : null;
+  const left = spec.indentLeft ?? 0, right = spec.indentRight ?? 0;
+  let baseline = spec.y + (spec.spaceBefore ?? 0);
+  const paragraphs = spec.vertical
+    ? spec.text.match(/\r\n|[\s\S]/gu) ?? [""]
+    : spec.text.split(/\r\n|\r|\n/);
+  let sourceOffset = 0;
+  for (let pi = 0; pi < paragraphs.length; pi++) {
+    const rawParagraph = paragraphs[pi]!;
+    const paragraph = spec.vertical && /[\r\n]/.test(rawParagraph) ? "" : rawParagraph;
+    let offset = sourceOffset;
+    const sourceGlyphs = Array.from(paragraph, ch => {
+      const glyph = textGlyphs(spec, ch)[0]!;
+      const inkWidth = glyphWidth(spec, glyph, ctx);
+      const entry = { ...glyph, start: offset, end: offset + ch.length, x: 0, advance: inkWidth + track, inkWidth, whitespace: /\s/.test(ch) };
+      offset += ch.length;
+      return entry;
+    });
+    let cursor = 0, first = true;
+    do {
+      const indent = left + (first ? spec.firstLineIndent ?? 0 : 0);
+      const available = boxWidth === null ? Infinity : Math.max(1, boxWidth - indent - right);
+      let end = sourceGlyphs.length;
+      if (boxWidth !== null) {
+        let width = 0, lastBreak = -1;
+        for (let i = cursor; i < sourceGlyphs.length; i++) {
+          const glyph = sourceGlyphs[i]!;
+          if (width + glyph.advance > available && i > cursor) {
+            end = lastBreak > cursor ? lastBreak : i;
+            // Consume a boundary space with the preceding line, without drawing it.
+            while (end < sourceGlyphs.length && sourceGlyphs[end]!.whitespace) end++;
+            break;
+          }
+          width += glyph.advance;
+          if (glyph.whitespace) lastBreak = i + 1;
+        }
+      }
+      const last = end === sourceGlyphs.length;
+      const glyphs = sourceGlyphs.slice(cursor, end).map(g => ({ ...g }));
+      let visible = glyphs.length;
+      if (!last) while (visible && glyphs[visible - 1]!.whitespace) visible--;
+      for (let i = visible; i < glyphs.length; i++) { glyphs[i]!.advance = 0; glyphs[i]!.inkWidth = 0; }
+      const naturalWidth = glyphs.reduce((sum, g) => sum + g.advance, 0);
+      const mode = spec.justification ?? "none";
+      const justified = boxWidth !== null && mode !== "none" && (!last || mode === "all");
+      const gaps = glyphs.map((g, i) => g.whitespace && i > 0 && i < visible - 1 ? i : -1).filter(i => i >= 0);
+      // Single words can still be fully justified, by distributing between glyphs.
+      if (justified && !gaps.length) for (let i = 0; i < visible - 1; i++) gaps.push(i);
+      if (justified && gaps.length && naturalWidth < available) {
+        const extra = (available - naturalWidth) / gaps.length;
+        for (const i of gaps) glyphs[i]!.advance += extra;
+      }
+      const width = glyphs.reduce((sum, g) => sum + g.advance, 0);
+      const align = boxWidth !== null && mode !== "none" ? mode === "all" ? "left" : mode : spec.align;
+      const origin = spec.x + indent;
+      const x = spec.vertical ? spec.x - width / 2
+        : boxWidth !== null ? origin + (align === "center" ? (available - width) / 2 : align === "right" ? available - width : 0)
+        : origin - (align === "center" ? width / 2 : align === "right" ? width + right : 0);
+      let gx = x;
+      for (const glyph of glyphs) { glyph.x = gx; gx += glyph.advance; }
+      result.push({ start: glyphs[0]?.start ?? sourceOffset, end: glyphs.at(-1)?.end ?? sourceOffset, x, y: baseline, width, paragraphEnd: last, glyphs });
+      baseline += lh;
+      cursor = end;
+      first = false;
+    } while (cursor < sourceGlyphs.length);
+    if (!spec.vertical) baseline += (spec.spaceAfter ?? 0) + (spec.spaceBefore ?? 0);
+    sourceOffset += rawParagraph.length;
+    if (!spec.vertical) {
+      if (spec.text.slice(sourceOffset, sourceOffset + 2) === "\r\n") sourceOffset += 2;
+      else if (sourceOffset < spec.text.length) sourceOffset++;
+    }
+  }
+  return result;
+}
+
 /** Shared by committed type and the live type-mask preview. */
 export function drawText(ctx: Ctx2D, spec: TextSpec): void {
   ctx.textBaseline = "alphabetic";
   ctx.textAlign = "left";
-  const track = (spec.tracking / 1000) * spec.size;
   const thickness = Math.max(1, spec.size / 16);
-  textLines(spec).forEach((line, li) => {
-    const y = spec.y + li * lineHeightOf(spec);
-    const width = measureLine(spec, line, ctx);
-    const start = spec.vertical || spec.align === "center" ? spec.x - width / 2 : spec.align === "right" ? spec.x - width : spec.x;
-    let x = start;
-    for (const glyph of textGlyphs(spec, line)) {
-      const advance = glyphWidth(spec, glyph, ctx);
-      ctx.fillText(glyph.text, x, y);
-      x += advance + track;
+  layoutText(spec, ctx).forEach(line => {
+    for (const glyph of line.glyphs) {
+      ctx.font = cssFont({ ...spec, size: glyph.size });
+      if (glyph.inkWidth) ctx.fillText(glyph.text, glyph.x, line.y);
     }
-    if (!line) return;
-    if (spec.underline) ctx.fillRect(start, y + spec.size * 0.12, width, thickness);
-    if (spec.strikethrough) ctx.fillRect(start, y - spec.size * 0.3, width, thickness);
+    if (spec.underline) ctx.fillRect(line.x, line.y + spec.size * 0.12, line.width, thickness);
+    if (spec.strikethrough) ctx.fillRect(line.x, line.y - spec.size * 0.3, line.width, thickness);
   });
   ctx.font = cssFont(spec);
 }
 
 /** Approximate bounding box of the rendered text (document space), for selection / transform handles. */
 export function textBounds(spec: TextSpec, ctx?: Ctx2D | null): { x: number; y: number; w: number; h: number } {
-  const lines = textLines(spec);
+  const lines = layoutText(spec, ctx);
   const lh = lineHeightOf(spec);
-  if (spec.vertical) {
-    const w = spec.size;
-    return { x: spec.x - w / 2, y: spec.y - spec.size, w, h: Math.max(1, lines.length) * lh };
-  }
-  let maxW = 0;
-  for (const l of lines) maxW = Math.max(maxW, measureLine(spec, l, ctx));
-  const x = spec.align === "left" ? spec.x : spec.align === "center" ? spec.x - maxW / 2 : spec.x - maxW;
-  return { x, y: spec.y - spec.size, w: Math.max(1, maxW), h: Math.max(1, lines.length) * lh };
+  const x = Math.min(...lines.map(l => l.x));
+  const right = Math.max(...lines.map(l => l.x + l.width));
+  const y = lines[0]!.y - spec.size;
+  return { x, y, w: Math.max(1, right - x), h: lines.at(-1)!.y - lines[0]!.y + lh };
 }
 
 /**
@@ -142,9 +259,6 @@ export function textBounds(spec: TextSpec, ctx?: Ctx2D | null): { x: number; y: 
 export function rasterizeText(spec: TextSpec, w: number, h: number): Raster {
   const out = new Raster(w, h);
   if (w === 0 || h === 0 || spec.text.length === 0) return out;
-  const lines = textLines(spec);
-  const lh = lineHeightOf(spec);
-  const track = (spec.tracking / 1000) * spec.size;
   const c2d = make2d(w, h);
   if (c2d) {
     const { ctx } = c2d;
@@ -173,18 +287,12 @@ export function rasterizeText(spec: TextSpec, w: number, h: number): Raster {
     const yb = Math.min(h, Math.round(y0 + bh));
     for (let y = ya; y < yb; y++) for (let x = xa; x < xb; x++) out.setPixel(x, y, color);
   };
-  lines.forEach((line, li) => {
-    const y = spec.y + li * lh;
-    const width = measureLine(spec, line);
-    const start = spec.vertical || spec.align === "center" ? spec.x - width / 2 : spec.align === "right" ? spec.x - width : spec.x;
-    let x = start;
-    for (const glyph of textGlyphs(spec, line)) {
-      const advance = glyphWidth(spec, glyph);
-      if (glyph.text.trim()) box(x, y - glyph.size * 0.7, advance, glyph.size * 0.7);
-      x += advance + track;
+  layoutText(spec).forEach(line => {
+    for (const glyph of line.glyphs) {
+      if (glyph.text.trim()) box(glyph.x, line.y - glyph.size * 0.7, glyph.inkWidth, glyph.size * 0.7);
     }
-    if (line && spec.underline) box(start, y + spec.size * 0.12, width, Math.max(1, spec.size / 16));
-    if (line && spec.strikethrough) box(start, y - spec.size * 0.3, width, Math.max(1, spec.size / 16));
+    if (spec.underline) box(line.x, line.y + spec.size * 0.12, line.width, Math.max(1, spec.size / 16));
+    if (spec.strikethrough) box(line.x, line.y - spec.size * 0.3, line.width, Math.max(1, spec.size / 16));
   });
   return out;
 }

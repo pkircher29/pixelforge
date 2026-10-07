@@ -393,6 +393,13 @@ function textFromFile(v: unknown): TextSpec | null {
     smallCaps: o.smallCaps === true,
     underline: o.underline === true,
     strikethrough: o.strikethrough === true,
+    paragraphWidth: typeof o.paragraphWidth === "number" && Number.isFinite(o.paragraphWidth) && o.paragraphWidth > 0 ? o.paragraphWidth : null,
+    indentLeft: typeof o.indentLeft === "number" && Number.isFinite(o.indentLeft) ? o.indentLeft : 0,
+    indentRight: typeof o.indentRight === "number" && Number.isFinite(o.indentRight) ? o.indentRight : 0,
+    firstLineIndent: typeof o.firstLineIndent === "number" && Number.isFinite(o.firstLineIndent) ? o.firstLineIndent : 0,
+    spaceBefore: typeof o.spaceBefore === "number" && Number.isFinite(o.spaceBefore) ? Math.max(0, o.spaceBefore) : 0,
+    spaceAfter: typeof o.spaceAfter === "number" && Number.isFinite(o.spaceAfter) ? Math.max(0, o.spaceAfter) : 0,
+    justification: ["left", "center", "right", "all"].includes(String(o.justification)) ? o.justification as NonNullable<TextSpec["justification"]> : "none",
     vertical: o.vertical === true,
     antialias: o.antialias !== false,
   };

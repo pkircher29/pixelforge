@@ -97,7 +97,18 @@ Implemented on `feat/v03-oauth-polish`:
   All 683 frontend tests, Svelte checks and Windows native build pass. Browser and
   Windows canvas checks verify caps toggling restores exact original pixels and
   reopening preserves the source text. Screenshot: `docs/screenshots/text-character-styles.png`.
-  Paragraph indents, space before/after and justification remain open.
+  Paragraph formatting now stores width, left/right/first-line indents, space before/
+  after and four justification modes. Width 0 preserves point type; positive widths
+  wrap at words with a glyph fallback for long words. Paragraph breaks remain in the
+  original source; visual lines retain UTF-16 positions for caret placement, selection
+  and Home/End/Up/Down navigation. Rendering and type-mask previews share that layout.
+  All 687 frontend tests pass, including project round-trip, paragraph geometry,
+  Unicode offsets, spacing, wrapping and justification; subsequent keyboard assertions
+  pass in the targeted text suite. Browser checks verify visible last-line alignment,
+  original source retention and visual-line keyboard movement. Svelte checks pass.
+  The Windows native build and the same paragraph-control, visible-justification and
+  wrapped-line navigation checks pass without runtime errors. Screenshot:
+  `docs/screenshots/text-paragraph-formatting.png`.
 - Polish item 9, drag portion: dragging a selected row moves the full selection in
   stack order, carries group children once, and excludes every moved row as a target.
   Multi-layer reparenting is one undoable move; pointer cancellation no longer commits.

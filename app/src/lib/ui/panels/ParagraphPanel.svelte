@@ -1,12 +1,11 @@
 <script lang="ts">
   /**
-   * Paragraph panel (PS): alignment buttons; left indent moves the text origin (point
-   * type has no box, so PS's indents act as an offset). Right / first-line indents and
-   * space before / after need engine support and are shown disabled.
+   * Paragraph formatting is stored on the text layer; width enables wrapped type.
    */
   import Icon from "../icons/Icon.svelte";
   import ScrubbyNumber from "../controls/ScrubbyNumber.svelte";
   import { applyTypePatch, currentTypeTarget } from "$lib/tools/ui/type-target.svelte";
+  import type { TextSpec } from "$lib/engine";
 
   const t = $derived(currentTypeTarget());
   const s = $derived(t.spec);
@@ -15,29 +14,30 @@
     { value: "center", icon: "align-hcenter", title: "Center text" },
     { value: "right", icon: "align-right", title: "Right align text" },
   ] as const;
-  let indent = $state(0);
-  function setIndent(v: number) {
-    const d = Math.round(v) - indent;
-    indent = Math.round(v);
-    if (d !== 0 && t.kind !== "defaults") applyTypePatch({ x: s.x + d });
-  }
 </script>
 
 <div class="pp">
   <div class="aligns" role="radiogroup" aria-label="Alignment">
     {#each ALIGNS as a (a.value)}
-      <button type="button" role="radio" class="b" class:on={s.align === a.value} aria-checked={s.align === a.value} aria-label={a.title} data-tip={a.title} onclick={() => applyTypePatch({ align: a.value })}>
+      <button type="button" role="radio" class="b" class:on={s.align === a.value && (!s.justification || s.justification === "none")} aria-checked={s.align === a.value && (!s.justification || s.justification === "none")} aria-label={a.title} data-tip={a.title} onclick={() => applyTypePatch({ align: a.value, justification: "none" })}>
         <Icon name={a.icon} size={16} />
       </button>
     {/each}
-    <button type="button" class="b" disabled aria-label="Justify (paragraph type only)" data-tip="Justify needs paragraph (box) type"><Icon name="distribute-h" size={16} /></button>
   </div>
   <div class="grid">
-    <ScrubbyNumber label="Indent left" value={indent} min={-2000} max={2000} unit="pt" width={44} disabled={t.kind === "defaults"} onchange={setIndent} />
-    <ScrubbyNumber label="Indent right" value={0} min={0} max={0} unit="pt" width={44} disabled onchange={() => {}} />
-    <ScrubbyNumber label="First line" value={0} min={0} max={0} unit="pt" width={44} disabled onchange={() => {}} />
-    <ScrubbyNumber label="Space before" value={0} min={0} max={0} unit="pt" width={44} disabled onchange={() => {}} />
+    <ScrubbyNumber label="Width" value={s.paragraphWidth ?? 0} min={0} max={30000} unit="px" width={44} disabled={s.vertical} onchange={(v) => applyTypePatch({ paragraphWidth: v || null })} />
+    <span>0 = point type</span>
+    <ScrubbyNumber label="Indent left" value={s.indentLeft ?? 0} min={-2000} max={2000} unit="pt" width={44} onchange={(v) => applyTypePatch({ indentLeft: v })} />
+    <ScrubbyNumber label="Indent right" value={s.indentRight ?? 0} min={-2000} max={2000} unit="pt" width={44} onchange={(v) => applyTypePatch({ indentRight: v })} />
+    <ScrubbyNumber label="First line" value={s.firstLineIndent ?? 0} min={-2000} max={2000} unit="pt" width={44} onchange={(v) => applyTypePatch({ firstLineIndent: v })} />
+    <ScrubbyNumber label="Space before" value={s.spaceBefore ?? 0} min={0} max={2000} unit="pt" width={44} onchange={(v) => applyTypePatch({ spaceBefore: v })} />
+    <ScrubbyNumber label="Space after" value={s.spaceAfter ?? 0} min={0} max={2000} unit="pt" width={44} onchange={(v) => applyTypePatch({ spaceAfter: v })} />
   </div>
+  <label>Justification
+    <select class="input" value={s.justification ?? "none"} disabled={s.vertical || !s.paragraphWidth} onchange={(e) => applyTypePatch({ justification: e.currentTarget.value as NonNullable<TextSpec["justification"]> })}>
+      <option value="none">None</option><option value="left">Last line left</option><option value="center">Last line centered</option><option value="right">Last line right</option><option value="all">Justify all lines</option>
+    </select>
+  </label>
   <label class="chk"><input type="checkbox" disabled /> Hyphenate</label>
 </div>
 
@@ -75,7 +75,7 @@
   }
   .grid {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: minmax(0, 1fr);
     gap: 4px 10px;
   }
   .chk {

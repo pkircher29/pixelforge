@@ -240,5 +240,12 @@ export function specFromOptions(toolId: string, vertical: boolean): TextSpec {
     smallCaps: o<boolean>("smallCaps", false),
     underline: o<boolean>("underline", false),
     strikethrough: o<boolean>("strikethrough", false),
+    paragraphWidth: o<number>("paragraphWidth", 0) || null,
+    indentLeft: o<number>("indentLeft", 0),
+    indentRight: o<number>("indentRight", 0),
+    firstLineIndent: o<number>("firstLineIndent", 0),
+    spaceBefore: o<number>("spaceBefore", 0),
+    spaceAfter: o<number>("spaceAfter", 0),
+    justification: o<string>("justification", "none") as NonNullable<TextSpec["justification"]>,
   });
 }

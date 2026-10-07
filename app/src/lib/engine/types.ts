@@ -350,6 +350,15 @@ export interface TextSpec {
   smallCaps?: boolean;
   underline?: boolean;
   strikethrough?: boolean;
+  /** Positive paragraph width enables wrapping; null/absent keeps point type. */
+  paragraphWidth?: number | null;
+  indentLeft?: number;
+  indentRight?: number;
+  firstLineIndent?: number;
+  spaceBefore?: number;
+  spaceAfter?: number;
+  /** Alignment of the last line when justifying; `all` stretches every line. */
+  justification?: "none" | "left" | "center" | "right" | "all";
   /** Vertical type: one glyph per line, stacked downwards from `x, y`. */
   vertical: boolean;
   antialias: boolean;
