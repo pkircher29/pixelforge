@@ -199,8 +199,12 @@ color, erase, source, target and smudge, selection and edge clipping, cancellati
 unchanged shared tiles and small-stroke allocation on a 4000×3000 canvas. All 707
 tests, Svelte checks and the frontend build pass. Real-browser GL checks verify a
 boundary-crossing stroke and cancellation while storage stays tiled, comparing alpha
-and premultiplied color to account for RGBA8 GPU rounding. Native brush verification
-is still pending. Legacy healing coverage readback still allocates a full float array;
+and premultiplied color to account for RGBA8 GPU rounding. The Windows native build
+passes; an isolated native window paints a stroke and restores exact canvas screenshot
+pixels through undo and redo without page errors (`docs/screenshots/tiled-brush-native.png`).
+The comparison moves the brush cursor outside the captured region: moving directly
+into the toolbar can leave its overlay at the previous canvas position, a remaining
+cursor cleanup issue. Legacy healing coverage readback still allocates a full float array;
 this is not completion of the application memory gate.
 Legacy pixel writers, remaining bulk operations, sparse GPU allocation, workers, non-destructive
 cropping and the full 1.5 GB benchmark gate remain open.
