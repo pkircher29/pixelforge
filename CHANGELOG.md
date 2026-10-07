@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.1] - 2026-10-07
+
+Subscription sign-in. Only officially documented flows are used; no borrowed or
+reverse-engineered credentials. See `docs/ai-research.md` §5.
+
+### Added
+- **Sign in with ChatGPT** (OpenAI's official flow for open-source local apps):
+  - Authorization code + PKCE through a one-shot `127.0.0.1` listener; tokens stored in the OS keychain, refreshed automatically, revoked on sign-out.
+  - Edit ▸ AI Providers ▸ ChatGPT has an *Authentication* switch: **API key | ChatGPT subscription**.
+  - ✨ Improve prompt runs on the plan.
+  - Image generation on a plan is refused by OpenAI's documented preview limitations. Pixelforge reports this clearly (`ai_plan_not_eligible`) and keeps API-key auth for images. An optional "Check image access" live test is available.
+  - Plan usage-limit errors (`ai_plan_limit`) show the reset time.
+  - Optional fallback to an API key, off by default.
+- **Grok subscription sign-in**, built but switched off. The device-code flow against `auth.x.ai` is implemented, but the client ID comes only from configuration (`PF_XAI_OAUTH_CLIENT_ID` or the Grok card). xAI has not published registration for third-party apps, and Pixelforge will not reuse another app's client. Until xAI issues one, the card reads "awaiting xAI approval".
+- Gemini card explains why subscription sign-in isn't possible (Google AI plans don't cover the Gemini API).
+- `scripts/fake-openai-auth.mjs`: a fake sign-in, token, responses and device-flow server for developing all of the above without an account.
+
+### Changed
+- `KeyStore` entries are keyed by account (`oauth:<provider>`, `custom:<id>`); the old provider helpers are kept as shorthands.
+- `ai_list_providers` reports `authModes`, `authActive` and `account`.
+
 ## [0.2.0] - 2026-10-07
 
 Photoshop-fidelity overhaul: the UI, tools and layer system now behave like Photoshop CC,

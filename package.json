@@ -1,6 +1,6 @@
 {
   "name": "pixelforge",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "private": true,
   "description": "Open-source Photoshop-style image editor with chained AI (ChatGPT, Grok, Gemini) - Tauri 2 + Svelte 5 + Rust",
   "license": "MIT",

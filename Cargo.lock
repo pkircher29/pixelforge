@@ -3001,7 +3001,7 @@ dependencies = [
 
 [[package]]
 name = "pf-ai"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "async-trait",
  "base64 0.22.1",
@@ -3021,7 +3021,7 @@ dependencies = [
 
 [[package]]
 name = "pf-io"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "image",
  "psd",
@@ -3106,7 +3106,7 @@ dependencies = [
 
 [[package]]
 name = "pixelforge"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "pf-ai",
  "pf-io",
