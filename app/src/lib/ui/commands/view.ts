@@ -88,11 +88,11 @@ export function registerViewMenu(): void {
 
 registerCommands([
   // Image
-  { id: "image.flipH", label: "Flip canvas horizontal", menu: "Image/Rotate canvas", order: 300, enabled: () => !!docStore.doc, run: () => { docStore.exec(new FlipCanvasCommand("h")); afterCanvasChange(); } },
-  { id: "image.flipV", label: "Flip canvas vertical", menu: "Image/Rotate canvas", order: 301, enabled: () => !!docStore.doc, run: () => { docStore.exec(new FlipCanvasCommand("v")); afterCanvasChange(); } },
-  { id: "image.rotate90", label: "90° clockwise", menu: "Image/Rotate canvas", order: 310, enabled: () => !!docStore.doc, run: () => { docStore.exec(new RotateCanvasCommand(1)); afterCanvasChange(); } },
-  { id: "image.rotate270", label: "90° counter-clockwise", menu: "Image/Rotate canvas", order: 311, enabled: () => !!docStore.doc, run: () => { docStore.exec(new RotateCanvasCommand(3)); afterCanvasChange(); } },
-  { id: "image.rotate180", label: "180°", menu: "Image/Rotate canvas", order: 312, enabled: () => !!docStore.doc, run: () => { docStore.exec(new RotateCanvasCommand(2)); afterCanvasChange(); } },
+  { id: "image.flipH", label: "Flip Canvas Horizontal", menu: "Image/Image Rotation", order: 300, enabled: () => !!docStore.doc, run: () => { docStore.exec(new FlipCanvasCommand("h")); afterCanvasChange(); } },
+  { id: "image.flipV", label: "Flip Canvas Vertical", menu: "Image/Image Rotation", order: 301, enabled: () => !!docStore.doc, run: () => { docStore.exec(new FlipCanvasCommand("v")); afterCanvasChange(); } },
+  { id: "image.rotate90", label: "90° Clockwise", menu: "Image/Image Rotation", order: 221, enabled: () => !!docStore.doc, run: () => { docStore.exec(new RotateCanvasCommand(1)); afterCanvasChange(); } },
+  { id: "image.rotate270", label: "90° Counter Clockwise", menu: "Image/Image Rotation", order: 222, enabled: () => !!docStore.doc, run: () => { docStore.exec(new RotateCanvasCommand(3)); afterCanvasChange(); } },
+  { id: "image.rotate180", label: "180°", menu: "Image/Image Rotation", order: 220, enabled: () => !!docStore.doc, run: () => { docStore.exec(new RotateCanvasCommand(2)); afterCanvasChange(); } },
 
   // Window
   { id: "window.palette", label: "Command palette…", menu: "Window", order: 100, shortcut: "CmdOrCtrl+K", keywords: ["search commands"], run: () => { ui.paletteOpen = !ui.paletteOpen; } },

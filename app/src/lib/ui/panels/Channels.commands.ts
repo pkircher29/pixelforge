@@ -112,6 +112,6 @@ registerCommands([
   { id: "channels.delete", label: "Delete Channel", enabled: () => !!selectedAlpha(), run: deleteChannel },
   { id: "channels.spot", label: "New Spot Channel…", enabled: () => false, run: () => {} },
   { id: "channels.options", label: "Channel Options…", enabled: () => !!selectedAlpha(), run: () => { const c = selectedAlpha(); if (c) void channelOptions(c); } },
-  { id: "select.save", label: "Save Selection…", menu: "Select", order: 800, enabled: () => !!docStore.doc && !docStore.doc.selection.isEmpty, run: saveSelectionAsChannel },
-  { id: "select.load", label: "Load Selection…", menu: "Select", order: 801, enabled: () => !!docStore.doc && docStore.doc.alphaChannels.length > 0, run: () => { const d = docStore.doc; const ch = selectedAlpha() ?? d?.alphaChannels[d.alphaChannels.length - 1]; if (ch) loadChannelSelection({ id: ch.id, name: ch.name, view: `alpha:${ch.id}`, kind: "alpha", shortcut: null, visible: true, selected: true }); } },
+  { id: "select.save", label: "Save Selection as Channel", order: 800, enabled: () => !!docStore.doc && !docStore.doc.selection.isEmpty, run: saveSelectionAsChannel },
+  { id: "select.load", label: "Load Last Channel as Selection", order: 801, enabled: () => !!docStore.doc && docStore.doc.alphaChannels.length > 0, run: () => { const d = docStore.doc; const ch = selectedAlpha() ?? d?.alphaChannels[d.alphaChannels.length - 1]; if (ch) loadChannelSelection({ id: ch.id, name: ch.name, view: `alpha:${ch.id}`, kind: "alpha", shortcut: null, visible: true, selected: true }); } },
 ]);

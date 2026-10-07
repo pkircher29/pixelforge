@@ -133,25 +133,25 @@ export function syncRecentCommands(paths: readonly string[]): void {
     const p = paths[i];
     if (!p) {
       // Slot 0 stays in the menu as a disabled "No recent files" row; others vanish.
-      const def: CommandDef = { id: `file.recent.${i}`, label: "No recent files", order: 100 + i, enabled: () => false, run: () => {} };
+      const def: CommandDef = { id: `file.recent.${i}`, label: "No recent files", order: 102 + i / 100, enabled: () => false, run: () => {} };
       if (i === 0) def.menu = "File/Open Recent";
       registerCommand(def);
       continue;
     }
     const name = p.split(/[\\/]/).pop() ?? p;
-    registerCommand({ id: `file.recent.${i}`, label: `${i + 1}. ${name}`, menu: "File/Open Recent", order: 100 + i, keywords: [p, "recent"], run: () => openPaths([p]) });
+    registerCommand({ id: `file.recent.${i}`, label: `${i + 1}. ${name}`, menu: "File/Open Recent", order: 102 + i / 100, keywords: [p, "recent"], run: () => openPaths([p]) });
   }
 }
 
 registerCommands([
   { id: "file.new", label: "New…", menu: "File", order: 100, shortcut: "CmdOrCtrl+N", keywords: ["create", "document"], run: newDocument },
   { id: "file.open", label: "Open…", menu: "File", order: 101, shortcut: "CmdOrCtrl+O", keywords: ["load", "image", "psd", "project"], run: openDocumentDialog },
-  { id: "file.recent.clear", label: "Clear recent", menu: "File/Open Recent", order: 190, enabled: () => ui.recentFiles.length > 0, run: () => recentClear() },
-  { id: "file.close", label: "Close", menu: "File", order: 103, shortcut: "CmdOrCtrl+W", enabled: () => !!docStore.active, run: async () => { if (docStore.activeId) await closeDocument(docStore.activeId); } },
-  { id: "file.closeAll", label: "Close all", menu: "File", order: 104, shortcut: "CmdOrCtrl+Alt+W", enabled: () => docStore.docs.length > 0, run: async () => { await closeAll(); } },
+  { id: "file.recent.clear", label: "Clear Recent File List", menu: "File/Open Recent", order: 190, enabled: () => ui.recentFiles.length > 0, run: () => recentClear() },
+  { id: "file.close", label: "Close", menu: "File", order: 110, shortcut: "CmdOrCtrl+W", enabled: () => !!docStore.active, run: async () => { if (docStore.activeId) await closeDocument(docStore.activeId); } },
+  { id: "file.closeAll", label: "Close All", menu: "File", order: 111, shortcut: "CmdOrCtrl+Alt+W", enabled: () => docStore.docs.length > 0, run: async () => { await closeAll(); } },
   { id: "file.save", label: "Save", menu: "File", order: 200, shortcut: "CmdOrCtrl+S", keywords: ["pfproj", "project"], enabled: () => !!docStore.active, run: async () => { if (docStore.active) await saveDocument(docStore.active); } },
-  { id: "file.saveAs", label: "Save as…", menu: "File", order: 201, shortcut: "CmdOrCtrl+Shift+S", enabled: () => !!docStore.active, run: async () => { if (docStore.active) await saveDocument(docStore.active, true); } },
-  { id: "file.export", label: "Export as…", menu: "File", order: 202, shortcut: "CmdOrCtrl+Shift+E", keywords: ["png", "jpeg", "jpg", "webp", "save image"], enabled: () => !!docStore.active, run: async () => { if (docStore.active) await exportDocument(docStore.active); } },
+  { id: "file.saveAs", label: "Save As…", menu: "File", order: 201, shortcut: "CmdOrCtrl+Shift+S", enabled: () => !!docStore.active, run: async () => { if (docStore.active) await saveDocument(docStore.active, true); } },
+  { id: "file.export", label: "Export As…", menu: "File", order: 202, shortcut: "CmdOrCtrl+Shift+E", keywords: ["png", "jpeg", "jpg", "webp", "save image"], enabled: () => !!docStore.active, run: async () => { if (docStore.active) await exportDocument(docStore.active); } },
   { id: "file.preferences", label: "Preferences…", menu: "File", order: 300, shortcut: "CmdOrCtrl+,", keywords: ["settings", "options"], run: async () => { await openDialog<Record<string, never>, void>(PreferencesDialog, {}); } },
-  { id: "file.quit", label: "Quit", menu: "File", order: 400, shortcut: "CmdOrCtrl+Q", keywords: ["exit"], run: quit },
+  { id: "file.quit", label: navigator.platform.startsWith("Mac") ? "Quit" : "Exit", menu: "File", order: 400, shortcut: "CmdOrCtrl+Q", keywords: ["exit"], run: quit },
 ]);

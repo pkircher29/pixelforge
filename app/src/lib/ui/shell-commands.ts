@@ -48,15 +48,17 @@ registerCommands([
 
 /** Register `Window/<panel>` toggles (with ✓) for every registered panel (call from an effect). */
 export function syncWindowPanelCommands(): void {
-  for (const p of getPanels()) {
+  // Photoshop lists panels alphabetically in the Window menu.
+  const panels = [...getPanels()].sort((a, b) => a.title.localeCompare(b.title));
+  panels.forEach((p, i) => {
     registerCommand({
       id: `window.panel.${p.id}`,
       label: p.title,
       menu: "Window",
-      order: 300 + p.order,
+      order: 300 + i / 100,
       keywords: ["panel", "show", "hide", "toggle", p.title.toLowerCase()],
       checked: () => ui.isPanelVisible(p.id) && !ui.workspace.iconized,
       run: () => ui.togglePanel(p.id),
     });
-  }
+  });
 }

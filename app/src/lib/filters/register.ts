@@ -19,7 +19,6 @@ import { activeRasterLayerOk, applyOpToActiveLayer } from "./applyToLayer";
 import { getLastFilter } from "./lastFilter";
 import { rawDoc } from "./raw";
 import { defaultParams, type OpDef } from "./types";
-import { FlipImageCommand, RotateImageCommand } from "./transform/commands";
 import { transformSession } from "./transform/session.svelte";
 import { trimRect } from "./transform/trim";
 
@@ -101,7 +100,7 @@ export function registerFilterCommands(): void {
     id: "image.size",
     label: "Image Size…",
     menu: "Image",
-    order: 100,
+    order: 200,
     shortcut: "CmdOrCtrl+Alt+I",
     keywords: ["resample", "resize", "scale"],
     enabled: docEnabled,
@@ -111,7 +110,7 @@ export function registerFilterCommands(): void {
     id: "image.canvasSize",
     label: "Canvas Size…",
     menu: "Image",
-    order: 110,
+    order: 201,
     shortcut: "CmdOrCtrl+Alt+C",
     keywords: ["anchor", "extend", "crop"],
     enabled: docEnabled,
@@ -121,7 +120,7 @@ export function registerFilterCommands(): void {
     id: "image.trim",
     label: "Trim",
     menu: "Image",
-    order: 130,
+    order: 330,
     keywords: ["crop", "transparent", "autocrop"],
     enabled: docEnabled,
     run: guarded(() => {
@@ -133,23 +132,17 @@ export function registerFilterCommands(): void {
     }),
   });
 
-  // ---- Image / Rotate
-  const rot = (id: string, label: string, order: number, make: () => RotateImageCommand | FlipImageCommand, keywords: string[]): void =>
-    registerCommand({ id, label, menu: "Image/Rotate", order, keywords, enabled: docEnabled, run: guarded(() => docStore.exec(make())) });
-  rot("image.rotate180", "180°", 200, () => new RotateImageCommand("180"), ["rotate", "canvas"]);
-  rot("image.rotate90cw", "90° Clockwise", 210, () => new RotateImageCommand("90cw"), ["rotate", "canvas"]);
-  rot("image.rotate90ccw", "90° Counter-clockwise", 220, () => new RotateImageCommand("90ccw"), ["rotate", "canvas"]);
+  // ---- Image / Image Rotation (180° / 90° / flips are the engine commands registered
+  // in ui/commands/view.ts; this module adds the Arbitrary… dialog).
   registerCommand({
     id: "image.rotateCanvas",
     label: "Arbitrary…",
-    menu: "Image/Rotate",
-    order: 230,
+    menu: "Image/Image Rotation",
+    order: 223,
     keywords: ["rotate", "angle", "canvas"],
     enabled: docEnabled,
     run: guarded(() => openDialog(RotateCanvasDialog, {})),
   });
-  rot("image.flipH", "Flip Canvas Horizontal", 300, () => new FlipImageCommand("h"), ["mirror", "flip"]);
-  rot("image.flipV", "Flip Canvas Vertical", 310, () => new FlipImageCommand("v"), ["mirror", "flip"]);
 
   // ---- Layer / Transform
   const layerCmd = (id: string, label: string, order: number, run: (layerId: string) => void): void =>
