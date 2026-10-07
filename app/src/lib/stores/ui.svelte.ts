@@ -38,10 +38,11 @@ export interface PanelLayout {
 /** PLAN-v2 §3 "Essentials": the panel ids each group holds, in tab order. */
 export const ESSENTIALS: readonly { id: string; panels: string[]; weight: number; collapsed?: boolean }[] = [
   { id: "color", panels: ["color", "swatches"], weight: 1 },
-  { id: "navigator", panels: ["navigator", "info"], weight: 0.9 },
+  // PS Essentials gives the Layers stack the height; Navigator/Info start collapsed.
+  { id: "navigator", panels: ["navigator", "info"], weight: 0.9, collapsed: true },
   { id: "properties", panels: ["properties"], weight: 1.1 },
-  { id: "layers", panels: ["layers", "channels", "paths"], weight: 2.2 },
-  { id: "history", panels: ["history", "ai", "ai-history"], weight: 1.4 },
+  { id: "layers", panels: ["layers", "channels", "paths"], weight: 3 },
+  { id: "history", panels: ["history", "ai", "ai-history"], weight: 1.1 },
   { id: "brush", panels: ["brush-settings", "brushes"], weight: 1.2, collapsed: true },
   { id: "type", panels: ["character", "paragraph"], weight: 1, collapsed: true },
 ];

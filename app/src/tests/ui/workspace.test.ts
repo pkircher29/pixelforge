@@ -10,7 +10,7 @@ describe("workspace store (tab groups)", () => {
   it("starts as Essentials: color / properties / layers / history groups", () => {
     const w = essentialsWorkspace();
     expect(w.groups.map((g) => g.id)).toEqual(["color", "navigator", "properties", "layers", "history", "brush", "type"]);
-    expect(w.groups.filter((g) => g.collapsed).map((g) => g.id)).toEqual(["brush", "type"]);
+    expect(w.groups.filter((g) => g.collapsed).map((g) => g.id)).toEqual(["navigator", "brush", "type"]);
     expect(w.groups.find((g) => g.id === "layers")!.panels).toEqual(["layers", "channels", "paths"]);
     expect(w.groups.find((g) => g.id === "history")!.panels).toEqual(["history", "ai", "ai-history"]);
     expect(defaultGroupFor("swatches")).toBe("color");
