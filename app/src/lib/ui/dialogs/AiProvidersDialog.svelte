@@ -275,7 +275,7 @@
         keyStatus = { ...keyStatus, [id]: true };
       }
       await testKey(id);
-      result = { ok: true, text: `${PROVIDER_VENDOR[id]} accepted the key.` };
+      result = { ok: true, text: `${PROVIDER_VENDOR[id]} accepted the key. Image generation has not been tested; model access, billing and quota may still need setup.` };
     } catch (e) {
       const f = toFriendlyError(e);
       result = { ok: false, text: f.code === "ai_auth" ? `${PROVIDER_VENDOR[id]} rejected the key. ${f.detail}` : `${f.title} ${f.detail}` };
