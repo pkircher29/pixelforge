@@ -50,6 +50,7 @@ export class PenToolImpl implements Tool {
 
   private before: Path | null = null;
   private live: Path | null = null;
+  private liveDocId: string | null = null;
   private dragging: { ref: AnchorRef; start: Point; kind: "new" | "anchor" | "handle"; which?: "in" | "out" } | null = null;
   private hover: Point | null = null;
 
@@ -156,6 +157,7 @@ export class PenToolImpl implements Tool {
     }
     // Keep the live path while the subpath is open; commit on close / Esc.
     this.live = path;
+    this.liveDocId = ctx.entry.id;
     ctx.invalidateOverlay();
   }
 
@@ -182,6 +184,14 @@ export class PenToolImpl implements Tool {
   endPath(ctx: ToolContext): void {
     const live = this.live;
     if (!live) return;
+    if (this.liveDocId && this.liveDocId !== ctx.entry.id) {
+      // The open path belongs to another document (tab switched mid-path): never
+      // commit it into this one. Its preview stays on its own document.
+      this.live = null;
+      this.before = null;
+      this.liveDocId = null;
+      return;
+    }
     this.finishEdit(ctx, live, "Pen Path");
   }
 
