@@ -12,6 +12,11 @@ document and selection. The mode description below the picker shows the resolved
 operation, including when an edit falls back because no editable image is available.
 The connection test checks authentication only; it does not generate an image or
 prove that the account has image-model access, billing or sufficient quota.
+Use **Check model** below the AI panel's model picker to query the selected model's
+metadata with the configured credentials. This is a read-only check, available for
+built-in API connections (including Gemini OAuth). It can reveal a missing model or
+access error without submitting an image request. A successful metadata lookup still
+does not prove image-generation permission, billing or quota.
 The panel-reveal fix passes 99 AI tests and a rebuilt Windows UI check: both OpenAI
 and Gemini can be selected, a prompt entered, and Run becomes enabled. That check
 did not submit a billable image request and is not evidence of successful generation.
@@ -55,6 +60,11 @@ cross-OS gates remain open.
 
 Windows follow-up (2026-10-07): saved-key authentication checks succeeded for OpenAI
 and Gemini; xAI rejected its saved key. No billable vendor image requests were sent.
+The native **Check model** action also successfully retrieved metadata for OpenAI's
+`gpt-image-2.5-flare` and Gemini's `gemini-3.1-flash-image` using the saved keys.
+The Grok model check was rejected for an invalid key. These metadata checks created
+no image jobs. Three adapter tests verify metadata-only GETs, error propagation and
+rejection of invalid model paths; all 100 frontend AI tests and Svelte check passed.
 An isolated native app using a loopback fixture server added an OpenAI-generated
 image layer, then Gemini and Grok edited-image layers. A simulated project spending
 limit produced an actionable error, no extra layer, and no automatic retry. Failed
@@ -78,6 +88,9 @@ The temporary app-specific WebView debugging setting was removed after the check
 
 ## Official references
 
+- [OpenAI model metadata](https://developers.openai.com/api/reference/resources/models/methods/retrieve)
+- [Gemini model metadata](https://ai.google.dev/api/models)
+- [xAI model metadata](https://docs.x.ai/developers/rest-api-reference/inference/models)
 - [Google Gemini OAuth](https://ai.google.dev/gemini-api/docs/oauth)
 - [Google installed-app OAuth and PKCE](https://developers.google.com/identity/protocols/oauth2/native-app)
 - [OpenAI open-source sign-in](https://developers.openai.com/siwc/token-sharing-open-source)

@@ -272,6 +272,13 @@ impl ImageProvider for GeminiProvider {
             .await?;
         http::ensure_success(&self.id(), resp).await.map(|_| ())
     }
+
+    async fn test_model(&self, model: &str) -> Result<(), Error> {
+        crate::provider::validate_model_id(model)?;
+        let resp = self.authenticate(self.client.get(format!("{}/v1beta/models/{model}", self.base_url)))
+            .send().await?;
+        http::ensure_success(&self.id(), resp).await.map(|_| ())
+    }
 }
 
 /// `generateContent` response (camelCase on the way out).

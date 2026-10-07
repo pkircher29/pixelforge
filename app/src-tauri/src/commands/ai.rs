@@ -12,7 +12,7 @@
 //! | `ai_job_status` | `{ job }` | `JobStatus` |
 //! | `ai_cancel` | `{ job }` | `bool` (was it still running / queued) |
 //! | `ai_take_result` | `{ job }` | raw body: binary frame (`ArrayBuffer` in JS) |
-//! | `ai_test_key` | `{ provider }` | `()` |
+//! | `ai_test_key` | `{ provider, model? }` | `()` |
 //! | `ai_custom_kinds` | - | `CustomKindInfo[]` |
 //! | `ai_custom_list` | - | `CustomProvider[]` |
 //! | `ai_custom_add` | `{ provider, auth? }` | `CustomProvider[]` |
@@ -425,9 +425,14 @@ pub async fn ai_test_key(
     app: AppHandle,
     state: State<'_, AppState>,
     provider: ProviderId,
+    model: Option<String>,
 ) -> CommandResult<()> {
     let p = resolve_provider(&app, &state, &provider).await?;
-    p.test_key().await?;
+    if let Some(model) = model {
+        p.test_model(&model).await?;
+    } else {
+        p.test_key().await?;
+    }
     Ok(())
 }
 

@@ -15,7 +15,8 @@
   import { decodeFrame } from "$lib/io/frame";
   import { docStore } from "$lib/stores/doc.svelte";
   import { assistProviders, improvePrompt } from "$lib/ai/assist";
-  import { hasTauri } from "$lib/ai/client";
+  import { hasTauri, testKey } from "$lib/ai/client";
+  import { toFriendlyError } from "$lib/ai/errors";
   import { openApiKeysDialog, openShootoutDialog } from "$lib/ai/dialogs";
   import { jobStore, TERMINAL, type AiJob } from "$lib/ai/jobs.svelte";
   import { toggleDiffOverlay } from "$lib/ai/overlay";
@@ -39,6 +40,23 @@
   let notice = $state<{ kind: "info" | "error"; text: string } | null>(null);
   let previews = $state<Record<string, string[]>>({});
   let busy = $state(false);
+  let checkingModel = $state(false);
+
+  async function checkModel(): Promise<void> {
+    if (!provider || checkingModel) return;
+    const selected = provider;
+    const model = effectiveModel;
+    checkingModel = true;
+    notice = null;
+    try {
+      await testKey(selected.id, model);
+      notice = { kind: "info", text: `${selected.name} returned metadata for ${model}. Image generation, billing and quota have not been tested.` };
+    } catch (e) {
+      notice = { kind: "error", text: `${selected.name} model ${model}: ${toFriendlyError(e).detail}` };
+    } finally {
+      checkingModel = false;
+    }
+  }
 
   const version = $derived(docStore.active?.version ?? -1);
   const doc = $derived.by(() => {
@@ -345,6 +363,9 @@
       <span class="flbl">Model:</span>
       <span class="grow-field"><PsSelect value={aiUi.model} choices={modelChoices} onchange={(v) => (aiUi.model = v)} /></span>
     </div>
+    {#if provider && ["open_ai", "gemini", "x_ai"].includes(provider.id) && !onSubscription(provider)}
+      <button type="button" class="textbtn" disabled={checkingModel || !hasTauri() || !isReady(provider)} title="Read model metadata without generating an image" onclick={() => void checkModel()}>{checkingModel ? "Checking model…" : "Check model"}</button>
+    {/if}
     <div class="frow">
       <span class="flbl">Mode:</span>
       <select class="input" aria-label="AI mode" value={aiUi.forcedMode ?? "auto"} onchange={(e) => { aiUi.forcedMode = e.currentTarget.value === "auto" ? undefined : e.currentTarget.value as AiMode; aiUi.model = ""; }}>

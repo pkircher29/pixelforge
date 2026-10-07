@@ -263,7 +263,7 @@ APIs has a negative-prompt field). `size` maps to OpenAI `size` (presets or a cu
 | `ai_job_status` | `{ job: JobId }` | `JobStatus` (`ai_unknown_job` otherwise) |
 | `ai_cancel` | `{ job: JobId }` | `boolean` — `true` if it was still queued/running |
 | `ai_take_result` | `{ job: JobId }` | frame (below); `ai_no_result` if not finished / already taken |
-| `ai_test_key` | `{ provider: ProviderId }` | `null`; `ai_auth` on a bad key, `ai_not_configured` if none. For `custom:<id>` this runs the kind's probe. |
+| `ai_test_key` | `{ provider: ProviderId, model?: string }` | `null`; without `model`, checks credentials (custom providers run their kind's probe). With `model`, built-ins perform a read-only metadata GET for that model; other backends return `ai_unsupported`. Neither form generates an image or proves billing/quota. Errors retain the provider response; `ai_auth` on a rejected key, `ai_not_configured` if none. |
 
 `ai_list_providers` returns the three built-ins followed by every registered custom
 provider (registry order). `ai_submit_*` accept any `ProviderId`; a custom id resolves its
