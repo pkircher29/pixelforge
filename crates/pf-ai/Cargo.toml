@@ -14,9 +14,12 @@ reqwest.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
-tokio.workspace = true
+# `net` + `io-util`: the one-shot loopback listener for "Sign in with ChatGPT" (oauth/).
+tokio = { workspace = true, features = ["net", "io-util"] }
 tracing.workspace = true
 uuid.workspace = true
+# PKCE S256 code challenge (RFC 7636). Already in the lockfile via rustls/reqwest.
+sha2 = "0.10"
 
 # OS keychain. Windows Credential Manager / macOS Keychain are native; Linux uses the
 # pure-Rust zbus Secret Service client so CI needs no libdbus headers. keyring 3's docs

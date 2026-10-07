@@ -3,4 +3,5 @@
 
 pub mod ai;
 pub mod io;
+pub mod oauth;
 pub mod settings;

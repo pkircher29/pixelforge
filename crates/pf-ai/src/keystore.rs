@@ -33,17 +33,33 @@ pub const FILE_STORE_NAME: &str = "ai-keys.json";
 /// File-store secret name.
 pub const FILE_STORE_SECRET_NAME: &str = "ai-keys.secret";
 
-/// Where API keys live.
+/// Where API keys (and OAuth token records) live.
+///
+/// Entries are addressed by an *account* name: the provider wire id for API keys
+/// (`open_ai`, `custom:<id>`, ...) and `oauth:<provider>` for OAuth token records
+/// (see [`crate::oauth::account_name`]). The provider-keyed methods are shorthands.
 pub trait KeyStore: Send + Sync {
-    /// Fetch the key for `provider`, `Ok(None)` when absent.
-    fn get(&self, provider: &ProviderId) -> Result<Option<SecretString>, Error>;
-    /// Store (or replace) the key for `provider`.
-    fn set(&self, provider: &ProviderId, key: &SecretString) -> Result<(), Error>;
-    /// Remove the key for `provider` (no error when absent).
-    fn delete(&self, provider: &ProviderId) -> Result<(), Error>;
+    /// Fetch the secret stored under `account`, `Ok(None)` when absent.
+    fn get_account(&self, account: &str) -> Result<Option<SecretString>, Error>;
+    /// Store (or replace) the secret under `account`.
+    fn set_account(&self, account: &str, value: &SecretString) -> Result<(), Error>;
+    /// Remove the secret under `account` (no error when absent).
+    fn delete_account(&self, account: &str) -> Result<(), Error>;
     /// Short backend label for diagnostics (`"keyring"`, `"file"`).
     fn backend(&self) -> &'static str;
 
+    /// Fetch the API key for `provider`, `Ok(None)` when absent.
+    fn get(&self, provider: &ProviderId) -> Result<Option<SecretString>, Error> {
+        self.get_account(&provider.as_str())
+    }
+    /// Store (or replace) the API key for `provider`.
+    fn set(&self, provider: &ProviderId, key: &SecretString) -> Result<(), Error> {
+        self.set_account(&provider.as_str(), key)
+    }
+    /// Remove the API key for `provider` (no error when absent).
+    fn delete(&self, provider: &ProviderId) -> Result<(), Error> {
+        self.delete_account(&provider.as_str())
+    }
     /// `true` when a non-empty key is stored.
     fn has(&self, provider: &ProviderId) -> Result<bool, Error> {
         Ok(self.get(provider)?.is_some_and(|k| !k.is_empty()))
@@ -78,13 +94,13 @@ impl KeyringStore {
     ///
     /// keyring 3's Linux backend blocks on zbus internally and its docs say calling it
     /// from a tokio worker can deadlock; a fresh std thread sidesteps that everywhere.
-    fn run<T, F>(&self, provider: &ProviderId, f: F) -> Result<T, Error>
+    fn run<T, F>(&self, account: &str, f: F) -> Result<T, Error>
     where
         T: Send + 'static,
         F: FnOnce(keyring::Entry) -> keyring::Result<T> + Send + 'static,
     {
         let service = self.service.clone();
-        let user = provider.as_str().into_owned();
+        let user = account.to_owned();
         let handle = std::thread::Builder::new()
             .name("pf-keyring".to_owned())
             .spawn(move || keyring::Entry::new(&service, &user).and_then(f))
@@ -92,26 +108,26 @@ impl KeyringStore {
         handle
             .join()
             .map_err(|_| Error::KeyStore("keyring thread panicked".to_owned()))?
-            .map_err(|e| Error::KeyStore(format!("{} keychain: {e}", provider.vendor())))
+            .map_err(|e| Error::KeyStore(format!("keychain entry {account}: {e}")))
     }
 }
 
 impl KeyStore for KeyringStore {
-    fn get(&self, provider: &ProviderId) -> Result<Option<SecretString>, Error> {
-        self.run(provider, |entry| match entry.get_password() {
+    fn get_account(&self, account: &str) -> Result<Option<SecretString>, Error> {
+        self.run(account, |entry| match entry.get_password() {
             Ok(p) => Ok(Some(SecretString::new(p))),
             Err(keyring::Error::NoEntry) => Ok(None),
             Err(e) => Err(e),
         })
     }
 
-    fn set(&self, provider: &ProviderId, key: &SecretString) -> Result<(), Error> {
+    fn set_account(&self, account: &str, key: &SecretString) -> Result<(), Error> {
         let value = key.expose().to_owned();
-        self.run(provider, move |entry| entry.set_password(&value))
+        self.run(account, move |entry| entry.set_password(&value))
     }
 
-    fn delete(&self, provider: &ProviderId) -> Result<(), Error> {
-        self.run(provider, |entry| match entry.delete_credential() {
+    fn delete_account(&self, account: &str) -> Result<(), Error> {
+        self.run(account, |entry| match entry.delete_credential() {
             Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
             Err(e) => Err(e),
         })
@@ -225,10 +241,10 @@ impl FileStore {
 }
 
 impl KeyStore for FileStore {
-    fn get(&self, provider: &ProviderId) -> Result<Option<SecretString>, Error> {
+    fn get_account(&self, account: &str) -> Result<Option<SecretString>, Error> {
         let _guard = self.lock.lock().map_err(|_| poisoned())?;
         let contents = self.load()?;
-        let Some(encoded) = contents.keys.get(provider.as_str().as_ref()) else {
+        let Some(encoded) = contents.keys.get(account) else {
             return Ok(None);
         };
         let Some(secret) = self.secret(false)? else {
@@ -243,7 +259,7 @@ impl KeyStore for FileStore {
         Ok(Some(SecretString::new(plain)))
     }
 
-    fn set(&self, provider: &ProviderId, key: &SecretString) -> Result<(), Error> {
+    fn set_account(&self, account: &str, key: &SecretString) -> Result<(), Error> {
         let _guard = self.lock.lock().map_err(|_| poisoned())?;
         let secret = self
             .secret(true)?
@@ -251,16 +267,16 @@ impl KeyStore for FileStore {
         let mut contents = self.load()?;
         let blob = obfuscate(&secret, key.expose().as_bytes());
         contents.keys.insert(
-            provider.as_str().into_owned(),
+            account.to_owned(),
             base64::engine::general_purpose::STANDARD.encode(blob),
         );
         self.save(&contents)
     }
 
-    fn delete(&self, provider: &ProviderId) -> Result<(), Error> {
+    fn delete_account(&self, account: &str) -> Result<(), Error> {
         let _guard = self.lock.lock().map_err(|_| poisoned())?;
         let mut contents = self.load()?;
-        if contents.keys.remove(provider.as_str().as_ref()).is_some() {
+        if contents.keys.remove(account).is_some() {
             self.save(&contents)?;
         }
         Ok(())
@@ -420,41 +436,41 @@ impl AutoKeyStore {
 }
 
 impl KeyStore for AutoKeyStore {
-    fn get(&self, provider: &ProviderId) -> Result<Option<SecretString>, Error> {
+    fn get_account(&self, account: &str) -> Result<Option<SecretString>, Error> {
         if !self.file_only() {
-            match self.keyring.get(provider) {
+            match self.keyring.get_account(account) {
                 Ok(Some(k)) => return Ok(Some(k)),
                 Ok(None) => {}
                 Err(e) => self.fall_back(&e),
             }
         }
         // Also consult the file so keys written during a previous fallback are found.
-        self.file.get(provider)
+        self.file.get_account(account)
     }
 
-    fn set(&self, provider: &ProviderId, key: &SecretString) -> Result<(), Error> {
+    fn set_account(&self, account: &str, key: &SecretString) -> Result<(), Error> {
         if !self.file_only() {
-            match self.keyring.set(provider, key) {
+            match self.keyring.set_account(account, key) {
                 Ok(()) => {
                     // Don't leave a stale copy in the file.
-                    let _ = self.file.delete(provider);
+                    let _ = self.file.delete_account(account);
                     return Ok(());
                 }
                 Err(e) => self.fall_back(&e),
             }
         }
-        self.file.set(provider, key)
+        self.file.set_account(account, key)
     }
 
-    fn delete(&self, provider: &ProviderId) -> Result<(), Error> {
+    fn delete_account(&self, account: &str) -> Result<(), Error> {
         let mut first_err = None;
         if !self.file_only() {
-            if let Err(e) = self.keyring.delete(provider) {
+            if let Err(e) = self.keyring.delete_account(account) {
                 self.fall_back(&e);
                 first_err = Some(e);
             }
         }
-        match self.file.delete(provider) {
+        match self.file.delete_account(account) {
             Ok(()) => Ok(()),
             Err(e) => Err(first_err.unwrap_or(e)),
         }

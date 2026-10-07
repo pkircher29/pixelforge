@@ -97,6 +97,34 @@ pub fn settings_set(
     Ok(guard.clone())
 }
 
+/// Current settings (loaded on first use), for other command modules.
+pub(crate) fn settings_snapshot(app: &AppHandle, state: &AppState) -> CommandResult<Settings> {
+    ensure_loaded(app, state)?;
+    let guard = state
+        .settings
+        .lock()
+        .map_err(|_| CommandError::poisoned("settings"))?;
+    Ok(guard.clone())
+}
+
+/// Mutate, persist and return the settings.
+pub(crate) fn update_settings(
+    app: &AppHandle,
+    state: &AppState,
+    f: impl FnOnce(&mut Settings),
+) -> CommandResult<Settings> {
+    ensure_loaded(app, state)?;
+    let mut guard = state
+        .settings
+        .lock()
+        .map_err(|_| CommandError::poisoned("settings"))?;
+    let mut next = guard.clone();
+    f(&mut next);
+    persist(app, &next)?;
+    *guard = next;
+    Ok(guard.clone())
+}
+
 // ---------------------------------------------------------------------------------
 // API keys
 // ---------------------------------------------------------------------------------

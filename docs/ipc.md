@@ -379,7 +379,7 @@ type CustomKindInfo = { kind: CustomKind; label: string; description: string; de
 | `ai_custom_update` | `{ provider, auth?: string \| null, clearAuth?: boolean }` | `CustomProvider[]`; a non-empty `auth` replaces the secret, `clearAuth` deletes it, otherwise it is kept |
 | `ai_custom_remove` | `{ id: string }` | `CustomProvider[]` (secret deleted too) |
 | `ai_custom_probe` | `{ provider: CustomProvider, auth?: string \| null }` | `ProbeResult` — probes the entry **as given** (unsaved form values are fine); `auth` overrides the stored secret for this call only. Server-side problems never reject: they come back as `reachable: false` / `authFailed: true`. |
-| `ai_prompt_assist` | frame: header `{ provider: ProviderId, text: string }` + at most one image blob (PNG/JPEG) | `string` — the rewritten prompt. Only `custom:<id>` entries of kind `ollama`; `ai_unsupported` otherwise, `ai_invalid_request` when neither text nor image is given. |
+| `ai_prompt_assist` | frame: header `{ provider: ProviderId, text: string }` + at most one image blob (PNG/JPEG) | `string` — the rewritten prompt. `custom:<id>` entries of kind `ollama`, or `open_ai` in ChatGPT-subscription mode (see "Subscription sign-in"); `ai_unsupported` otherwise, `ai_invalid_request` when neither text nor image is given. |
 | `ai_hub_search` | `{ query: string, pipelineTag?: 'text-to-image' \| 'image-to-image', limit?: number }` | `HubModel[]` (public Hub, no token) |
 | `ai_comfy_templates` | – | `{ txt2img, img2img, inpaint }` — the bundled API-format workflows as JSON text |
 
@@ -396,6 +396,72 @@ never does (emulated in the webview); OpenAI-compatible servers get OpenAI's alp
 only when the user ticked `maskEdit`.
 
 Dev fake for every kind: `node scripts/fake-local-ai.mjs` (port 8790), see its header.
+
+## Subscription sign-in (`commands/oauth.rs` + `pf_ai::oauth`, owner: oauth)
+
+Officially documented flows only (`docs/ai-research.md` section 5): **ChatGPT** = OpenAI "Sign in with
+ChatGPT" (Authorization Code + PKCE S256 + OIDC, dynamic client registration, loopback redirect
+`http://127.0.0.1:<random port>/callback`, 5-minute timeout); **Grok** = xAI RFC 8628 device flow,
+available **only** when a client ID issued to Pixelforge by xAI is configured (`PF_XAI_OAUTH_CLIENT_ID`
+or the Settings field); **Gemini** has none. Token records (`{ accessToken, refreshToken, idToken,
+expiresAt, clientId, scopes, email, plan, planUsage, images, models }`) live in the key store under the
+user name `oauth:<provider>` (`oauth:open_ai`, `oauth:x_ai`) and never cross IPC. Access tokens are
+refreshed (serialised) 120 s before expiry and once after a 401.
+
+```ts
+type AuthMode = 'api_key' | 'subscription';
+// ProviderInfo gains:
+//   authModes: AuthMode[]        // ['api_key'] or ['api_key','subscription'] (open_ai, x_ai)
+//   authActive: AuthMode         // what requests use; settings.json aiAuth.<provider>.mode
+//   account?: { email?: string; plan?: string }   // signed-in account (plan only where documented)
+//   promptAssist: true for open_ai when authActive = 'subscription' and signed in
+type ImageAccess = { eligible: boolean; detail: string; source: 'docs' | 'live' | 'unknown'; checkedAt: number };
+type PlanModel = { slug: string; displayName: string };
+type OAuthStart = { flow: 'loopback' | 'device'; authUrl: string; userCode?: string; verificationUri?: string; expiresIn?: number; browserFailed: boolean };
+type OAuthStatus = {
+  provider: ProviderId; available: boolean; unavailableReason?: string; docsUrl: string;
+  flow: 'loopback' | 'device' | 'none'; signedIn: boolean; pending: boolean;
+  email?: string; plan?: string; planUsage: boolean; images?: ImageAccess; models: PlanModel[];
+  authMode: AuthMode; fallbackToKey: boolean;
+  clientIdSource?: 'env' | 'settings' | 'none';   // x_ai
+  manageUrl?: string;                              // open_ai: https://chatgpt.com/settings/usage
+};
+type OAuthEvent = { provider: ProviderId; state: 'waiting' | 'signed_in' | 'signed_out' | 'error'; email?: string; plan?: string; error?: string; code?: string };
+```
+
+| command | args | returns |
+|---|---|---|
+| `ai_oauth_start` | `{ provider }` | `OAuthStart`. Opens the system browser (`tauri-plugin-opener`), emits `waiting`, finishes in the background and emits `signed_in` (switching `aiAuth.<provider>.mode` to `subscription`) or `error`. Listen to `ai://oauth` **before** calling. `ai_oauth_unavailable` for Gemini and for Grok without a client ID. |
+| `ai_oauth_cancel` | `{ provider }` | `boolean` (a sign-in was pending) |
+| `ai_oauth_status` | `{ provider }` | `OAuthStatus` (no network) |
+| `ai_oauth_sign_out` | `{ provider }` | `OAuthStatus`; revokes the refresh token at the documented `revocation_endpoint` (best effort) and deletes the record; emits `signed_out` |
+| `ai_oauth_check_images` | `{ provider, live?: boolean }` | `ImageAccess`. Without `live`: the documented verdict, no request (OpenAI: not eligible, per "Preview limitations"; xAI: `unknown`). `live: true` sends one small image request with the plan token, which **uses one image of the plan if allowed**; the verdict is stored and gates subscription image requests (OpenAI). |
+| `ai_auth_configure` | `{ provider, mode?: AuthMode, fallbackToKey?: boolean, xaiClientId?: string }` | `OAuthStatus`. `fallbackToKey` (default off) re-sends with the stored API key **only** on `ai_plan_limit`. `xaiClientId: ""` clears it. |
+
+Event `ai://oauth`: `OAuthEvent`. A user cancel arrives as `state: 'error', code: 'ai_oauth_cancelled'`.
+
+In subscription mode `ai_submit_*` use the plan token: ChatGPT images go through the Responses API
+`image_generation` tool (`store: false`, `stream: true`; native mask via `input_image_mask`) **only** after
+a successful live check, otherwise they fail with `ai_plan_not_eligible`; Grok uses the normal
+`/v1/images/*` JSON endpoints with the bearer. `ai_prompt_assist` accepts `provider: 'open_ai'` in
+subscription mode (text Responses with `instructions`, plan models from `GET /v1/models`).
+There is never a silent switch to the API key.
+
+Additional error codes:
+
+| code | meaning |
+|---|---|
+| `ai_plan_not_eligible` | the subscription can't be used for this request through Pixelforge (ChatGPT images; xAI 401/403 after a refresh; OpenAI `subscription_sharing_user_not_eligible` / `_unsupported_capability` / `_route_not_supported`) |
+| `ai_plan_limit` | the plan's usage cap (OpenAI `subscription_sharing_usage_limit_exceeded`, xAI 429); the message carries the reset time when the vendor sent one |
+| `ai_oauth_signed_out` | subscription mode but no stored sign-in |
+| `ai_oauth_reauth` | refresh token dead (`invalid_grant`, `refresh_token_reused`, ...); record deleted |
+| `ai_oauth_unavailable` | no sign-in for this provider / no xAI client ID configured |
+| `ai_oauth_denied`, `ai_oauth_cancelled`, `ai_oauth_timeout` | user declined / cancelled / 5 min (loopback) or code expiry (device) |
+| `ai_oauth_state_mismatch` | callback `state` did not match; nothing exchanged |
+| `ai_oauth_callback`, `ai_oauth_exchange`, `ai_oauth_id_token`, `ai_oauth_client` | malformed callback / token endpoint failure / ID token failed issuer-audience-nonce-expiry checks / client rejected |
+
+Dev: `node scripts/fake-openai-auth.mjs` (port 8791) emulates both authorization servers, the plan
+`/v1/models` + streaming `/v1/responses`, and Grok Imagine with a bearer; see its header and README.
 
 ## Settings commands (`commands/settings.rs`, owner: ai-rust)
 

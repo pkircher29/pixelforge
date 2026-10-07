@@ -8,10 +8,15 @@
   import { onMount } from "svelte";
   import { openUrl } from "@tauri-apps/plugin-opener";
   import { invoke } from "@tauri-apps/api/core";
+  import { writeText } from "@tauri-apps/plugin-clipboard-manager";
   import { deleteKey, getKeyStatus, hasTauri, hubSearch, setKey, testKey } from "$lib/ai/client";
   import { toFriendlyError } from "$lib/ai/errors";
   import { newCustomProvider, providersStore, slugify } from "$lib/ai/providers.svelte";
+  import { oauthStore } from "$lib/ai/oauth.svelte";
+  import { LIMITATIONS_URL, XAI_RESEARCH_URL, authItems, authModeOf, subscriptionView } from "$lib/ai/auth-ui";
+  import Segmented from "$lib/ui/controls/Segmented.svelte";
   import {
+    type AuthMode,
     PROVIDER_CONSOLE_URL,
     PROVIDER_IDS,
     PROVIDER_LABEL,
@@ -138,6 +143,40 @@
     showKey = false;
     result = null;
     draft = null;
+    xaiClientId = "";
+    if (id !== "gemini") {
+      void oauthStore.ensureListening();
+      void oauthStore.refresh(id);
+    }
+  }
+
+  // ---- subscription sign-in
+  let xaiClientId = $state("");
+  let copied = $state(false);
+  async function setMode(id: BuiltinProviderId, mode: AuthMode): Promise<void> {
+    result = null;
+    await oauthStore.configure(id, { mode });
+  }
+  async function liveCheck(id: BuiltinProviderId): Promise<void> {
+    await oauthStore.checkImages(id, true);
+  }
+  async function copy(text: string): Promise<void> {
+    try {
+      if (hasTauri()) await writeText(text);
+      else await navigator.clipboard.writeText(text);
+      copied = true;
+      setTimeout(() => (copied = false), 1500);
+    } catch {
+      copied = false;
+    }
+  }
+  async function saveClientId(): Promise<void> {
+    if (!xaiClientId.trim()) return;
+    await oauthStore.configure("x_ai", { xaiClientId: xaiClientId.trim() });
+    xaiClientId = "";
+  }
+  async function clearClientId(): Promise<void> {
+    await oauthStore.configure("x_ai", { xaiClientId: "" });
   }
   function selectCustom(id: string): void {
     const c = customs.find((x) => x.id === id);
@@ -369,10 +408,11 @@
       <nav class="list" aria-label="Providers">
         <div class="group">Built-in</div>
         {#each PROVIDER_IDS as id (id)}
+          {@const info = providersStore.byId(id)}
           <button type="button" class="row" class:on={selection?.kind === "builtin" && selection.id === id} onclick={() => selectBuiltin(id)}>
-            <span class="dot" class:ok={statusDot(id)}></span>
+            <span class="dot" class:ok={info?.authActive === "subscription" ? !!info.account : statusDot(id)}></span>
             <span class="rname">{PROVIDER_LABEL[id]}</span>
-            <span class="rsub">{PROVIDER_VENDOR[id]}</span>
+            <span class="rsub">{info?.authActive === "subscription" ? "subscription" : PROVIDER_VENDOR[id]}</span>
           </button>
         {/each}
         <div class="group">Custom &amp; local</div>
@@ -404,9 +444,101 @@
       <section class="form">
         {#if selection?.kind === "builtin"}
           {@const id = selection.id}
+          {@const fl = oauthStore.flow(id)}
+          {@const st = fl.status}
+          {@const mode = authModeOf(st, providersStore.byId(id))}
+          {@const view = subscriptionView(fl, st)}
           <div class="ftitle">{PROVIDER_LABEL[id]} <span class="muted">· {PROVIDER_VENDOR[id]}</span>
-            <button type="button" class="link" onclick={() => open(PROVIDER_CONSOLE_URL[id])}>Get a key ↗</button>
+            {#if mode === "api_key"}<button type="button" class="link" onclick={() => open(PROVIDER_CONSOLE_URL[id])}>Get a key ↗</button>{/if}
           </div>
+          {#if id !== "gemini"}
+            <div class="authrow">
+              <span class="muted">Authentication</span>
+              <Segmented ariaLabel="Authentication" value={mode} items={authItems(id)} disabled={oauthStore.busy[id] === "config"} onchange={(v) => void setMode(id, v as AuthMode)} />
+            </div>
+          {/if}
+          {#if mode === "subscription" && id === "open_ai"}
+            <div class="sub" data-testid="siwc-panel">
+              {#if view === "signed_in"}
+                <div class="acct">
+                  <span class="dot ok"></span>
+                  <span>Signed in as <b>{fl.email ?? st?.email ?? "your ChatGPT account"}</b></span>
+                  <span class="muted">· Plan: {fl.plan ?? st?.plan ?? "not shared with apps by OpenAI"}</span>
+                </div>
+                <p class="hint">{st?.planUsage === false ? "⚠ The plan-usage permission was not granted: you're signed in, but requests can't use your ChatGPT plan. Sign out and sign in again to grant it." : "Using ChatGPT plan · eligible usage in this app uses your ChatGPT plan and counts toward the per-app limit you set in ChatGPT."}
+                  <button type="button" class="link" onclick={() => open(st?.manageUrl ?? "https://chatgpt.com/settings/usage")}>Manage usage ↗</button>
+                </p>
+                <p class="hint">✨ Improve prompt runs on your plan{st?.models?.length ? ` (${st.models.map((m) => m.displayName).join(", ")})` : ""}.</p>
+                <div class="actions">
+                  <button type="button" class="btn" disabled={!!oauthStore.busy[id]} onclick={() => void oauthStore.checkImages(id)}>{oauthStore.busy[id] === "check" ? "Checking…" : "Check image access"}</button>
+                  <button type="button" class="btn danger" disabled={!!oauthStore.busy[id]} onclick={() => void oauthStore.signOut(id)}>{oauthStore.busy[id] === "signout" ? "Signing out…" : "Sign out"}</button>
+                </div>
+                {#if fl.images}
+                  <p class="result" class:ok={fl.images.eligible} class:bad={!fl.images.eligible} data-testid="image-access">{fl.images.eligible ? "✓ Images: allowed." : "✕ Images: not available on your plan."} <span class="muted">{fl.images.detail}</span></p>
+                  {#if !fl.images.eligible && fl.images.source === "docs"}
+                    <p class="hint">Want to be sure for your account? <button type="button" class="link" disabled={!!oauthStore.busy[id]} onclick={() => void liveCheck(id)}>{oauthStore.busy[id] === "live" ? "Testing…" : "Run a live test"}</button> — sends one small image request with your plan; if OpenAI allows it, it uses one image of your plan.</p>
+                  {/if}
+                {/if}
+                <label class="check"><input type="checkbox" checked={st?.fallbackToKey ?? false} disabled={!statusDot(id) || !!oauthStore.busy[id]} onchange={(e) => void oauthStore.configure(id, { fallbackToKey: (e.currentTarget as HTMLInputElement).checked })} /> Fall back to API key when the plan limit is hit{#if !statusDot(id)}<span class="muted"> (save an API key first)</span>{/if}</label>
+              {:else if view === "waiting"}
+                <p class="waiting"><span class="spin"></span> {fl.phase === "starting" ? "Opening your browser…" : "Finish signing in in your browser. This window updates by itself."}</p>
+                {#if fl.start?.browserFailed}<p class="hint">Your browser didn't open.</p>{/if}
+                <div class="actions">
+                  <button type="button" class="btn" onclick={() => void oauthStore.cancel(id)}>Cancel</button>
+                  {#if fl.start?.authUrl}<button type="button" class="link" onclick={() => open(fl.start?.authUrl ?? "")}>Open the sign-in page again ↗</button>{/if}
+                </div>
+              {:else}
+                <p class="hint">Use your ChatGPT Plus or Pro plan instead of an API key. Eligible usage in this app uses your ChatGPT plan. OpenAI's plan usage covers text (Pixelforge uses it for ✨ Improve prompt); <b>image generation isn't available on ChatGPT plans in third-party apps</b>, so images still need an API key.
+                  <button type="button" class="link" onclick={() => open(LIMITATIONS_URL)}>OpenAI's limitations ↗</button></p>
+                <button type="button" class="siwc" onclick={() => void oauthStore.start(id)}>Sign in with ChatGPT</button>
+                {#if fl.phase === "error" && fl.error}<p class="result bad">✕ {fl.error}</p>{/if}
+              {/if}
+            </div>
+          {:else if mode === "subscription" && id === "x_ai"}
+            <div class="sub" data-testid="xai-panel">
+              {#if view === "unavailable"}
+                <button type="button" class="siwc" disabled title="Awaiting xAI approval">Sign in with SuperGrok — awaiting xAI approval for Pixelforge</button>
+                <p class="hint">xAI lets a few named open-source apps sign in with SuperGrok / X Premium, but it hasn't published a way for other apps to register, and those apps use xAI's own shared client. Pixelforge won't borrow another app's credentials, so this stays off until xAI issues Pixelforge its own OAuth client ID. Use an xAI API key meanwhile.
+                  <button type="button" class="link" onclick={() => open(XAI_RESEARCH_URL)}>Why, and how we've applied ↗</button></p>
+              {:else if view === "signed_in"}
+                <div class="acct"><span class="dot ok"></span><span>Signed in as <b>{fl.email ?? st?.email ?? "your xAI account"}</b></span><span class="muted">· Plan: {fl.plan ?? st?.plan ?? "SuperGrok / X Premium"}</span></div>
+                <div class="actions">
+                  <button type="button" class="btn" disabled={!!oauthStore.busy[id]} onclick={() => void oauthStore.checkImages(id)}>{oauthStore.busy[id] === "check" ? "Checking…" : "Check image access"}</button>
+                  <button type="button" class="btn danger" disabled={!!oauthStore.busy[id]} onclick={() => void oauthStore.signOut(id)}>{oauthStore.busy[id] === "signout" ? "Signing out…" : "Sign out"}</button>
+                </div>
+                {#if fl.images}
+                  <p class="result" class:ok={fl.images.eligible} class:bad={!fl.images.eligible && fl.images.source !== "unknown"} data-testid="image-access">{fl.images.eligible ? "✓ Images: allowed." : fl.images.source === "unknown" ? "? Images: not documented by xAI." : "✕ Images: not available."} <span class="muted">{fl.images.detail}</span></p>
+                  {#if fl.images.source !== "live"}<p class="hint"><button type="button" class="link" onclick={() => void liveCheck(id)}>{oauthStore.busy[id] === "live" ? "Testing…" : "Run a live test"}</button> — one small Grok Imagine request on your plan.</p>{/if}
+                {/if}
+                <label class="check"><input type="checkbox" checked={st?.fallbackToKey ?? false} disabled={!statusDot(id) || !!oauthStore.busy[id]} onchange={(e) => void oauthStore.configure(id, { fallbackToKey: (e.currentTarget as HTMLInputElement).checked })} /> Fall back to API key when the plan limit is hit{#if !statusDot(id)}<span class="muted"> (save an API key first)</span>{/if}</label>
+              {:else if view === "waiting"}
+                {#if fl.start?.userCode}
+                  <p class="hint">Enter this code at <button type="button" class="link" onclick={() => open(fl.start?.authUrl ?? "")}>{fl.start.verificationUri}</button>:</p>
+                  <div class="code"><span data-testid="user-code">{fl.start.userCode}</span>
+                    <button type="button" class="btn" onclick={() => void copy(fl.start?.userCode ?? "")}>{copied ? "Copied" : "Copy"}</button>
+                    <button type="button" class="btn" onclick={() => open(fl.start?.authUrl ?? "")}>Open browser</button>
+                  </div>
+                {/if}
+                <p class="waiting"><span class="spin"></span> {fl.phase === "starting" ? "Requesting a code…" : "Waiting for you to approve in the browser…"}</p>
+                <div class="actions"><button type="button" class="btn" onclick={() => void oauthStore.cancel(id)}>Cancel</button></div>
+              {:else}
+                <p class="hint">Use your SuperGrok or X Premium subscription instead of an xAI API key. You'll get a short code to approve on x.ai.</p>
+                <button type="button" class="siwc" onclick={() => void oauthStore.start(id)}>Sign in with SuperGrok</button>
+                {#if fl.phase === "error" && fl.error}<p class="result bad">✕ {fl.error}</p>{/if}
+              {/if}
+              <label class="field">
+                <span>xAI OAuth client ID (issued to Pixelforge by xAI){st?.clientIdSource === "env" ? " — set by PF_XAI_OAUTH_CLIENT_ID" : ""}</span>
+                <span class="inrow">
+                  <input type="text" bind:value={xaiClientId} placeholder={st?.clientIdSource === "settings" ? "Saved; paste a new one to replace it" : "Empty until xAI issues one"} spellcheck="false" autocomplete="off" disabled={st?.clientIdSource === "env"} />
+                  <button type="button" class="btn" disabled={st?.clientIdSource === "env" || !!oauthStore.busy[id]} onclick={() => void saveClientId()}>Save</button>
+                  {#if st?.clientIdSource === "settings"}<button type="button" class="btn" onclick={() => void clearClientId()}>Clear</button>{/if}
+                </span>
+              </label>
+            </div>
+          {:else}
+          {#if id === "gemini"}
+            <p class="hint">Subscription sign-in isn't available for Gemini: Google AI Pro / Ultra benefits apply only inside Google AI Studio, and the Gemini API is billed separately. <button type="button" class="link" onclick={() => open("https://ai.google.dev/gemini-api/docs/google-ai-plans")}>Google's plan terms ↗</button></p>
+          {/if}
           <label class="field">
             <span>API key</span>
             <span class="inrow">
@@ -419,6 +551,7 @@
             <button type="button" class="btn" disabled={(!statusDot(id) && !keyValue.trim()) || busy !== ""} onclick={() => void testBuiltin(id)}>{busy === "test" ? "Testing…" : "Test connection"}</button>
             <button type="button" class="btn danger" disabled={!statusDot(id) || busy !== ""} onclick={() => void deleteBuiltin(id)}>Delete key</button>
           </div>
+          {/if}
         {:else if draft && kindInfo}
           <div class="ftitle">{draftIsNew ? "New: " : ""}{kindInfo.label}
             <button type="button" class="link" onclick={() => open(kindInfo.helpUrl)}>{kindInfo.requiresAuth ? "Get a token ↗" : "Install / docs ↗"}</button>
@@ -539,7 +672,7 @@
     </div>
 
     <footer>
-      <p>Pixelforge calls each vendor's image API directly with your own key. ChatGPT Plus, SuperGrok and Google AI Pro subscriptions do not cover API use; each vendor bills API calls separately. Local servers (ComfyUI, WebUI, Ollama, LocalAI) cost nothing per image. Signing in with a ChatGPT account is planned for a later release.</p>
+      <p>Pixelforge calls each vendor's API directly with your own key, or with your ChatGPT subscription where OpenAI officially allows it (text only: images need a key). Grok subscription sign-in waits on xAI issuing Pixelforge a client ID; Google AI Pro never covers the API. Local servers (ComfyUI, WebUI, Ollama, LocalAI) cost nothing per image.</p>
       <p class="muted">
         {#if backend === "keyring"}Keys and tokens are stored in the OS keychain and never shown again.{:else if backend === "file"}No OS keychain is available: keys are kept in a local file, obfuscated but not encrypted.{:else}Keys are stored in the OS keychain where available, otherwise in an obfuscated local file.{/if}
         Custom providers live in ai-providers.json in the app config folder.
@@ -612,4 +745,17 @@
   footer { border-top: 1px solid var(--border); padding: 6px 10px; }
   footer p { margin: 0 0 3px; line-height: 1.4; }
   .muted { color: var(--fg-2); }
+  .authrow { display: flex; align-items: center; gap: 8px; }
+  .sub { display: flex; flex-direction: column; gap: 6px; padding: 6px 8px; border: 1px solid var(--border); background: var(--bg-0); border-radius: 2px; }
+  .acct { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  /* OpenAI's UI guidelines: a "Sign in with ChatGPT" / "Continue with ChatGPT" label with
+     prominence comparable to other sign-in options. Neutral black/white, no borrowed logo. */
+  .siwc { align-self: flex-start; height: 26px; padding: 0 14px; border-radius: 13px; background: #0d0d0d; color: #fff; border: 1px solid #3a3a3a; font-weight: 600; font-size: 11px; }
+  .siwc:hover:not(:disabled) { background: #262626; }
+  .siwc:disabled { opacity: 0.55; cursor: not-allowed; }
+  .waiting { display: flex; align-items: center; gap: 6px; margin: 0; color: var(--fg-1); }
+  .spin { width: 10px; height: 10px; border: 2px solid var(--fg-2); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .code { display: flex; align-items: center; gap: 6px; }
+  .code span { font-family: var(--font-mono, monospace); font-size: 16px; letter-spacing: 0.12em; color: var(--fg-0); padding: 2px 8px; border: 1px dashed var(--border-strong); }
 </style>

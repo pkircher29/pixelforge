@@ -127,6 +127,75 @@ export interface ProviderInfo {
   promptAssist: boolean;
   /** A secret is optional (local servers). */
   keyOptional: boolean;
+  /** `["api_key"]`, or `["api_key", "subscription"]` for ChatGPT / Grok. Absent on old builds. */
+  authModes?: AuthMode[];
+  /** Which credential requests use. */
+  authActive?: AuthMode;
+  /** Signed-in subscription account. */
+  account?: AccountInfo;
+}
+
+export type AuthMode = "api_key" | "subscription";
+
+export interface AccountInfo {
+  email?: string;
+  /** Only where the vendor documents how to read it (OpenAI does not). */
+  plan?: string;
+}
+
+/** Image-eligibility verdict (`ai_oauth_check_images`). */
+export interface ImageAccess {
+  eligible: boolean;
+  detail: string;
+  /** `docs` (no request sent), `live` (a real request was made), `unknown`. */
+  source: "docs" | "live" | "unknown";
+  checkedAt: number;
+}
+
+export interface PlanModel {
+  slug: string;
+  displayName: string;
+}
+
+/** `ai_oauth_status`. */
+export interface OAuthStatus {
+  provider: ProviderId;
+  available: boolean;
+  unavailableReason?: string;
+  docsUrl: string;
+  flow: "loopback" | "device" | "none";
+  signedIn: boolean;
+  pending: boolean;
+  email?: string;
+  plan?: string;
+  planUsage: boolean;
+  images?: ImageAccess;
+  models: PlanModel[];
+  authMode: AuthMode;
+  fallbackToKey: boolean;
+  /** xAI: where the client ID came from. */
+  clientIdSource?: "env" | "settings" | "none";
+  manageUrl?: string;
+}
+
+/** `ai_oauth_start`. */
+export interface OAuthStart {
+  flow: "loopback" | "device";
+  authUrl: string;
+  userCode?: string;
+  verificationUri?: string;
+  expiresIn?: number;
+  browserFailed: boolean;
+}
+
+/** `ai://oauth` payload. */
+export interface OAuthEvent {
+  provider: ProviderId;
+  state: "waiting" | "signed_in" | "signed_out" | "error";
+  email?: string;
+  plan?: string;
+  error?: string;
+  code?: string;
 }
 
 /** Can this provider be used to make images at all (generation chips / shootout)? */
@@ -134,9 +203,26 @@ export function canGenerate(p: ProviderInfo): boolean {
   return p.capabilities.generate || p.capabilities.instructEdit || p.capabilities.maskEdit;
 }
 
-/** Ready to run: has a key, or the key is optional. */
+/** Requests go through a signed-in subscription. */
+export function onSubscription(p: ProviderInfo): boolean {
+  return p.authActive === "subscription";
+}
+
+/** Ready to run: has a key (API-key mode), is signed in (subscription mode), or the key is optional. */
 export function isReady(p: ProviderInfo): boolean {
+  if (onSubscription(p)) return p.account !== undefined;
   return p.hasKey || p.keyOptional;
+}
+
+/** `ChatGPT (subscription)` / `ChatGPT (API key)` where both modes exist; plain name otherwise. */
+export function authLabel(p: ProviderInfo): string {
+  if (!p.authModes || p.authModes.length < 2) return p.name;
+  return `${p.name} (${onSubscription(p) ? "subscription" : "API key"})`;
+}
+
+/** What to show when the provider is not ready. */
+export function notReadyNote(p: ProviderInfo): string {
+  return onSubscription(p) ? "not signed in" : "no key";
 }
 
 export type JobId = string;

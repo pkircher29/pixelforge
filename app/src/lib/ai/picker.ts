@@ -3,7 +3,7 @@
  * go to the overflow dropdown. Tested in `tests/ai/picker.test.ts`.
  */
 
-import { canGenerate, type ProviderId, type ProviderInfo } from "./types";
+import { authLabel, canGenerate, onSubscription, type ProviderId, type ProviderInfo } from "./types";
 
 export interface PickerLayout {
   /** Providers rendered as chips, in order. */
@@ -40,6 +40,7 @@ export function chipGlyph(p: ProviderInfo): string {
 /** Tooltip for a chip. */
 export function chipTitle(p: ProviderInfo): string {
   const where = p.local ? "local, no cost" : p.kind === "builtin" ? p.vendor : `${p.vendor}, hosted`;
+  if (onSubscription(p)) return p.account ? `${authLabel(p)}: signed in${p.account.email ? ` as ${p.account.email}` : ""}` : `${authLabel(p)}: not signed in, click to sign in`;
   if (p.kind !== "builtin" && !p.hasKey && !p.keyOptional) return `${p.name} (${where}): no token yet, click to add one`;
   if (p.kind === "builtin" && !p.hasKey) return `${p.name}: no key yet, click to add one`;
   return `${p.name} (${where})${p.hasKey ? ": key saved" : ""}`;

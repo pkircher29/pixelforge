@@ -87,6 +87,28 @@ export function describeAiError(code: string, message: string): FriendlyError {
       return { ...base, title: "The provider sent back no usable image.", hint: "Try again; if it persists, try another model.", retryable: true };
     case "ai_image":
       return { ...base, title: "Could not encode or decode an image.", hint: "Check the input image.", retryable: false };
+    case "ai_plan_not_eligible":
+      return { ...base, title: "Your subscription can't do this through Pixelforge.", hint: message || "Switch this provider to an API key in AI Providers.", retryable: false };
+    case "ai_plan_limit":
+      return { ...base, title: "Your subscription's usage limit is reached.", hint: message || "Wait for the limit to reset, or switch to an API key.", retryable: false };
+    case "ai_oauth_signed_out":
+    case "ai_oauth_reauth":
+      return { ...base, title: "You're signed out of your subscription.", hint: "Sign in again in AI Providers (Edit menu), or switch to an API key.", retryable: false };
+    case "ai_oauth_unavailable":
+      return { ...base, title: "Subscription sign-in isn't available for this provider.", hint: message, retryable: false };
+    case "ai_oauth_denied":
+      return { ...base, title: "Sign-in was declined.", hint: "Start again if that wasn't intended.", retryable: true };
+    case "ai_oauth_timeout":
+      return { ...base, title: "Sign-in timed out.", hint: "Start again and finish in the browser within 5 minutes.", retryable: true };
+    case "ai_oauth_state_mismatch":
+      return { ...base, title: "The sign-in response didn't match this request.", hint: "Nothing was exchanged. Start again.", retryable: true };
+    case "ai_oauth_cancelled":
+      return { ...base, title: "Sign-in cancelled.", hint: "", retryable: true };
+    case "ai_oauth_callback":
+    case "ai_oauth_exchange":
+    case "ai_oauth_id_token":
+    case "ai_oauth_client":
+      return { ...base, title: "Sign-in failed.", hint: message, retryable: true };
     case "ai_unknown_job":
     case "ai_no_result":
       return { ...base, title: "The job result is gone.", hint: "Run it again.", retryable: true };
