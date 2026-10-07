@@ -14,6 +14,7 @@
   import Toast from "./lib/ui/Toast.svelte";
   import TooltipLayer from "./lib/ui/TooltipLayer.svelte";
   import { historyUi } from "./lib/ui/panels/History.store.svelte";
+  import { hydratePresetAssets } from "./lib/tools/preset-assets";
   import Welcome from "./lib/ui/Welcome.svelte";
   import DialogHost from "./lib/ui/dialogs/DialogHost.svelte";
   import ContactSheet from "./lib/ui/icons/ContactSheet.svelte";
@@ -63,6 +64,7 @@
   });
 
   onMount(() => {
+    void hydratePresetAssets().catch(e => toast.error("Could not load presets", String(e?.message ?? e)));
     void settings.load().then((s) => {
       const mb = s.historyBudgetMb;
       for (const d of docStore.docs) d.history.budgetBytes = mb * 1048576;

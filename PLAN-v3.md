@@ -73,6 +73,16 @@ Implemented on `feat/v03-oauth-polish`:
   Tests cover already-applied paint, layer deletion, repeated branch switching and
   independent snapshot/History Brush sources. Browser screenshots:
   `docs/screenshots/history-options.png`, `docs/screenshots/history-nonlinear.png`.
+- Polish item 6, persistence and manager: Define Pattern / Define Brush Preset save
+  metadata and RGBA pixels in native app-data `patterns/` / `brushes/` folders, restored
+  at startup. Browser previews use IndexedDB. Preset Manager lists sampled brushes and
+  patterns, renames and deletes them. Native storage uses bounded, validated records and
+  temporary-file replacement; corrupt entries report errors without hiding valid assets.
+  Three Rust storage tests pass. Browser reload and a full Windows process restart both
+  preserve defined assets; rename/delete pass without runtime errors. All 677 frontend
+  tests, Svelte checks and native build pass. Screenshot:
+  `docs/screenshots/preset-manager-native.png`. Synchronizing legacy Brushes-panel edits
+  with asset metadata, and cross-OS verification, remain open.
 - Polish item 9, drag portion: dragging a selected row moves the full selection in
   stack order, carries group children once, and excludes every moved row as a target.
   Multi-layer reparenting is one undoable move; pointer cancellation no longer commits.

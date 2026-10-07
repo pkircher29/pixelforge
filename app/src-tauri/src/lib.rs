@@ -32,6 +32,9 @@ pub fn run() {
         .manage(AppState::default())
         .invoke_handler(tauri::generate_handler![
             commands::fonts::fonts_list,
+            commands::presets::presets_list,
+            commands::presets::presets_save,
+            commands::presets::presets_remove,
             commands::ai::ai_list_providers,
             commands::ai::ai_submit_generate,
             commands::ai::ai_submit_edit,

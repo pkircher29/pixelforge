@@ -35,6 +35,8 @@ import { withoutDiffOverlays } from "$lib/ai/overlay";
 import { clearThroughMask, fillThroughMask } from "$lib/tools/paint/fill";
 import { patternById } from "$lib/tools/patterns";
 import { tipFromRaster } from "$lib/tools/brush-tips";
+import { hydratePresetAssets, persistBrush, persistPattern } from "$lib/tools/preset-assets";
+import PresetManagerDialog from "../dialogs/PresetManagerDialog.svelte";
 import { brushStore } from "$lib/tools/brush-store.svelte";
 import { nextUntitledName } from "./file";
 import {
@@ -318,6 +320,7 @@ async function askName(title: string, initial: string): Promise<string | null> {
 }
 
 export async function defineBrushPreset(): Promise<void> {
+  await hydratePresetAssets();
   const src = definitionSource();
   if (!src) return;
   if (src.width > 2500 || src.height > 2500) {
@@ -327,19 +330,22 @@ export async function defineBrushPreset(): Promise<void> {
   const name = await askName("Brush Name", `Sampled Brush ${brushStore.userPresets.length + 1}`);
   if (name === null) return;
   const id = `sampled-${Date.now().toString(36)}`;
-  tipFromRaster(id, name, src);
+  const tip = tipFromRaster(id, name, src);
   brushStore.update({ tip: id, size: Math.max(src.width, src.height) });
-  brushStore.saveAsPreset(name);
-  toast.success("Brush preset defined", `${name} — ${src.width} × ${src.height} px (tip kept until the app closes)`);
+  const preset = brushStore.saveAsPreset(name);
+  await persistBrush(tip, preset);
+  toast.success("Brush preset saved", `${name} — ${src.width} × ${src.height} px`);
 }
 
 export async function definePatternFromSelection(): Promise<void> {
+  await hydratePresetAssets();
   const src = definitionSource();
   if (!src) return;
   const name = await askName("Pattern Name", `Pattern ${getUserPatterns().length + 1}`);
   if (name === null) return;
-  definePattern(name, src);
-  toast.success("Pattern defined", `${name} — ${src.width} × ${src.height} px (available in Fill until the app closes)`);
+  const pattern = definePattern(name, src);
+  await persistPattern(pattern);
+  toast.success("Pattern saved", `${name} — ${src.width} × ${src.height} px`);
 }
 
 // ---------------------------------------------------------------------------- Purge ▸
@@ -393,6 +399,7 @@ registerCommands([
 
   { id: "edit.defineBrush", label: "Define Brush Preset…", menu: "Edit", order: 800, keywords: ["custom brush", "sampled tip"], enabled: hasDoc, run: defineBrushPreset },
   { id: "edit.definePattern", label: "Define Pattern…", menu: "Edit", order: 801, keywords: ["tile"], enabled: hasDoc, run: definePatternFromSelection },
+  { id: "edit.presetManager", label: "Preset Manager…", menu: "Edit", order: 802, keywords: ["patterns", "brushes", "presets"], run: async () => { await openDialog<Record<string, never>, void>(PresetManagerDialog, {}); } },
   { id: "edit.purge.undo", label: "Undo", menu: "Edit/Purge", order: 850, enabled: hasDoc, run: () => purge("undo") },
   { id: "edit.purge.histories", label: "Histories", menu: "Edit/Purge", order: 851, enabled: () => docStore.docs.length > 0, run: () => purge("histories") },
   { id: "edit.purge.all", label: "All", menu: "Edit/Purge", order: 852, enabled: () => docStore.docs.length > 0, run: () => purge("all") },

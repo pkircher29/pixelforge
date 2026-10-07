@@ -491,3 +491,16 @@ never come back over IPC; only booleans do.
 `<config>` is `app_config_dir()`: `%APPDATA%\com.pixelforge.app` on Windows,
 `~/Library/Application Support/com.pixelforge.app` on macOS,
 `~/.config/com.pixelforge.app` on Linux.
+# User preset assets
+
+`presets_list({ kind })` returns `{ assets, errors }`; `presets_save({ kind, asset })`
+persists one asset; `presets_remove({ kind, id })` removes one asset (missing is a no-op).
+`kind` is `patterns` or `brushes`. An asset contains `id`, `name`, `width`, `height`,
+RGBA byte-array `pixels`, and optional brush-preset `settings` metadata.
+
+Files live in the corresponding native app-data subdirectory as `<id>.pfpreset`.
+The binary record is `PFPRESET1\n`, a little-endian u32 JSON-header length, the UTF-8
+metadata header, then RGBA bytes. Headers are capped at 64 KiB, rasters at 16 megapixels;
+dimensions and byte counts must match. IDs allow ASCII letters/digits, hyphen and
+underscore only. Writes sync a unique temporary file before replacement. Listing
+returns valid records plus errors for malformed files. Browser previews use IndexedDB.

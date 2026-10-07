@@ -44,6 +44,11 @@ class BrushStore {
     return [...BUILTIN_PRESETS, ...this.userPresets];
   }
 
+  restorePreset(preset: BrushPreset): void {
+    this.userPresets = [...this.userPresets.filter(p => p.id !== preset.id), { ...preset, settings: normalizeBrushSettings(preset.settings) }];
+    this.version++;
+  }
+
   get current(): BrushPreset | null {
     return this.presets.find((p) => p.id === this.presetId) ?? null;
   }
