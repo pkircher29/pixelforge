@@ -118,9 +118,9 @@ export function quickMaskTarget(doc: Document): Raster | null {
 }
 
 /** Parse a `ViewChannel` string. */
-export function parseViewChannel(v: ViewChannel): { kind: "rgb" | "r" | "g" | "b" | "mask" } | { kind: "alpha"; id: string } {
+export function parseViewChannel(v: ViewChannel): { kind: Exclude<ViewChannel, `alpha:${string}`> } | { kind: "alpha"; id: string } {
   if (v.startsWith("alpha:")) return { kind: "alpha", id: v.slice(6) };
-  return { kind: v as "rgb" | "r" | "g" | "b" | "mask" };
+  return { kind: v as Exclude<ViewChannel, `alpha:${string}`> };
 }
 
 /**
@@ -136,6 +136,17 @@ export function channelViewRaster(doc: Document, composite: Raster, view: ViewCh
   const h = doc.height;
   const out = new Raster(w, h);
   const d = out.data;
+  if (v.kind === "rg" || v.kind === "rb" || v.kind === "gb" || v.kind === "none") {
+    const c = composite.data;
+    for (let i = 0; i < d.length; i += 4) {
+      const alpha = c[i + 3]! / 255;
+      d[i] = v.kind.includes("r") ? c[i]! * alpha : 0;
+      d[i + 1] = v.kind.includes("g") ? c[i + 1]! * alpha : 0;
+      d[i + 2] = v.kind.includes("b") ? c[i + 2]! * alpha : 0;
+      d[i + 3] = 255;
+    }
+    return out;
+  }
   if (v.kind === "r" || v.kind === "g" || v.kind === "b") {
     const ch = v.kind === "r" ? 0 : v.kind === "g" ? 1 : 2;
     const c = composite.data;

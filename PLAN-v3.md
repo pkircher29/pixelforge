@@ -19,6 +19,12 @@ Implemented on `feat/v03-oauth-polish`:
 - Existing ChatGPT and Grok sign-in paths retained. ChatGPT plan image restrictions
   and the requirement for an xAI-issued Pixelforge client ID still apply.
 - Polish item 13: Ctrl+F opens Search, Ctrl+K remains an alias, Last Filter uses Ctrl+Alt+F.
+- Polish item 11, color-view portion: explicit RG/RB/GB display modes suppress the
+  hidden color component in CPU and GL rendering. Hiding every color displays black
+  instead of accidentally restoring RGB. Model/CPU tests and real WebGL display-pixel
+  checks cover all three pairs and the empty view; 675 frontend tests pass. Browser
+  Channels eye interaction passes without errors; screenshot:
+  `docs/screenshots/two-channel-view.png`. Alpha overlays and native checks remain open.
 - Polish item 12: font permission requests start directly from the picker gesture;
   native `fonts_list` uses font-kit on a blocking worker to enumerate installed families.
   Successful discovery lists installed families instead of merging uninstalled fallback

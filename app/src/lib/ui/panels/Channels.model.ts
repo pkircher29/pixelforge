@@ -16,6 +16,10 @@ export interface ChannelRow {
   selected: boolean;
 }
 
+function colorView(hidden: ReadonlySet<string>): ViewChannel {
+  return (["r", "g", "b"].filter(c => !hidden.has(c)).join("") || "none") as ViewChannel;
+}
+
 /** Hidden-set semantics: `hidden` lists channel ids whose eye is off. */
 export function buildChannelRows(doc: Document, activeLayer: Layer | null, view: ViewChannel, hidden: readonly string[]): ChannelRow[] {
   const h = new Set(hidden);
@@ -52,14 +56,14 @@ export function clickChannel(row: ChannelRow, rows: readonly ChannelRow[] = []):
  * else the single visible color); turning the last color channel on returns to
  * "rgb"; alpha / mask eyes view that channel while on.
  */
-export function toggleChannelEye(rows: readonly ChannelRow[], row: ChannelRow, view: ViewChannel, hidden: readonly string[]): { view: ViewChannel; hidden: string[] } {
+export function toggleChannelEye(rows: readonly ChannelRow[], row: ChannelRow, _view: ViewChannel, hidden: readonly string[]): { view: ViewChannel; hidden: string[] } {
   const h = new Set(hidden);
   if (row.kind === "composite") {
     if (row.visible) {
       // PS: hiding RGB hides the color channels (an alpha keeps showing if visible).
       ["r", "g", "b"].forEach((c) => h.add(c));
       const alpha = rows.find((r) => (r.kind === "alpha" || r.kind === "mask") && r.visible);
-      return { view: alpha ? alpha.view : view, hidden: [...h] };
+      return { view: alpha ? alpha.view : "none", hidden: [...h] };
     }
     ["r", "g", "b"].forEach((c) => h.delete(c));
     return { view: "rgb", hidden: [...h] };
@@ -70,15 +74,14 @@ export function toggleChannelEye(rows: readonly ChannelRow[], row: ChannelRow, v
     const visibleColors = ["r", "g", "b"].filter((c) => !h.has(c));
     if (visibleColors.length === 0) {
       const alpha = rows.find((r) => (r.kind === "alpha" || r.kind === "mask") && !h.has(r.id));
-      return { view: alpha ? alpha.view : "rgb", hidden: [...h] };
+      return { view: alpha ? alpha.view : "none", hidden: [...h] };
     }
-    return { view: visibleColors.length === 1 ? (visibleColors[0] as ViewChannel) : "rgb", hidden: [...h] };
+    return { view: colorView(h), hidden: [...h] };
   }
   // alpha / mask
   if (row.visible) {
     h.add(row.id);
-    const colors = ["r", "g", "b"].filter((c) => !h.has(c));
-    return { view: colors.length === 1 ? (colors[0] as ViewChannel) : "rgb", hidden: [...h] };
+    return { view: colorView(h), hidden: [...h] };
   }
   h.delete(row.id);
   return { view: row.view, hidden: [...h] };

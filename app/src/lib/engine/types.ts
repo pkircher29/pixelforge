@@ -641,7 +641,7 @@ export type CompositorKind = "webgl2" | "canvas2d";
  * Channel view mode: `"rgb"` the composite; `"r"`/`"g"`/`"b"` one channel as grayscale;
  * `"alpha:<channelId>"` an alpha channel; `"mask"` the active layer's mask.
  */
-export type ViewChannel = "rgb" | "r" | "g" | "b" | `alpha:${string}` | "mask";
+export type ViewChannel = "rgb" | "r" | "g" | "b" | "rg" | "rb" | "gb" | "none" | `alpha:${string}` | "mask";
 
 /** Per-frame options for {@link ICompositor.render}. */
 export interface RenderOptions {

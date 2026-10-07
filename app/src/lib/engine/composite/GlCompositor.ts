@@ -1141,6 +1141,10 @@ export class GlCompositor implements ICompositor {
     if (view.kind === "r") mode = 1;
     else if (view.kind === "g") mode = 2;
     else if (view.kind === "b") mode = 3;
+    else if (view.kind === "rg") mode = 5;
+    else if (view.kind === "rb") mode = 6;
+    else if (view.kind === "gb") mode = 7;
+    else if (view.kind === "none") mode = 8;
     else if ((view.kind === "alpha" || view.kind === "mask") && this.channelTex && this.channelKey !== "") mode = 4;
     gl.uniform1i(u.u_viewMode, mode);
     const qm = doc.quickMask;

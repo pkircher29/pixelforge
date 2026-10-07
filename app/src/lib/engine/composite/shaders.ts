@@ -174,6 +174,10 @@ void main() {
     vec4 comp = texture(u_composite, d / u_docSize);
     if (u_viewMode == 0) {
       color = comp.rgb + checker * (1.0 - comp.a);
+    } else if (u_viewMode >= 5) {
+      color = comp.rgb * vec3(u_viewMode == 5 || u_viewMode == 6 ? 1.0 : 0.0,
+                             u_viewMode == 5 || u_viewMode == 7 ? 1.0 : 0.0,
+                             u_viewMode == 6 || u_viewMode == 7 ? 1.0 : 0.0);
     } else if (u_viewMode == 4) {
       color = vec3(texture(u_channel, d / u_docSize).r);
     } else {

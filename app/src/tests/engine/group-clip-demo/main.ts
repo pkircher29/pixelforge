@@ -31,6 +31,16 @@ try {
   group.maskEnabled = false; check("disabled group mask");
   top.visible = false; check("hidden clipped layer");
   top.visible = true; group.visible = false; check("hidden group hides chain");
+  const colorDoc = createDocument({ width: 32, height: 24, background: "white" });
+  addLayer(colorDoc, createRasterLayer(colorDoc, { raster: Raster.filled(32, 24, rgba(100, 150, 200)) }));
+  const gl = document.querySelector<HTMLCanvasElement>("#canvas")!.getContext("webgl2")!;
+  for (const [channel, expected] of [["rg", [100, 150, 0]], ["rb", [100, 0, 200]], ["gb", [0, 150, 200]], ["none", [0, 0, 0]]] as const) {
+    comp.render(colorDoc, view, { viewChannel: channel, showPixelGrid: false, showSelection: false });
+    const pixel = new Uint8Array(4);
+    gl.readPixels(160, 120, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixel);
+    if (expected.some((value, i) => Math.abs(value - pixel[i]!) > 1)) throw new Error(`${channel}: unexpected display pixel ${pixel}`);
+    checks.push(`${channel} channel display: ${pixel.slice(0, 3)}`);
+  }
   result.textContent = `PASS\n${checks.join("\n")}`;
 } catch (e) { result.textContent = `FAIL: ${e}`; throw e; }
 finally { comp.dispose(); }
