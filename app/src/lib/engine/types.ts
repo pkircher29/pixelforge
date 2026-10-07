@@ -54,8 +54,10 @@ export type ResampleMethod = "nearest" | "bilinear" | "bicubic";
 export interface IRaster {
   readonly width: number;
   readonly height: number;
-  /** RGBA8, straight alpha, row-major, `width * height * 4` bytes. */
+  /** Legacy writable RGBA8 array. May materialize sparse storage; prefer readPixels for bounded reads. */
   readonly data: Uint8ClampedArray<ArrayBuffer>;
+  /** Detached RGBA bytes for a region; out-of-bounds pixels are transparent black. */
+  readPixels(rect: Rect): Uint8ClampedArray<ArrayBuffer>;
   /** `{ 0, 0, width, height }`. */
   bounds(): Rect;
   /** Deep copy. */

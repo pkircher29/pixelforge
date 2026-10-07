@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { Raster, Rect, TiledRaster, rgba } from "../../lib/engine";
+import { PaintCommand, Raster, Rect, TiledRaster, addLayer, createDocument, createRasterLayer, rgba } from "../../lib/engine";
 
 it("allocates only populated tiles, including hidden RGB, and releases cleared tiles", () => {
   const raster = new TiledRaster(4000, 3000);
@@ -81,4 +81,73 @@ it("retains touched tile versions rather than full canvases for 200 snapshots", 
   expect(TiledRaster.retainedPixelBytes([...layers, ...snapshots])).toBe(200 * 256 * 256 * 4);
   expect(layers.every(layer => layer.storageMode === "tiled")).toBe(true);
   expect(snapshots[30]!.getPixel(10, 10)).toEqual(rgba(0, 30, 60));
+});
+
+it("copies bounded regions without materializing source tiles", () => {
+  const sparse = new TiledRaster(1000, 1000);
+  sparse.fill(rgba(5, 10, 20, 128), Rect.make(254, 253, 8, 9));
+  const region = Rect.make(250, 250, 20, 20);
+  const bytes = sparse.readPixels(region);
+  const dense = new Raster(20, 20);
+  dense.blit(sparse, -250, -250, undefined, { mode: "replace" });
+  expect(dense.data).toEqual(bytes);
+  expect(sparse.storageMode).toBe("tiled");
+  bytes.fill(0);
+  expect(sparse.getPixel(255, 255).a).toBe(128);
+  expect(sparse.readPixels(Rect.make(-3, -4, 10, 10))).toEqual(new Uint8ClampedArray(400));
+});
+
+it("matches contiguous over/replace blits with clipping, offsets and opacity", () => {
+  const source = new Raster(280, 270);
+  source.fill(rgba(30, 170, 80, 90), Rect.make(2, 4, 275, 260));
+  source.fill(rgba(200, 50, 10, 230), Rect.make(254, 250, 26, 20));
+  source.setPixel(0, 0, rgba(99, 88, 77, 0));
+  const sparseSource = TiledRaster.fromBytes(source.width, source.height, source.data);
+  for (const mode of ["over", "replace"] as const) for (const opacity of [0, 0.25, 1]) {
+    const dense = Raster.filled(520, 280, rgba(90, 40, 160, 110));
+    const tiled = TiledRaster.filled(520, 280, rgba(90, 40, 160, 110));
+    const bounds = Rect.make(1, 2, 276, 267);
+    dense.blit(source, 250, -8, bounds, { mode, opacity });
+    tiled.blit(sparseSource, 250, -8, bounds, { mode, opacity });
+    const actual = tiled.readPixels(tiled.bounds()), expected = dense.data;
+    expect(actual.length).toBe(expected.length);
+    expect(actual.findIndex((value, i) => value !== expected[i])).toBe(-1);
+    expect(tiled.storageMode).toBe("tiled");
+    expect(sparseSource.storageMode).toBe("tiled");
+  }
+});
+
+it("handles overlapping self-copies, transparent replacement and snapshot isolation", () => {
+  const sparse = new TiledRaster(600, 300);
+  sparse.fill(rgba(255, 0, 0), Rect.make(250, 0, 15, 280));
+  const snapshot = sparse.clone();
+  const expected = Raster.fromBytes(600, 300, sparse.readPixels(sparse.bounds()));
+  expected.blit(expected.clone(), 252, 5, Rect.make(250, 0, 15, 280), { mode: "replace" });
+  sparse.blit(sparse, 252, 5, Rect.make(250, 0, 15, 280), { mode: "replace" });
+  expect(sparse.readPixels(sparse.bounds())).toEqual(expected.data);
+  expect(snapshot.getPixel(266, 6).a).toBe(0);
+  sparse.blit(new TiledRaster(600, 300), 0, 0, undefined, { mode: "replace" });
+  expect(sparse.allocatedTileCount).toBe(0);
+  expect(snapshot.getPixel(250, 0).a).toBe(255);
+});
+
+it("uses sparse captures and restores sparse pixels through real paint commands", () => {
+  const doc = createDocument({ width: 600, height: 300, background: "transparent" });
+  const raster = new TiledRaster(600, 300);
+  raster.setPixel(1, 1, rgba(50, 60, 70));
+  const layer = createRasterLayer(doc, { raster });
+  addLayer(doc, layer);
+  const captured = PaintCommand.capture(layer);
+  expect(captured.pixels).toBeInstanceOf(TiledRaster);
+  expect(TiledRaster.retainedPixelBytes([raster, captured.pixels as TiledRaster])).toBe(256 * 256 * 4);
+  const dirty = Rect.make(253, 254, 9, 8);
+  raster.fill(rgba(255, 0, 0), dirty);
+  const command = PaintCommand.finish(layer, captured, "Paint", dirty);
+  command.undo(doc);
+  expect(raster.getPixel(255, 255).a).toBe(0);
+  command.do(doc);
+  expect(raster.getPixel(255, 255)).toEqual(rgba(255, 0, 0));
+  expect(raster.getPixel(1, 1)).toEqual(rgba(50, 60, 70));
+  expect(raster.storageMode).toBe("tiled");
+  expect(command.byteSize()).toBeLessThan(600 * 300 * 4);
 });

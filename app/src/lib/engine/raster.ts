@@ -86,6 +86,18 @@ export class Raster implements IRaster {
     return new Raster(this.width, this.height, new Uint8ClampedArray(this.data));
   }
 
+  readPixels(rect: Rect): Uint8ClampedArray<ArrayBuffer> {
+    const result = new Uint8ClampedArray(Math.max(0, rect.w) * Math.max(0, rect.h) * 4);
+    const area = Rect.intersect(rect, this.bounds());
+    if (Rect.isEmpty(area)) return result;
+    const data = this.data;
+    for (let y = area.y; y < area.y + area.h; y++) {
+      const start = (y * this.width + area.x) * 4;
+      result.set(data.subarray(start, start + area.w * 4), ((y - rect.y) * rect.w + area.x - rect.x) * 4);
+    }
+    return result;
+  }
+
   fill(color: RGBA, rect?: Rect): void {
     const d = this.data;
     const area = rect ? Rect.intersect(rect, this.bounds()) : this.bounds();
@@ -159,15 +171,19 @@ export class Raster implements IRaster {
     const sy0 = sr.y + (dst.y - dstFull.y);
     const mode = opts?.mode ?? "over";
     const opacity = Math.min(1, Math.max(0, opts?.opacity ?? 1));
-    const s = src.data;
+    // Sparse sources provide only the visible region; do not request their legacy
+    // writable array, which would permanently expand the whole source layer.
+    const direct = src instanceof Raster ? src.denseData : undefined;
+    const s = direct ?? src.readPixels(Rect.make(sx0, sy0, dst.w, dst.h));
+    const sourceX = direct ? sx0 : 0, sourceY = direct ? sy0 : 0;
     const d = this.data;
-    const sw = src.width;
+    const sw = direct ? src.width : dst.w;
     const dw = this.width;
 
     if (mode === "replace" && opacity >= 1) {
       const rowBytes = dst.w * 4;
       for (let y = 0; y < dst.h; y++) {
-        const si = ((sy0 + y) * sw + sx0) * 4;
+        const si = ((sourceY + y) * sw + sourceX) * 4;
         const di = ((dst.y + y) * dw + dst.x) * 4;
         d.set(s.subarray(si, si + rowBytes), di);
       }
@@ -175,7 +191,7 @@ export class Raster implements IRaster {
     }
 
     for (let y = 0; y < dst.h; y++) {
-      let si = ((sy0 + y) * sw + sx0) * 4;
+      let si = ((sourceY + y) * sw + sourceX) * 4;
       let di = ((dst.y + y) * dw + dst.x) * 4;
       for (let x = 0; x < dst.w; x++, si += 4, di += 4) {
         const as = (s[si + 3]! / 255) * opacity;

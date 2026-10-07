@@ -1,6 +1,6 @@
 import { Raster } from "./raster";
 import { Rect } from "./rect";
-import type { RGBA } from "./types";
+import type { BlitOptions, IRaster, RGBA } from "./types";
 
 export const RASTER_TILE_SIZE = 256;
 const TILE_BYTES = RASTER_TILE_SIZE * RASTER_TILE_SIZE * 4;
@@ -11,7 +11,7 @@ const shared = new WeakSet<Tile>();
 /**
  * Sparse RGBA storage for the raster migration. Pixel, fill, crop and clone operations
  * stay tiled. The legacy writable `data` accessor permanently materializes this instance
- * into a contiguous buffer; inherited bulk operations still use that compatibility path.
+ * into a contiguous buffer; inherited resampling operations still use that compatibility path.
  * Document factories and compositor uploads must migrate before the memory gate closes.
  */
 export class TiledRaster extends Raster {
@@ -22,6 +22,22 @@ export class TiledRaster extends Raster {
   constructor(width: number, height: number) {
     super(width, height, undefined, true);
     this.columns = Math.ceil(width / RASTER_TILE_SIZE);
+  }
+
+  static override filled(width: number, height: number, color: RGBA): TiledRaster {
+    const result = new TiledRaster(width, height);
+    result.fill(color);
+    return result;
+  }
+
+  static override fromBytes(width: number, height: number, bytes: ArrayBufferView): TiledRaster {
+    const result = new TiledRaster(width, height);
+    result.blit(Raster.fromBytes(width, height, bytes), 0, 0, undefined, { mode: "replace" });
+    return result;
+  }
+
+  static override fromImageData(image: ImageData): TiledRaster {
+    return TiledRaster.fromBytes(image.width, image.height, image.data);
   }
 
   get storageMode(): "tiled" | "contiguous" { return this.denseData ? "contiguous" : "tiled"; }
@@ -46,6 +62,57 @@ export class TiledRaster extends Raster {
   }
 
   override byteLength(): number { return this.denseData?.byteLength ?? this.tiles.size * TILE_BYTES; }
+
+  override readPixels(rect: Rect): Uint8ClampedArray<ArrayBuffer> {
+    if (this.denseData) return super.readPixels(rect);
+    const result = new Uint8ClampedArray(Math.max(0, rect.w) * Math.max(0, rect.h) * 4);
+    const area = Rect.intersect(rect, this.bounds());
+    if (Rect.isEmpty(area)) return result;
+    for (let ty = Math.floor(area.y / RASTER_TILE_SIZE); ty <= Math.floor((area.y + area.h - 1) / RASTER_TILE_SIZE); ty++) {
+      for (let tx = Math.floor(area.x / RASTER_TILE_SIZE); tx <= Math.floor((area.x + area.w - 1) / RASTER_TILE_SIZE); tx++) {
+        const tile = this.tiles.get(ty * this.columns + tx);
+        if (!tile) continue;
+        const part = Rect.intersect(area, Rect.make(tx * RASTER_TILE_SIZE, ty * RASTER_TILE_SIZE, RASTER_TILE_SIZE, RASTER_TILE_SIZE));
+        for (let y = part.y; y < part.y + part.h; y++) {
+          const start = ((y - ty * RASTER_TILE_SIZE) * RASTER_TILE_SIZE + part.x - tx * RASTER_TILE_SIZE) * 4;
+          result.set(tile.bytes.subarray(start, start + part.w * 4), ((y - rect.y) * rect.w + part.x - rect.x) * 4);
+        }
+      }
+    }
+    return result;
+  }
+
+  override blit(src: IRaster, dx: number, dy: number, srcRect?: Rect, opts?: BlitOptions): void {
+    if (this.denseData) { super.blit(src === this ? this.clone() : src, dx, dy, srcRect, opts); return; }
+    const sr = srcRect ? Rect.intersect(srcRect, src.bounds()) : src.bounds();
+    const destination = Rect.intersect(Rect.make(dx, dy, sr.w, sr.h), this.bounds());
+    if (Rect.isEmpty(sr) || Rect.isEmpty(destination)) return;
+    const opacity = Math.min(1, Math.max(0, opts?.opacity ?? 1));
+    if (opacity <= 0) return;
+    const replaceAll = opts?.mode === "replace" && opacity >= 1;
+    // Reading from a clone gives overlapping self-copies snapshot semantics.
+    const source = src === this ? this.clone() : src;
+    for (let ty = Math.floor(destination.y / RASTER_TILE_SIZE); ty <= Math.floor((destination.y + destination.h - 1) / RASTER_TILE_SIZE); ty++) {
+      for (let tx = Math.floor(destination.x / RASTER_TILE_SIZE); tx <= Math.floor((destination.x + destination.w - 1) / RASTER_TILE_SIZE); tx++) {
+        const key = ty * this.columns + tx;
+        const part = Rect.intersect(destination, Rect.make(tx * RASTER_TILE_SIZE, ty * RASTER_TILE_SIZE, RASTER_TILE_SIZE, RASTER_TILE_SIZE));
+        const pixels = source.readPixels(Rect.make(sr.x + part.x - dx, sr.y + part.y - dy, part.w, part.h));
+        if (!replaceAll) {
+          let visible = false;
+          for (let i = 3; i < pixels.length; i += 4) if (pixels[i]) { visible = true; break; }
+          if (!visible) continue;
+        }
+        if (!this.tiles.has(key) && !pixels.some(v => v !== 0)) continue;
+        const tile = this.writable(key);
+        const view = new Raster(RASTER_TILE_SIZE, RASTER_TILE_SIZE, tile.bytes);
+        view.blit(new Raster(part.w, part.h, pixels), part.x - tx * RASTER_TILE_SIZE, part.y - ty * RASTER_TILE_SIZE, undefined, opts);
+        let populated = 0;
+        for (let i = 0; i < tile.bytes.length; i += 4) if (tile.bytes[i] || tile.bytes[i + 1] || tile.bytes[i + 2] || tile.bytes[i + 3]) populated++;
+        tile.populated = populated;
+        if (!populated) this.tiles.delete(key);
+      }
+    }
+  }
 
   /** Unique retained pixel buffers across snapshots; excludes JS objects and GPU memory. */
   static retainedPixelBytes(rasters: Iterable<TiledRaster>): number {
@@ -143,6 +210,7 @@ export class TiledRaster extends Raster {
   }
 
   override crop(rect: Rect): TiledRaster {
+    if (Rect.equals(rect, this.bounds())) return this.clone();
     const result = new TiledRaster(Math.max(0, rect.w), Math.max(0, rect.h));
     if (this.denseData) {
       result.blit(this, -rect.x, -rect.y, undefined, { mode: "replace" });

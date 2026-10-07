@@ -166,12 +166,17 @@ behind `IRaster`/`Raster`, copy-on-write clones, sparse pixel/fill/clear/crop op
 alpha bounds and detached tile readback. Empty/cleared tiles hold no pixel buffer;
 transparent pixels with nonzero RGB are preserved. The legacy writable `data` getter
 explicitly materializes a contiguous buffer, preserving old callers' mutation contract.
-Inherited bulk operations still take that compatibility path. Five new tests cover
+Resampling and inherited transforms still take that compatibility path. Nine tests cover
 tile edges, clipping, pixel equivalence, snapshot isolation, array compatibility and
 200 retained snapshots across 30 empty 4000×3000 rasters with one-pixel edits. That
 isolated test retains 50 MiB of unique pixel buffers; it is **not** an app memory
-benchmark. All 692 tests and Svelte checks pass. Document factories, touched-tile
-history integration, bulk operations, per-tile GL uploads, workers, non-destructive
+benchmark. Region readback, dense/sparse and sparse/sparse blits, opacity, replacement,
+overlapping self-copy, imports and filled construction now preserve sparse storage.
+Full-bounds captures share tiles; tests exercise actual PaintCommand capture/finish/
+undo/redo on an explicitly supplied tiled layer. Ordinary document factories still
+create contiguous layers. All 696 tests and Svelte checks pass; real-browser CPU/GL
+clipping, channel and alpha-overlay checks retain pixel parity. Document factories,
+production history integration, remaining bulk operations, per-tile GL uploads, workers, non-destructive
 cropping and the full 1.5 GB benchmark gate remain open.
 
 1. Tooltips clip at panel/window edges → one tooltip layer at app root with edge-aware placement (flip/shift).
