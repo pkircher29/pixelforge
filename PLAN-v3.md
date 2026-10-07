@@ -51,6 +51,13 @@ Implemented on `feat/v03-oauth-polish`:
   Tests cover already-applied paint, layer deletion, repeated branch switching and
   independent snapshot/History Brush sources. Browser screenshots:
   `docs/screenshots/history-options.png`, `docs/screenshots/history-nonlinear.png`.
+- Polish item 9, drag portion: dragging a selected row moves the full selection in
+  stack order, carries group children once, and excludes every moved row as a target.
+  Multi-layer reparenting is one undoable move; pointer cancellation no longer commits.
+  Alt-drag duplicates selected root blocks. Tests cover separated rows, group/child
+  selections, self-drop rejection, group destinations and exact undo/redo. Browser
+  verification covers nonadjacent multi-selection drag and undo/redo without errors;
+  screenshot: `docs/screenshots/layers-multi-drag.png`. Group clipping remains open.
 - Polish item 10: Density and Feather are layer render parameters with undo, preserved
   in `.pfproj` and layer/structural snapshots. CPU and GL compositors share cached
   effective masks for pixels, groups, adjustments, effects and clipping. Painted mask

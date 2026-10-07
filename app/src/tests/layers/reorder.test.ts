@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { History } from "../../lib/engine";
-import { computeDrop, resolveDrop, reorderTarget, type RowGeom } from "../../lib/ui/panels/layer-reorder";
-import { MoveLayerToCommand } from "../../lib/ui/panels/Layers.model";
+import { computeDrop, resolveDrop, resolveMultiDrop, movingLayerIds, reorderTarget, type RowGeom } from "../../lib/ui/panels/layer-reorder";
+import { MoveLayerToCommand, MoveLayersToCommand } from "../../lib/ui/panels/Layers.model";
 import { sampleDoc, byName, names } from "./fixtures";
 
 /** Rows as the panel renders them (top → bottom), 40 px each. */
@@ -14,6 +14,44 @@ function geoms(doc: ReturnType<typeof sampleDoc>): RowGeom[] {
 }
 
 describe("drag reorder math", () => {
+  it("moves noncontiguous selections in stack order and restores parents/clips on undo", () => {
+    const doc = sampleDoc();
+    const original = doc.layers.map(l => ({ id: l.id, parentId: l.parentId, clip: l.clipToBelow }));
+    const ids = [byName(doc, "Title").id, byName(doc, "Tint").id];
+    const target = { id: byName(doc, "Background").id, pos: "below" as const };
+    const dest = resolveMultiDrop(doc, ids, target)!;
+    const h = new History(doc);
+    h.push(new MoveLayersToCommand(ids, dest.toIndex, dest.parentId));
+    expect(names(doc)).toEqual(["Tint", "Title", "Background", "Group 1", "Photo", "Shape 1"]);
+    expect(byName(doc, "Tint").parentId).toBeNull();
+    expect(byName(doc, "Tint").clipToBelow).toBe(false);
+    h.undo();
+    expect(doc.layers.map(l => ({ id: l.id, parentId: l.parentId, clip: l.clipToBelow }))).toEqual(original);
+    h.redo();
+    expect(names(doc).slice(0, 2)).toEqual(["Tint", "Title"]);
+  });
+
+  it("moves a group and selected children only once and refuses self drops", () => {
+    const doc = sampleDoc();
+    const ids = [byName(doc, "Group 1").id, byName(doc, "Photo").id, byName(doc, "Title").id];
+    expect(movingLayerIds(doc, ids)).toHaveLength(4);
+    expect(resolveMultiDrop(doc, ids, { id: byName(doc, "Tint").id, pos: "above" })).toBeNull();
+    const dest = resolveMultiDrop(doc, ids, { id: byName(doc, "Background").id, pos: "below" })!;
+    new MoveLayersToCommand(ids, dest.toIndex, dest.parentId).do(doc);
+    expect(names(doc)).toEqual(["Group 1", "Photo", "Tint", "Title", "Background", "Shape 1"]);
+    expect(byName(doc, "Photo").parentId).toBe(byName(doc, "Group 1").id);
+  });
+
+  it("drops several layers into a group without reversing their order", () => {
+    const doc = sampleDoc();
+    const group = byName(doc, "Group 1").id;
+    const ids = [byName(doc, "Title").id, byName(doc, "Shape 1").id];
+    const dest = resolveMultiDrop(doc, ids, { id: group, pos: "into" })!;
+    new MoveLayersToCommand(ids, dest.toIndex, dest.parentId).do(doc);
+    expect(names(doc)).toEqual(["Background", "Group 1", "Photo", "Tint", "Shape 1", "Title"]);
+    expect(ids.map(id => doc.layers.find(l => l.id === id)!.parentId)).toEqual([group, group]);
+  });
+
   it("reorderTarget keeps the v0.1 contract", () => {
     expect(reorderTarget(0, 2, true)).toBe(2);
     expect(reorderTarget(2, 0, false)).toBe(0);
