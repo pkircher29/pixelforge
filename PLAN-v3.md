@@ -183,7 +183,15 @@ edge tiles, four-region boundary edits, tile deletion and full clears with pixel
 and source storage remaining tiled; existing clipping/channel/overlay checks pass too.
 The Windows native build passes; its fill/define-pattern/define-brush flow, shared-tip
 rename/delete and full-process-restart persistence smoke test pass without runtime errors.
-Legacy pixel writers/import paths, remaining bulk operations, sparse GPU allocation, workers, non-destructive
+Project save frames now use detached readback without changing live storage; project
+and image/PSD frame readers construct tiled pixel layers directly. Imports copy tile
+rows without an extra full-canvas Raster copy. Tests cover byte-view offsets, edge
+tiles, masks, transparent RGB and queued-save isolation for tiled and legacy layers.
+All 700 tests, Svelte checks and the frontend build pass. Browser GPU checks confirm
+project-frame reopen pixel parity with both live and restored sources remaining tiled.
+The existing file/IPC format still requires contiguous transfer blobs, so save-time
+peak allocation is not resolved by this change.
+Legacy pixel writers, remaining bulk operations, sparse GPU allocation, workers, non-destructive
 cropping and the full 1.5 GB benchmark gate remain open.
 
 1. Tooltips clip at panel/window edges → one tooltip layer at app root with edge-aware placement (flip/shift).

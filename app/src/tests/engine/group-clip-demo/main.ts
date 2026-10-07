@@ -1,5 +1,7 @@
 import { BlendMode, GlCompositor, Raster, Rect, TiledRaster, Viewport, addLayer, compositeToRaster, createDocument, createRasterLayer, groupLayers, rgba } from "../../../lib/engine";
 import { CanvasCompositor } from "../../../lib/engine/composite/CanvasCompositor";
+import { documentFromProjectFrame, projectFrameParts, type ProjectHeader } from "../../../lib/io/convert";
+import { decodeFrame, encodeFrame } from "../../../lib/io/frame";
 
 const result = document.querySelector<HTMLPreElement>("#result")!;
 const comp = new GlCompositor(document.querySelector<HTMLCanvasElement>("#canvas")!);
@@ -79,6 +81,14 @@ try {
     return stats;
   }
   checkTiles("sparse edge-tile upload");
+  const expectedSaved = comp.readComposite()!.data;
+  const saved = projectFrameParts(tiledDoc, "browser-tiled.pfproj", "0.3.0", null);
+  const reopened = documentFromProjectFrame(decodeFrame<ProjectHeader>(encodeFrame(saved.header as unknown as Record<string, unknown>, saved.blobs)));
+  comp.render(reopened, tiledView, { showSelection: false, showPixelGrid: false });
+  if (comp.readComposite()!.data.some((v, i) => Math.abs(v - expectedSaved[i]!) > 2)) throw new Error("reopened tile pixels changed");
+  if (tiled.storageMode !== "tiled" || (reopened.layers[0]!.raster as TiledRaster).storageMode !== "tiled") throw new Error("project frames expanded tiled storage");
+  checks.push("project frame reopen: GPU pixel parity; live and restored sources remain tiled");
+  comp.render(tiledDoc, tiledView, { showSelection: false, showPixelGrid: false });
   tiled.fill(rgba(240, 10, 30), Rect.make(254, 254, 4, 4));
   comp.markDirty(tiledLayer.id, Rect.make(254, 254, 4, 4));
   if (checkTiles("cross-tile dirty update").uploads !== 4) throw new Error("dirty update must upload four intersected tile regions");

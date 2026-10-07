@@ -31,7 +31,19 @@ export class TiledRaster extends Raster {
 
   static override fromBytes(width: number, height: number, bytes: ArrayBufferView): TiledRaster {
     const result = new TiledRaster(width, height);
-    result.blit(Raster.fromBytes(width, height, bytes), 0, 0, undefined, { mode: "replace" });
+    if (bytes.byteLength !== width * height * 4) throw new RangeError("TiledRaster: RGBA byte count does not match dimensions");
+    const source = new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    for (let y = 0; y < height; y += RASTER_TILE_SIZE) for (let x = 0; x < width; x += RASTER_TILE_SIZE) {
+      const tw = Math.min(RASTER_TILE_SIZE, width - x), th = Math.min(RASTER_TILE_SIZE, height - y);
+      const data = new Uint8ClampedArray(tw * th * 4);
+      for (let row = 0; row < th; row++) {
+        const start = ((y + row) * width + x) * 4;
+        data.set(source.subarray(start, start + tw * 4), row * tw * 4);
+      }
+      let populated = 0;
+      for (let i = 0; i < data.length; i += 4) if (data[i] || data[i + 1] || data[i + 2] || data[i + 3]) populated++;
+      if (populated) result.tiles.set((y / RASTER_TILE_SIZE) * result.columns + x / RASTER_TILE_SIZE, { bytes: data, width: tw, height: th, populated });
+    }
     return result;
   }
 
