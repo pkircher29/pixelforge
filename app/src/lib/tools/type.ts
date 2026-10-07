@@ -6,6 +6,7 @@
  */
 import { Type, TypeOutline } from "@lucide/svelte";
 import { textBounds, type TextSpec } from "$lib/engine";
+import { drawText, measureLine } from "$lib/engine/ops/text";
 import type { Tool, ToolContext, ToolEvent, ToolOption } from "./types";
 import { linePosOf, lines, selectionSpans } from "./text-session";
 import { specFromOptions, typeSession, type TypeVariant } from "./type-session.svelte";
@@ -159,10 +160,7 @@ export class TypeTool implements Tool {
 
   /** Measure helper on the overlay context (same glyph-by-glyph metric as the engine). */
   private measure(g: CanvasRenderingContext2D, spec: TextSpec, s: string): number {
-    const track = (spec.tracking / 1000) * spec.size;
-    let w = 0;
-    for (const ch of Array.from(s)) w += g.measureText(ch).width + track;
-    return w;
+    return measureLine(spec, s, g);
   }
 
   private lineStartX(g: CanvasRenderingContext2D, spec: TextSpec, line: string): number {
@@ -196,9 +194,8 @@ export class TypeTool implements Tool {
     if (x < x0 - 6 || x > x0 + w + 6) return null;
     let acc = x0;
     let col = 0;
-    const track = (spec.tracking / 1000) * spec.size;
     for (const ch of Array.from(l)) {
-      const cw = g.measureText(ch).width + track;
+      const cw = this.measure(g, spec, ch);
       if (x < acc + cw / 2) break;
       acc += cw;
       col += ch.length;
@@ -229,18 +226,7 @@ export class TypeTool implements Tool {
       g.font = cssFontFor(spec);
       g.fillStyle = "rgba(255,0,0,0.45)";
       g.textBaseline = "alphabetic";
-      ls.forEach((line, li) => {
-        const y = spec.y + li * lh;
-        if (spec.vertical) {
-          Array.from(line).forEach((ch, ci) => g.fillText(ch, spec.x - g.measureText(ch).width / 2, spec.y + ci * lh));
-          return;
-        }
-        let x = this.lineStartX(g, spec, line);
-        for (const ch of Array.from(line)) {
-          g.fillText(ch, x, y);
-          x += g.measureText(ch).width + (spec.tracking / 1000) * spec.size;
-        }
-      });
+      drawText(g, spec);
       g.restore();
     }
     // Selection highlight.

@@ -345,6 +345,11 @@ export interface TextSpec {
   tracking: number;
   bold: boolean;
   italic: boolean;
+  /** Character styles preserve the original editable text. Missing fields mean false. */
+  allCaps?: boolean;
+  smallCaps?: boolean;
+  underline?: boolean;
+  strikethrough?: boolean;
   /** Vertical type: one glyph per line, stacked downwards from `x, y`. */
   vertical: boolean;
   antialias: boolean;

@@ -23,6 +23,10 @@ export function textSpec(text: string, x: number, y: number, over: Partial<TextS
     tracking: 0,
     bold: false,
     italic: false,
+    allCaps: false,
+    smallCaps: false,
+    underline: false,
+    strikethrough: false,
     vertical: false,
     antialias: true,
     ...over,
@@ -73,16 +77,48 @@ export function fallbackAdvance(spec: TextSpec): number {
   return spec.size * 0.6 + (spec.tracking / 1000) * spec.size;
 }
 
+/** One source character may display multiple capitals (for example ß → SS). */
+export function textGlyphs(spec: TextSpec, line: string): { text: string; size: number }[] {
+  return Array.from(line, ch => {
+    const upper = ch.toUpperCase();
+    const small = !spec.allCaps && spec.smallCaps && ch !== upper;
+    return { text: spec.allCaps || small ? upper : ch, size: small ? spec.size * 0.7 : spec.size };
+  });
+}
+
+function glyphWidth(spec: TextSpec, glyph: { text: string; size: number }, ctx?: Ctx2D | null): number {
+  if (!ctx) return Array.from(glyph.text).length * glyph.size * 0.6;
+  ctx.font = cssFont({ ...spec, size: glyph.size });
+  return ctx.measureText(glyph.text).width;
+}
+
 /** Measure a line's advance width (canvas when available, else the fallback metric). */
 export function measureLine(spec: TextSpec, line: string, ctx?: Ctx2D | null): number {
   const track = (spec.tracking / 1000) * spec.size;
-  if (ctx) {
-    ctx.font = cssFont(spec);
-    let wsum = 0;
-    for (const ch of Array.from(line)) wsum += ctx.measureText(ch).width + track;
-    return wsum;
-  }
-  return Array.from(line).length * fallbackAdvance(spec);
+  return textGlyphs(spec, line).reduce((width, glyph) => width + glyphWidth(spec, glyph, ctx) + track, 0);
+}
+
+/** Shared by committed type and the live type-mask preview. */
+export function drawText(ctx: Ctx2D, spec: TextSpec): void {
+  ctx.textBaseline = "alphabetic";
+  ctx.textAlign = "left";
+  const track = (spec.tracking / 1000) * spec.size;
+  const thickness = Math.max(1, spec.size / 16);
+  textLines(spec).forEach((line, li) => {
+    const y = spec.y + li * lineHeightOf(spec);
+    const width = measureLine(spec, line, ctx);
+    const start = spec.vertical || spec.align === "center" ? spec.x - width / 2 : spec.align === "right" ? spec.x - width : spec.x;
+    let x = start;
+    for (const glyph of textGlyphs(spec, line)) {
+      const advance = glyphWidth(spec, glyph, ctx);
+      ctx.fillText(glyph.text, x, y);
+      x += advance + track;
+    }
+    if (!line) return;
+    if (spec.underline) ctx.fillRect(start, y + spec.size * 0.12, width, thickness);
+    if (spec.strikethrough) ctx.fillRect(start, y - spec.size * 0.3, width, thickness);
+  });
+  ctx.font = cssFont(spec);
 }
 
 /** Approximate bounding box of the rendered text (document space), for selection / transform handles. */
@@ -119,21 +155,7 @@ export function rasterizeText(spec: TextSpec, w: number, h: number): Raster {
     ctx.fillStyle = `rgba(${spec.color.r}, ${spec.color.g}, ${spec.color.b}, ${spec.color.a / 255})`;
     const smoothing = spec.antialias;
     if ("imageSmoothingEnabled" in ctx) ctx.imageSmoothingEnabled = smoothing;
-    lines.forEach((line, li) => {
-      const y = spec.y + li * lh;
-      if (spec.vertical) {
-        if (!line) return;
-        const gw = ctx.measureText(line).width;
-        ctx.fillText(line, spec.x - gw / 2, y);
-        return;
-      }
-      const width = measureLine(spec, line, ctx);
-      let x = spec.align === "left" ? spec.x : spec.align === "center" ? spec.x - width / 2 : spec.x - width;
-      for (const ch of Array.from(line)) {
-        ctx.fillText(ch, x, y);
-        x += ctx.measureText(ch).width + track;
-      }
-    });
+    drawText(ctx, spec);
     const data = c2d.readback();
     out.data.set(data);
     if (!spec.antialias) {
@@ -143,9 +165,6 @@ export function rasterizeText(spec: TextSpec, w: number, h: number): Raster {
     return out;
   }
   // Fallback block renderer (no 2D canvas).
-  const adv = fallbackAdvance(spec);
-  const gw = spec.size * 0.6;
-  const gh = spec.size * 0.7;
   const color: RGBA = { ...spec.color };
   const box = (x0: number, y0: number, bw: number, bh: number): void => {
     const xa = Math.max(0, Math.round(x0));
@@ -156,16 +175,16 @@ export function rasterizeText(spec: TextSpec, w: number, h: number): Raster {
   };
   lines.forEach((line, li) => {
     const y = spec.y + li * lh;
-    if (spec.vertical) {
-      if (line && line !== " ") box(spec.x - gw / 2, y - gh, gw, gh);
-      return;
+    const width = measureLine(spec, line);
+    const start = spec.vertical || spec.align === "center" ? spec.x - width / 2 : spec.align === "right" ? spec.x - width : spec.x;
+    let x = start;
+    for (const glyph of textGlyphs(spec, line)) {
+      const advance = glyphWidth(spec, glyph);
+      if (glyph.text.trim()) box(x, y - glyph.size * 0.7, advance, glyph.size * 0.7);
+      x += advance + track;
     }
-    const width = Array.from(line).length * adv;
-    let x = spec.align === "left" ? spec.x : spec.align === "center" ? spec.x - width / 2 : spec.x - width;
-    for (const ch of Array.from(line)) {
-      if (ch !== " ") box(x, y - gh, gw, gh);
-      x += adv;
-    }
+    if (line && spec.underline) box(start, y + spec.size * 0.12, width, Math.max(1, spec.size / 16));
+    if (line && spec.strikethrough) box(start, y - spec.size * 0.3, width, Math.max(1, spec.size / 16));
   });
   return out;
 }

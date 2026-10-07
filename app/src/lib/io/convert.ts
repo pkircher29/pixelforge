@@ -389,6 +389,10 @@ function textFromFile(v: unknown): TextSpec | null {
     tracking: typeof o.tracking === "number" ? o.tracking : 0,
     bold: o.bold === true,
     italic: o.italic === true,
+    allCaps: o.allCaps === true,
+    smallCaps: o.smallCaps === true,
+    underline: o.underline === true,
+    strikethrough: o.strikethrough === true,
     vertical: o.vertical === true,
     antialias: o.antialias !== false,
   };

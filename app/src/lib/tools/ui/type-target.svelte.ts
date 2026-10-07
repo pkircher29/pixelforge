@@ -33,11 +33,15 @@ export function currentTypeTarget(): TypeTarget {
       color: { ...toolStore.fg },
       leading: (o<number>("leading", 0) || null) as number | null,
       tracking: o<number>("tracking", 0),
+      allCaps: o<boolean>("allCaps", false),
+      smallCaps: o<boolean>("smallCaps", false),
+      underline: o<boolean>("underline", false),
+      strikethrough: o<boolean>("strikethrough", false),
     }),
   };
 }
 
-/** Apply a spec patch to the current target. Extra fields (allCaps, underline, indents) ride along in TextSpec as unknown keys for forward compat. */
+/** Apply a style patch without rewriting the editable text. */
 export function applyTypePatch(patch: Partial<TextSpec>): void {
   const t = currentTypeTarget();
   if (t.kind === "session") {
@@ -65,6 +69,9 @@ function syncToolOptions(patch: Partial<TextSpec>): void {
     }
     if (patch.tracking !== undefined) toolStore.setOption(id, "tracking", patch.tracking);
     if (patch.leading !== undefined) toolStore.setOption(id, "leading", patch.leading ?? 0);
+    for (const key of ["allCaps", "smallCaps", "underline", "strikethrough"] as const) {
+      if (patch[key] !== undefined) toolStore.setOption(id, key, patch[key]!);
+    }
   }
   if (patch.color) toolStore.setFg(patch.color);
 }

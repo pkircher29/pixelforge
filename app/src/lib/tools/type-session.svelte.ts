@@ -234,7 +234,11 @@ export function specFromOptions(toolId: string, vertical: boolean): TextSpec {
     antialias: aa !== "none",
     color: { ...toolStore.fg },
     vertical,
-    leading: null,
-    tracking: 0,
+    leading: o<number>("leading", 0) || null,
+    tracking: o<number>("tracking", 0),
+    allCaps: o<boolean>("allCaps", false),
+    smallCaps: o<boolean>("smallCaps", false),
+    underline: o<boolean>("underline", false),
+    strikethrough: o<boolean>("strikethrough", false),
   });
 }

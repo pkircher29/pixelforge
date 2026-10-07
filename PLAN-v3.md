@@ -87,6 +87,17 @@ Implemented on `feat/v03-oauth-polish`:
   suite and all three targeted persistence tests (including a subsequent pending-save
   deletion regression), Svelte checks and native build pass. Screenshot:
   `docs/screenshots/preset-manager-native.png`. Cross-OS verification remains open.
+- Polish item 7, character styles: All Caps, Small Caps, Underline and Strikethrough
+  are editable style flags, with defaults for new type and project-file persistence.
+  All Caps no longer rewrites the original text; synthetic small caps renders lowercase
+  letters as 70% capitals. Displayed-glyph measurements drive rasterization, horizontal
+  caret placement and selection, including uppercase expansions such as ß to SS.
+  Type-mask previews share the renderer. Tests cover undo, mixed-case source retention,
+  project round-trip, glyph advances and continuous decorations across spaces.
+  All 683 frontend tests, Svelte checks and Windows native build pass. Browser and
+  Windows canvas checks verify caps toggling restores exact original pixels and
+  reopening preserves the source text. Screenshot: `docs/screenshots/text-character-styles.png`.
+  Paragraph indents, space before/after and justification remain open.
 - Polish item 9, drag portion: dragging a selected row moves the full selection in
   stack order, carries group children once, and excludes every moved row as a target.
   Multi-layer reparenting is one undoable move; pointer cancellation no longer commits.
