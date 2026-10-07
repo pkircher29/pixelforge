@@ -61,7 +61,7 @@ export function viewMenuCommands(): CommandDef[] {
     { id: "view.zoomOut", label: "Zoom Out", menu: "View", order: 101, shortcut: "CmdOrCtrl+-", enabled: hasDoc, run: () => withView((e) => e.viewport.zoomOut(center())) },
     { id: "view.fit", label: "Fit on Screen", menu: "View", order: 102, shortcut: "CmdOrCtrl+0", enabled: hasDoc, run: () => withView((e) => e.viewport.fitToView(canvasHost.viewW, canvasHost.viewH, e.doc.width, e.doc.height, 32)) },
     { id: "view.actual", label: "100%", menu: "View", order: 103, shortcut: "CmdOrCtrl+1", keywords: ["actual pixels"], enabled: hasDoc, run: () => withView((e) => e.viewport.actualPixels(canvasHost.viewW, canvasHost.viewH, e.doc.width, e.doc.height)) },
-    { id: "view.zoom200", label: "200%", menu: "View", order: 104, shortcut: "CmdOrCtrl+2", enabled: hasDoc, run: () => withView((e) => e.viewport.setZoomAt(center(), 2)) },
+    { id: "view.zoom200", label: "200%", menu: "View", order: 104, enabled: hasDoc, run: () => withView((e) => e.viewport.setZoomAt(center(), 2)) },
     { id: "view.printSize", label: "Print Size", menu: "View", order: 105, keywords: ["physical", "inches"], enabled: hasDoc, run: () => withView((e) => e.viewport.setZoomAt(center(), printSizeZoom(e.doc.meta.dpi))) },
 
     { id: "view.screen.standard", label: "Standard Screen Mode", menu: "View/Screen Mode", order: 200, checked: () => toolStore.screenMode === "standard", run: () => setScreenMode("standard") },

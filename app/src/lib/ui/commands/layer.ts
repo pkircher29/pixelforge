@@ -289,6 +289,8 @@ async function newFill(kind: "solid" | "gradient" | "pattern"): Promise<void> {
   select([layer.id]);
   const fill = await openDialog<{ fill: FillSpec; layerId: string }, FillSpec>(FillLayerDialog, { fill: spec, layerId: layer.id });
   if (fill) docStore.exec(new SetFillLayerCommand(layer.id, fill), { noMerge: true });
+  // PS: cancelling the fill dialog of a brand-new fill layer removes the layer.
+  else if (docStore.active?.history.undoLabel === `New ${label} Layer`) docStore.undo();
 }
 
 async function newAdjustment(opId: string): Promise<void> {

@@ -106,7 +106,29 @@ export function duplicateChannel(): void {
   docStore.exec(new AddAlphaChannelCommand({ ...ch, id: `${ch.id}_copy_${Date.now().toString(36)}`, name: `${ch.name} copy`, mask: ch.mask.clone() }));
 }
 
+/** PS channel shortcuts: Ctrl+2 composite, Ctrl+3/4/5 R/G/B, Ctrl+6… alpha channels. */
+const viewCmd = (id: string, label: string, key: string, view: () => ViewChannel | null): Parameters<typeof registerCommands>[0][number] => ({
+  id,
+  label,
+  shortcut: `CmdOrCtrl+${key}`,
+  keywords: ["channel", "view"],
+  enabled: () => !!docStore.doc && view() !== null,
+  run: () => {
+    const v = view();
+    if (v) applyChannelView({ view: v, hidden: v === "rgb" ? [] : layersUi.hiddenChannels });
+  },
+});
 registerCommands([
+  viewCmd("channels.view.rgb", "View RGB Composite", "2", () => "rgb"),
+  viewCmd("channels.view.r", "View Red Channel", "3", () => "r"),
+  viewCmd("channels.view.g", "View Green Channel", "4", () => "g"),
+  viewCmd("channels.view.b", "View Blue Channel", "5", () => "b"),
+  ...[0, 1, 2, 3].map((i) =>
+    viewCmd(`channels.view.alpha${i}`, `View Alpha Channel ${i + 1}`, String(6 + i), () => {
+      const c = docStore.doc?.alphaChannels[i];
+      return c ? (`alpha:${c.id}` as ViewChannel) : null;
+    }),
+  ),
   { id: "channels.new", label: "New Channel…", keywords: ["alpha channel"], enabled: () => !!docStore.doc, run: newChannel },
   { id: "channels.duplicate", label: "Duplicate Channel…", enabled: () => !!selectedAlpha(), run: duplicateChannel },
   { id: "channels.delete", label: "Delete Channel", enabled: () => !!selectedAlpha(), run: deleteChannel },

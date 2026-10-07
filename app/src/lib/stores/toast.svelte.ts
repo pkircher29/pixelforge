@@ -23,6 +23,15 @@ class ToastStore {
   private timers = new Map<number, ReturnType<typeof setTimeout>>();
 
   push(kind: ToastKind, message: string, opts: { detail?: string; timeout?: number } = {}): number {
+    // The same message already showing (e.g. a refusal fired on pointer-down and again
+    // on the first move): keep one and restart its timer instead of stacking copies.
+    const dup = this.items.find((x) => x.kind === kind && x.message === message && x.detail === opts.detail);
+    if (dup) {
+      const t = this.timers.get(dup.id);
+      if (t) clearTimeout(t);
+      if (dup.timeout > 0) this.timers.set(dup.id, setTimeout(() => this.dismiss(dup.id), dup.timeout));
+      return dup.id;
+    }
     const id = ++this.seq;
     const item: ToastItem = { id, kind, message, timeout: opts.timeout ?? DEFAULT_TIMEOUT[kind] };
     if (opts.detail) item.detail = opts.detail;
