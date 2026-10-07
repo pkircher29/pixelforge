@@ -28,13 +28,17 @@ function cubicWeight(t: number): number {
 export class Raster implements IRaster {
   readonly width: number;
   readonly height: number;
-  readonly data: Uint8ClampedArray<ArrayBuffer>;
+  protected denseData: Uint8ClampedArray<ArrayBuffer> | undefined;
+  get data(): Uint8ClampedArray<ArrayBuffer> {
+    return this.denseData ??= new Uint8ClampedArray(this.width * this.height * 4);
+  }
 
   /**
    * Create a raster. When `data` is given it is used as-is (not copied) and must have
    * exactly `width * height * 4` bytes.
+   * `deferAllocation` is reserved for storage subclasses that override the data accessor.
    */
-  constructor(width: number, height: number, data?: Uint8ClampedArray<ArrayBuffer>) {
+  constructor(width: number, height: number, data?: Uint8ClampedArray<ArrayBuffer>, deferAllocation = false) {
     if (!Number.isInteger(width) || !Number.isInteger(height) || width < 0 || height < 0) {
       throw new RangeError(`Raster: invalid size ${width}x${height}`);
     }
@@ -46,9 +50,9 @@ export class Raster implements IRaster {
           `Raster: data length ${data.length} != ${width}x${height}x4 (${width * height * 4})`,
         );
       }
-      this.data = data;
-    } else {
-      this.data = new Uint8ClampedArray(width * height * 4);
+      this.denseData = data;
+    } else if (!deferAllocation) {
+      this.denseData = new Uint8ClampedArray(width * height * 4);
     }
   }
 

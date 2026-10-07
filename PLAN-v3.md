@@ -161,6 +161,19 @@ See `docs/oauth-setup.md` for configuration and verification boundaries.
 
 ## 1. Polish backlog (from v0.2 QA — all must close)
 
+Tiling implementation progress: `TiledRaster` now provides sparse 256×256 RGBA tiles
+behind `IRaster`/`Raster`, copy-on-write clones, sparse pixel/fill/clear/crop operations,
+alpha bounds and detached tile readback. Empty/cleared tiles hold no pixel buffer;
+transparent pixels with nonzero RGB are preserved. The legacy writable `data` getter
+explicitly materializes a contiguous buffer, preserving old callers' mutation contract.
+Inherited bulk operations still take that compatibility path. Five new tests cover
+tile edges, clipping, pixel equivalence, snapshot isolation, array compatibility and
+200 retained snapshots across 30 empty 4000×3000 rasters with one-pixel edits. That
+isolated test retains 50 MiB of unique pixel buffers; it is **not** an app memory
+benchmark. All 692 tests and Svelte checks pass. Document factories, touched-tile
+history integration, bulk operations, per-tile GL uploads, workers, non-destructive
+cropping and the full 1.5 GB benchmark gate remain open.
+
 1. Tooltips clip at panel/window edges → one tooltip layer at app root with edge-aware placement (flip/shift).
 2. Navigator group too short when expanded → per-group min height (Navigator ≥ 180 px incl. zoom row); dock respects mins when distributing.
 3. Custom brush tips show a round cursor → cursor renders the actual tip outline (marching-squares of the tip alpha at current size/angle/roundness, cached).
