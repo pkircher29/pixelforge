@@ -9,7 +9,7 @@
   import Icon from "$lib/ui/icons/Icon.svelte";
   import ProviderGlyph from "./ProviderGlyph.svelte";
   import { chipTitle, pickerLayout, DEFAULT_MAX_CHIPS } from "$lib/ai/picker";
-  import { isReady, type ProviderId, type ProviderInfo } from "$lib/ai/types";
+  import { authLabel, isReady, notReadyNote, type ProviderId, type ProviderInfo } from "$lib/ai/types";
 
   interface Props {
     providers: readonly ProviderInfo[];
@@ -48,8 +48,8 @@
   <button type="button" class="sel" class:open bind:this={btn} aria-haspopup="listbox" aria-expanded={open} aria-label="Provider" title={current ? chipTitle(current) : "Choose a provider"} onclick={() => (open = !open)} onkeydown={onKey}>
     {#if current}
       <ProviderGlyph provider={current} />
-      <span class="name">{current.name}</span>
-      {#if !isReady(current)}<span class="nokey">no key</span>{/if}
+      <span class="name">{authLabel(current)}</span>
+      {#if !isReady(current)}<span class="nokey">{notReadyNote(current)}</span>{/if}
     {:else}
       <span class="name dim">{all.length ? "Choose…" : "No providers"}</span>
     {/if}
@@ -63,8 +63,8 @@
         <button type="button" role="option" class="row" class:on={p.id === selected} aria-selected={p.id === selected} title={chipTitle(p)} onclick={() => pick(p.id)}>
           <span class="chk">{#if p.id === selected}<Icon name="check" size={12} />{/if}</span>
           <ProviderGlyph provider={p} />
-          <span class="rname">{p.name}</span>
-          <span class="meta">{isReady(p) ? p.vendor : "no key"}</span>
+          <span class="rname">{authLabel(p)}</span>
+          <span class="meta">{isReady(p) ? (p.account?.email ?? p.vendor) : notReadyNote(p)}</span>
         </button>
       {/each}
       {#if builtins.length && customs.length}<div class="sep"></div>{/if}

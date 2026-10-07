@@ -106,6 +106,48 @@ pub enum Error {
     /// JSON (de)serialization failure.
     #[error("JSON error: {0}")]
     Json(#[from] serde_json::Error),
+
+    /// The signed-in subscription cannot be used for this request through a third-party
+    /// app (e.g. ChatGPT plan tokens and image generation). Never retried, never silently
+    /// re-routed to an API key.
+    #[error("{message}")]
+    PlanNotEligible {
+        /// Provider whose plan refused.
+        provider: ProviderId,
+        /// User-facing explanation.
+        message: String,
+    },
+
+    /// The subscription's usage cap for third-party apps is used up.
+    #[error("{message}")]
+    PlanLimit {
+        /// Provider whose plan is capped.
+        provider: ProviderId,
+        /// Unix seconds when usage resets, when the provider said so.
+        resets_at: Option<u64>,
+        /// User-facing explanation.
+        message: String,
+    },
+
+    /// Subscription sign-in failed or must be redone. `code` is one of the stable
+    /// `ai_oauth_*` identifiers listed in `docs/ipc.md`.
+    #[error("{message}")]
+    OAuth {
+        /// Stable `ai_oauth_*` code.
+        code: &'static str,
+        /// User-facing explanation.
+        message: String,
+    },
+}
+
+impl Error {
+    /// Shorthand for [`Error::OAuth`].
+    pub fn oauth(code: &'static str, message: impl Into<String>) -> Self {
+        Error::OAuth {
+            code,
+            message: message.into(),
+        }
+    }
 }
 
 /// Alias matching the name used in `PLAN.md` section 2.2.
@@ -132,6 +174,9 @@ impl Error {
             Error::KeyStore(_) => "ai_key_store",
             Error::Io(_) => "io",
             Error::Json(_) => "json",
+            Error::PlanNotEligible { .. } => "ai_plan_not_eligible",
+            Error::PlanLimit { .. } => "ai_plan_limit",
+            Error::OAuth { code, .. } => code,
         }
     }
 

@@ -33,6 +33,7 @@ pub mod ipc;
 pub mod jobs;
 pub mod keystore;
 pub mod mask;
+pub mod oauth;
 pub mod provider;
 pub mod providers;
 pub mod secret;

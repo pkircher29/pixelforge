@@ -43,7 +43,14 @@ use tauri::ipc::{InvokeBody, Request, Response};
 use tauri::{AppHandle, Emitter, State};
 use tokio::sync::broadcast::error::RecvError;
 
-use crate::commands::settings::{custom_registry, key_store, load_key, load_key_opt, validate_key};
+use std::collections::HashMap;
+
+use crate::commands::oauth::{
+    auth_pref, auth_rows, session_for, subscription_provider, AuthMode, AuthRow,
+};
+use crate::commands::settings::{
+    custom_registry, key_store, load_key, load_key_opt, settings_snapshot, validate_key,
+};
 use crate::error::{CommandError, CommandResult};
 use crate::state::AppState;
 
@@ -88,10 +95,33 @@ pub struct ProviderInfo {
     pub prompt_assist: bool,
     /// A secret is optional for this provider (local servers).
     pub key_optional: bool,
+    /// Offered auth modes: `["api_key"]`, or `["api_key", "subscription"]` (ChatGPT, Grok).
+    pub auth_modes: Vec<&'static str>,
+    /// The mode requests use right now.
+    pub auth_active: AuthMode,
+    /// Signed-in subscription account, when there is one.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub account: Option<AccountInfo>,
+}
+
+/// Signed-in account shown next to the provider.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AccountInfo {
+    /// E-mail from the ID token.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub email: Option<String>,
+    /// Plan name, where the vendor documents it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub plan: Option<String>,
 }
 
 /// Pure builder for the built-in rows (unit-testable without Tauri).
-pub fn provider_rows(has_key: impl Fn(&ProviderId) -> bool, backend: &str) -> Vec<ProviderInfo> {
+pub fn provider_rows(
+    has_key: impl Fn(&ProviderId) -> bool,
+    backend: &str,
+    auth: &HashMap<ProviderId, AuthRow>,
+) -> Vec<ProviderInfo> {
     ProviderId::BUILTIN
         .into_iter()
         .map(|id| {
@@ -101,7 +131,19 @@ pub fn provider_rows(has_key: impl Fn(&ProviderId) -> bool, backend: &str) -> Ve
                 ProviderId::OpenAi => pf_ai::capabilities::OPENAI_EDIT_MODEL.to_owned(),
                 _ => default_model.clone(),
             };
+            let row = auth.get(&id).cloned().unwrap_or_default();
+            let on_plan = row.active == AuthMode::Subscription;
+            let account = row.account.map(|(email, plan)| AccountInfo { email, plan });
             ProviderInfo {
+                // ChatGPT on the plan rewrites prompts (text Responses are allowed).
+                prompt_assist: id == ProviderId::OpenAi && on_plan && account.is_some(),
+                auth_modes: if row.modes.is_empty() {
+                    vec!["api_key"]
+                } else {
+                    row.modes
+                },
+                auth_active: row.active,
+                account,
                 name: id.label().into_owned(),
                 vendor: id.vendor().to_owned(),
                 has_key: has_key(&id),
@@ -113,7 +155,6 @@ pub fn provider_rows(has_key: impl Fn(&ProviderId) -> bool, backend: &str) -> Ve
                 kind: "builtin".to_owned(),
                 local: false,
                 icon: "cloud".to_owned(),
-                prompt_assist: false,
                 key_optional: false,
                 id,
             }
@@ -158,6 +199,9 @@ pub fn custom_rows(
                 icon: c.icon().to_owned(),
                 prompt_assist: c.kind.prompt_assist(),
                 key_optional: !c.kind.requires_auth(),
+                auth_modes: vec!["api_key"],
+                auth_active: AuthMode::ApiKey,
+                account: None,
                 id,
             }
         })
@@ -172,9 +216,11 @@ pub async fn ai_list_providers(
 ) -> CommandResult<Vec<ProviderInfo>> {
     let store = key_store(&app, &state)?;
     let registry = custom_registry(&app, &state)?;
+    let settings = settings_snapshot(&app, &state)?;
     tauri::async_runtime::spawn_blocking(move || {
         let has = |id: &ProviderId| store.has(id).unwrap_or(false);
-        let mut rows = provider_rows(has, store.backend());
+        let auth = auth_rows(store.as_ref(), &settings);
+        let mut rows = provider_rows(has, store.backend(), &auth);
         match registry.load() {
             Ok(customs) => rows.extend(custom_rows(&customs, has, store.backend())),
             Err(e) => tracing::warn!("custom provider registry unreadable: {e}"),
@@ -246,6 +292,10 @@ async fn resolve_provider(
             Ok(build_custom_provider(&cfg, auth)?)
         }
         builtin => {
+            // Subscription mode (ChatGPT / Grok sign-in) never falls back silently.
+            if let Some(p) = subscription_provider(app, state, builtin).await? {
+                return Ok(p);
+            }
             let key = load_key(store, builtin.clone()).await?;
             // `PF_AI_BASE_URL_*` (dev: scripts/fake-ai-server.mjs) redirects the provider.
             Ok(build_provider_from_env(builtin, AuthMethod::ApiKey(key))?)
@@ -565,10 +615,36 @@ pub async fn ai_prompt_assist(
         .first()
         .filter(|b| !b.is_empty())
         .map(|b| ImageBytes::png(b.to_vec()));
+    if header.provider == ProviderId::OpenAi {
+        let settings = settings_snapshot(&app, &state)?;
+        if auth_pref(&settings, &ProviderId::OpenAi).mode != AuthMode::Subscription {
+            return Err(CommandError::new(
+                "ai_unsupported",
+                "Improve prompt with ChatGPT needs \"ChatGPT subscription\" sign-in (AI Providers)",
+            ));
+        }
+        let session = session_for(&app, &state, &ProviderId::OpenAi).await?;
+        let t = session.snapshot().await;
+        let model = pf_ai::oauth::openai_siwc::pick_model(&t.models, None).ok_or_else(|| {
+            CommandError::new(
+                "ai_plan_not_eligible",
+                "Your ChatGPT plan lists no models Pixelforge may call",
+            )
+        })?;
+        let cfg = pf_ai::oauth::openai_siwc::SiwcConfig::from_env();
+        return Ok(pf_ai::oauth::openai_siwc::prompt_assist(
+            &session,
+            &cfg,
+            &model,
+            &header.text,
+            image.as_ref(),
+        )
+        .await?);
+    }
     let ProviderId::Custom(cid) = &header.provider else {
         return Err(CommandError::new(
             "ai_unsupported",
-            "prompt assist needs a custom provider of kind Ollama",
+            "prompt assist needs a custom provider of kind Ollama, or ChatGPT on a subscription",
         ));
     };
     let cfg = custom_entry(custom_registry(&app, &state)?, cid).await?;
@@ -606,8 +682,30 @@ mod tests {
 
     #[test]
     fn rows_list_all_three_providers_with_capabilities() {
-        let rows = provider_rows(|id| *id == ProviderId::XAi, "file");
+        let mut auth = HashMap::new();
+        auth.insert(
+            ProviderId::OpenAi,
+            AuthRow {
+                modes: vec!["api_key", "subscription"],
+                active: AuthMode::Subscription,
+                account: Some((Some("me@example.com".into()), None)),
+            },
+        );
+        let rows = provider_rows(|id| *id == ProviderId::XAi, "file", &auth);
         assert_eq!(rows.len(), 3);
+        assert!(
+            rows[0].prompt_assist,
+            "ChatGPT on the plan improves prompts"
+        );
+        let j0 = serde_json::to_value(&rows[0]).expect("serialize");
+        assert_eq!(
+            j0["authModes"],
+            serde_json::json!(["api_key", "subscription"])
+        );
+        assert_eq!(j0["authActive"], "subscription");
+        assert_eq!(j0["account"]["email"], "me@example.com");
+        assert!(!rows[1].prompt_assist);
+        assert_eq!(rows[2].auth_modes, vec!["api_key"]);
         assert_eq!(rows[0].id, ProviderId::OpenAi);
         assert_eq!(rows[0].default_model, "gpt-image-2.5-flare");
         assert_eq!(rows[0].edit_model, "gpt-image-2.5-sunburst");

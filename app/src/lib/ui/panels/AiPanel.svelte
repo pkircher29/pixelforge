@@ -30,7 +30,7 @@
   import ScrubbyNumber from "$lib/ui/controls/ScrubbyNumber.svelte";
   import { aiSections, modeTooltip, progressFraction } from "./ai-panel-ui.svelte";
   import { aiUi, type SizeOption } from "$lib/ai/ui.svelte";
-  import { type AiMode, type ImageSize, type ProviderId } from "$lib/ai/types";
+  import { isReady, notReadyNote, onSubscription, type AiMode, type ImageSize, type ProviderId } from "$lib/ai/types";
 
   let promptEl = $state<HTMLTextAreaElement | null>(null);
   let dropEl = $state<HTMLDivElement | null>(null);
@@ -103,12 +103,14 @@
   const chosenSize = $derived(sizeOptions.find((o) => o.key === aiUi.sizeKey)?.size);
 
   const cost = $derived(
-    provider
+    provider && onSubscription(provider)
+      ? { usd: 0, perImage: 0, approx: false, note: "Uses your subscription plan: no per-request API charge (counts toward the plan's limits)." }
+      : provider
       ? estimateCost({ provider: provider.id, model: effectiveModel, mode, size: chosenSize, quality: aiUi.quality || undefined, n: aiUi.n, local: provider.local })
       : null,
   );
 
-  const canRun = $derived(Boolean(provider && aiUi.prompt.trim().length > 0 && !busy && (provider?.hasKey || provider?.keyOptional || !hasTauri())));
+  const canRun = $derived(Boolean(provider && aiUi.prompt.trim().length > 0 && !busy && ((provider ? isReady(provider) : false) || !hasTauri())));
   const assistants = $derived(assistProviders(aiUi.providers));
   let improving = $state(false);
 
@@ -177,7 +179,7 @@
 
   function pickProvider(id: ProviderId): void {
     const p = aiUi.providers.find((x) => x.id === id);
-    if (p && !p.hasKey && !p.keyOptional && hasTauri()) {
+    if (p && !isReady(p) && hasTauri()) {
       openApiKeysDialog({ select: id });
     }
     aiUi.providerId = id;
@@ -483,8 +485,8 @@
       <span class="cost" title={cost.note}>{provider?.local ? "Free" : formatUsd(cost.usd, cost.approx)}</span>
     {/if}
   </div>
-  {#if provider && !provider.hasKey && !provider.keyOptional && hasTauri()}
-    <button type="button" class="textbtn keylink" onclick={() => openApiKeysDialog({ select: provider.id })}>Add a {provider.name} key…</button>
+  {#if provider && !isReady(provider) && hasTauri()}
+    <button type="button" class="textbtn keylink" onclick={() => openApiKeysDialog({ select: provider.id })}>{onSubscription(provider) ? `Sign in to ${provider.name} (${notReadyNote(provider)})…` : `Add a ${provider.name} key…`}</button>
   {/if}
 
   {#if notice}

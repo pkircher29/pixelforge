@@ -10,6 +10,11 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { decodeFrame, encodeFrame } from "$lib/io/frame";
 import type {
+  AuthMode,
+  ImageAccess,
+  OAuthEvent,
+  OAuthStart,
+  OAuthStatus,
   CustomKindInfo,
   CustomProvider,
   EditParams,
@@ -162,6 +167,50 @@ export function promptAssist(provider: ProviderId, text: string, image?: Uint8Ar
 
 export function hubSearch(query: string, pipelineTag = "text-to-image", limit = 20): Promise<HubModel[]> {
   return invoke<HubModel[]>("ai_hub_search", { query, pipelineTag, limit });
+}
+
+// ---------------------------------------------------------------------------
+// Subscription sign-in (docs/ipc.md "Subscription sign-in")
+// ---------------------------------------------------------------------------
+
+/** Sign-in progress topic. */
+export const OAUTH_EVENT = "ai://oauth";
+
+/** Opens the browser; the outcome arrives on `ai://oauth` (listen first). */
+export function oauthStart(provider: ProviderId): Promise<OAuthStart> {
+  return invoke<OAuthStart>("ai_oauth_start", { provider });
+}
+
+export function oauthCancel(provider: ProviderId): Promise<boolean> {
+  return invoke<boolean>("ai_oauth_cancel", { provider });
+}
+
+export function oauthStatus(provider: ProviderId): Promise<OAuthStatus> {
+  return invoke<OAuthStatus>("ai_oauth_status", { provider });
+}
+
+export function oauthSignOut(provider: ProviderId): Promise<OAuthStatus> {
+  return invoke<OAuthStatus>("ai_oauth_sign_out", { provider });
+}
+
+/** `live: true` sends a real image request with the plan token (may use one image of the plan). */
+export function oauthCheckImages(provider: ProviderId, live = false): Promise<ImageAccess> {
+  return invoke<ImageAccess>("ai_oauth_check_images", { provider, live });
+}
+
+export interface AuthConfigure {
+  mode?: AuthMode;
+  fallbackToKey?: boolean;
+  /** xAI only: the client ID xAI issued to Pixelforge ("" clears it). */
+  xaiClientId?: string;
+}
+
+export function authConfigure(provider: ProviderId, cfg: AuthConfigure): Promise<OAuthStatus> {
+  return invoke<OAuthStatus>("ai_auth_configure", { provider, ...cfg });
+}
+
+export function onOAuthEvents(handler: (ev: OAuthEvent) => void): Promise<UnlistenFn> {
+  return listen<OAuthEvent>(OAUTH_EVENT, (e) => handler(e.payload));
 }
 
 /** Subscribe to every job event. Await this before the first submit. */

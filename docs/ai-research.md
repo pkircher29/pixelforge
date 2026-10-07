@@ -160,7 +160,7 @@ Trait sketch: `capabilities() -> {generate, mask_edit, instruct_edit, multi_ref,
 - **xAI**: blessed for a handful of named open-source agents via xAI's shared public OAuth client; no docs.x.ai documentation, no enrollment process, allowlist 403s. Not shippable. Use API keys.
 - **Google**: explicitly **not supported** — AI Pro/Ultra never covered the API, consumer OAuth to the CLI/Code Assist backend was removed 2026-06-18, and doing it anyway is a ToS violation that has gotten subscribers banned. API key (Cloud-billed project) is the only option.
 
-**Decision for Pixelforge v1**: API-key auth for all three now. `AuthMethod::OAuth` stays in the trait; OpenAI SIWC (loopback PKCE) is a v1.1 task gated on an empirical check that a plan token can run the Responses `image_generation` tool.
+**Decision for Pixelforge v1**: API-key auth for all three now. `AuthMethod::OAuth` stays in the trait; OpenAI SIWC (loopback PKCE) is a v1.1 task gated on an empirical check that a plan token can run the Responses `image_generation` tool. **Update 2026-10-06 (section 5)**: OpenAI's preview-limitations page now lists image generation as unsupported for plan tokens; SIWC is implemented for sign-in + "Improve prompt", images stay on API keys.
 
 ---
 
@@ -235,3 +235,154 @@ Launch with `--api` (`--listen` for LAN, `--api-auth user:pass` for basic auth);
 | `comfy_ui` | yes | yes | **native** | no | yes (multiples of 8) | yes | `GET /system_stats` + `/object_info/CheckpointLoaderSimple` |
 | `a1111` | yes | yes | **native** | no | yes (multiples of 8) | yes | `GET /sdapi/v1/sd-models` |
 | `replicate` | yes | per model (`image` input) | off | no | yes | no | `GET /v1/models/{owner}/{name}` |
+
+---
+
+## 5. Subscription sign-in (verified 2026-10-06)
+
+Paul's rule: **only officially supported flows, never reverse-engineered or borrowed auth.**
+Re-verified from primary sources for the `feat/oauth-siwc` branch. Implementation:
+`crates/pf-ai/src/oauth/`, `app/src-tauri/src/commands/oauth.rs`, contract in `docs/ipc.md`
+"Subscription sign-in".
+
+### 5.1 OpenAI "Sign in with ChatGPT" (SIWC): implemented
+
+Sources: https://developers.openai.com/siwc , /siwc/quickstart , /siwc/request-client-id ,
+/siwc/ui-ux-guidelines , /siwc/token-sharing-open-source and its subpages `/sign-in`,
+`/profiles-and-sessions`, `/models-and-inference`, `/token-reference`, `/errors-and-recovery`,
+`/preview-limitations`; cookbook https://developers.openai.com/cookbook/articles/sign-in-with-chatgpt ;
+live discovery https://auth.openai.com/.well-known/openid-configuration (fetched 2026-10-06).
+
+- **Eligibility of the app**: "These docs explain ChatGPT plan usage for open-source and locally
+  hosted apps" (overview); the cookbook says the integration is "available for open-source tools
+  and personal projects that run locally". Commercial / remotely hosted apps use the interest form
+  (`/siwc/request-client-id`). Pixelforge (MIT, local desktop) qualifies for self-serve
+  **dynamic client registration**; no client ID has to be requested.
+- **Authorize**: `GET https://auth.openai.com/api/accounts/authorize` with `client_id=dynamic_agent_client`
+  (first sign-in; then the issued `oaiapp_...`), `agent_name_hint=Pixelforge` (first registration only),
+  `ext_agent_host_id` (required, stable per host, `urn:uuid:` allowed; Pixelforge persists it as
+  `siwcHostId` in settings.json), `response_type=code`,
+  `scope=openid profile email offline_access resource.invoke chatgpt.tokens.use.direct`,
+  `resource=https://api.openai.com/v1`, fresh `state` and `nonce`, `code_challenge_method=S256`,
+  `code_challenge`; optional `login_hint`, `id_token_hint`.
+- **Redirect**: `http://127.0.0.1:<PORT>/callback` exactly (loopback IP, not `localhost`; path
+  `/callback`; port may differ per attempt; same `redirect_uri` for the exchange). The callback carries
+  `code`, `scope`, `state` and the **issued `client_id`**.
+- **Token**: `POST https://auth.openai.com/api/accounts/oauth/token` (form) `grant_type=authorization_code`,
+  issued `client_id`, `code`, `code_verifier`, `redirect_uri`, `resource`; no client secret. Validate the
+  ID token (issuer, audience, nonce) and the scopes; if `chatgpt.tokens.use.direct` is missing, keep the
+  sign-in but mark plan usage disabled. Discovery lists `token_endpoint_auth_methods_supported: none`.
+- **Lifetimes / refresh** (`/token-reference`, `/profiles-and-sessions`): access token 1 h, refresh token
+  30 days, rotated on every refresh (30-day window restarts). Refresh = same endpoint, `grant_type=refresh_token`,
+  issued `client_id`, `refresh_token`, `resource`, no `scope`; serialise refreshes. Unusable on
+  `invalid_grant`, `invalid_refresh_token`, `token_expired`, `refresh_token_expired`,
+  `refresh_token_invalidated`, `refresh_token_reused` -> sign in again.
+- **Sign-out**: `revocation_endpoint` = `https://auth.openai.com/api/accounts/oauth/revoke`
+  (`token=<refresh>`, `token_type_hint=refresh_token`, `client_id`); retry with backoff, then clear.
+- **Plan name**: not exposed. The access token's `https://api.openai.com/auth` claim is "intentionally
+  opaque"; the ID token / userinfo carry only standard OIDC claims (discovery `claims_supported`). The UI
+  shows the e-mail and says the plan isn't shared with apps.
+- **What the plan token may call** (`/models-and-inference`, `/preview-limitations`):
+  `GET https://api.openai.com/v1/models` (use `models[]` entries with `visibility: "list"`, show
+  `display_name`, send `slug`) and `POST https://api.openai.com/v1/responses` with `store: false` and
+  `stream: true`, successful only after `response.completed`. Rejected parameters: `background`,
+  `conversation`, `max_output_tokens`, `max_tool_calls`, `metadata`, `moderation`, `multi_agent`, `prompt`,
+  `prompt_cache_retention`, `safety_identifier`, `temperature`, `top_logprobs`, `top_p`, `truncation`,
+  `user`; explicit system messages rejected (use `instructions`). Inputs: "Text, images, and files are
+  supported when the selected model accepts them." Tools supported: function/custom tools, web search.
+  **Unsupported tools: "Image generation, file search, Code Interpreter, native computer use, hosted
+  MCP/connectors, and Responses `tool_search`".** `/v1/images/*` is not a listed route
+  (`subscription_sharing_route_not_supported` is the documented error for wrong routes). The docs point
+  apps at the public Responses API, not ChatGPT's internal `backend-api` (some third-party agents use a
+  `backend-api/codex/images` route with Codex tokens; Pixelforge does not).
+- **Verdict on images: a ChatGPT plan token may NOT generate images through Pixelforge.** Image requests in
+  subscription mode fail locally with `ai_plan_not_eligible` ("Your ChatGPT plan can't generate images
+  through third-party apps — use an API key for images"). The Responses `image_generation` path is
+  implemented and tested against the documented event shapes, but only runs after an explicit, opt-in
+  "live test" succeeds for that account (it would bill one image to the plan); the server's
+  `subscription_sharing_unsupported_capability` also maps to `ai_plan_not_eligible`.
+  **What the plan does power: "✨ Improve prompt"** (text Responses, explicitly allowed).
+- **Errors** (`/errors-and-recovery`): `subscription_sharing_usage_limit_exceeded` 429 -> `ai_plan_limit`
+  (link "Manage usage" = https://chatgpt.com/settings/usage), `subscription_sharing_user_not_eligible` 403,
+  `subscription_sharing_unsupported_capability` 400, `subscription_sharing_route_not_supported` 403,
+  `chatpass_v2_scope_not_authorized` 403 -> `ai_plan_not_eligible`; `subscription_sharing_invalid_user` 401
+  -> refresh then re-auth; `subscription_sharing_usage_unavailable` / `_user_unavailable` 503 -> retry.
+  These can arrive mid-stream in `response.failed`. **"No silent fallbacks"**: Pixelforge only re-sends
+  with the API key when the user ticks "Fall back to API key when the plan limit is hit" (off by default).
+- **Usage caps** (WorkOS write-up of the DevDay 2026-09-29 announcement,
+  https://workos.com/blog/sign-in-with-chatgpt-plan-usage-scope , not on developers.openai.com): Plus and Pro
+  only; users set a weekly per-app limit in ChatGPT Settings > Usage; Plus shares a 5-hour window across apps.
+  Reset times are not documented in the error body; Pixelforge shows one if `resets_at` / `Retry-After` is sent.
+- **Branding** (`/siwc/ui-ux-guidelines`, `/siwc/quickstart`): label "Sign in with ChatGPT" (or "Continue
+  with ChatGPT"), comparable prominence to other sign-in options, "approved OpenAI branding"; first-use copy
+  "Eligible usage in this app uses your ChatGPT plan."; "Using ChatGPT plan" near the model picker; "Manage
+  usage" link. No logo asset was published on the pages read, so Pixelforge uses a text-only neutral
+  black button (no OpenAI mark).
+
+### 5.2 xAI (SuperGrok / X Premium): implemented behind a config-only client ID; **disabled by default**
+
+Sources: https://x.ai/news/grok-opencode ("Use Grok in OpenCode": "Pick the sign-in method that fits your
+setup — both use your Grok subscription"; "More open-source agents and integrations are coming soon."),
+Hermes Agent https://hermes-agent.nousresearch.com/docs/guides/xai-grok-oauth , OpenClaw
+https://docs.openclaw.ai/providers/xai , discovery https://auth.x.ai/.well-known/openid-configuration ,
+docs.x.ai (CLI reference https://docs.x.ai/build/cli/reference , image editing
+https://docs.x.ai/developers/model-capabilities/images/editing , debugging/support
+https://docs.x.ai/docs/key-information/debugging ), Hermes PR
+https://github.com/NousResearch/hermes-agent/pull/26534 (2026-05-15), Hermes issue
+https://github.com/NousResearch/hermes-agent/issues/26847 , the feature request
+https://github.com/diegosouzapw/OmniRoute/issues/2760 (2026-05-26), Kilo Code source
+`packages/opencode/src/plugin/xai.ts` (github.com/Kilo-Org/kilocode). The r/hermesagent thread "AI Services
+that work with OAuth" was not fetched (Reddit blocks the fetcher); nothing below depends on it.
+
+- **Endpoints are public**: discovery publishes `device_authorization_endpoint`
+  `https://auth.x.ai/oauth2/device/code`, `token_endpoint` `/oauth2/token`, `revocation_endpoint`
+  `/oauth2/revoke`, `userinfo_endpoint`, grants `authorization_code`, `refresh_token`,
+  `urn:ietf:params:oauth:grant-type:device_code`, PKCE S256, `token_endpoint_auth_methods_supported` incl.
+  `none`, scopes incl. `openid profile email offline_access api:access grok-cli:access`.
+- **Client registration is NOT public.** docs.x.ai documents OAuth only for xAI's own CLI (`grok login
+  --oauth | --device-auth`) and for connectors; there is no developer page, form or console section to
+  register a third-party OAuth client. The blessed partners all send **xAI's shared Grok-CLI client ID**:
+  OpenClaw's docs say "OpenClaw uses xAI's shared OAuth client" and the consent screen shows "Grok Build";
+  Kilo Code's source comments "we reuse the Grok-CLI client_id that xAI ships ... Source of truth:
+  hermes-agent PR #26534" and hard-codes it with scope `openid profile email offline_access grok-cli:access
+  api:access`, a fixed loopback port and `plan=generic`. Eligibility is server-side: "xAI decides which
+  accounts can receive OAuth API tokens" (OpenClaw); Hermes documents HTTP 403 for standard SuperGrok
+  subscribers (issue #26847). **Reusing that client ID is borrowing another product's credentials, so
+  Pixelforge does not.** We did not read any other app's token files.
+- **Does the token work for Grok Imagine?** Not documented on docs.x.ai (the image pages show only
+  `Authorization: Bearer $XAI_API_KEY`). Partner evidence says yes: Hermes PR #26534 "The same OAuth bearer
+  covers every direct-to-xAI surface (chat runtime, auxiliary tasks, TTS, image gen, video gen,
+  transcription)", and Hermes' `plugins/image_gen/xai` posts to `/v1/images/generations` and
+  `/v1/images/edits` with that credential; OpenClaw says the OAuth credential "also powers ... xAI
+  image/video generation". Chat goes through the Responses API (`codex_responses`). Treat as
+  partner-verified, not vendor-documented; Pixelforge maps a post-refresh 401/403 to `ai_plan_not_eligible`
+  and a 429 to `ai_plan_limit` ("subscription plans have daily image limits") with the reset time from
+  `Retry-After`.
+- **Edits re-confirmed 2026-10-06**: docs.x.ai still says the edits endpoint "requires `application/json`"
+  and has no mask field (a pasted claim of multipart + mask is not on docs.x.ai). Pixelforge keeps mask
+  emulation for Grok.
+- **What Pixelforge ships**: the full RFC 8628 device flow (code + verification URL, copy, open browser,
+  polling with `authorization_pending` / `slow_down`, refresh, revocation, sign-out) against the discovery
+  endpoints, using a client ID **only** from `PF_XAI_OAUTH_CLIENT_ID` or the Settings field "xAI OAuth
+  client ID (issued to Pixelforge by xAI)", empty by default. With none, the Grok card shows a disabled
+  "Sign in with SuperGrok — awaiting xAI approval for Pixelforge" with this explanation. Scopes default to
+  `openid profile email offline_access api:access` (override `PF_XAI_OAUTH_SCOPES` if xAI specifies others).
+- **Application route (what Paul does)**: there is no published form. The documented developer contacts are
+  `support@x.ai` (docs.x.ai "Debugging errors") and the xAI API Developer Discord `#help`; business contact is
+  `sales@x.ai` / https://x.ai/contact-sales (linked from the OpenCode post, which promises more open-source
+  integrations). Send xAI: project name Pixelforge, repo https://github.com/pkircher29/pixelforge (MIT,
+  local desktop app, Tauri/Rust), maintainer and contact e-mail; the request: "a public OAuth client ID for
+  SuperGrok / X Premium subscription sign-in, like the ones used by Hermes Agent, OpenClaw and OpenCode";
+  grant type device code (RFC 8628) and optionally authorization code + PKCE with loopback redirect
+  `http://127.0.0.1/callback` (random port); scopes needed (identity, `offline_access`, API access for
+  Grok Imagine image generation/editing and chat for prompt rewriting); which tiers are eligible and the
+  quota semantics (daily image limits, `Retry-After`); the consent-screen name ("Pixelforge"); confirmation
+  that `/v1/images/generations` and `/v1/images/edits` accept the token. Once issued, paste it into
+  AI Providers > Grok > "xAI OAuth client ID" (or set `PF_XAI_OAUTH_CLIENT_ID`); no code change needed.
+
+### 5.3 Google Gemini: not implemented (re-confirmed)
+
+https://ai.google.dev/gemini-api/docs/google-ai-plans (fetched 2026-10-06): "Google AI plan benefits for
+developer usage apply only within the Google AI Studio web interface. Direct use of the Gemini API (such as
+using API keys or external applications) is billed and managed separately." No subscription sign-in; the
+Gemini card says so and links the page. (Section 3 has the Code Assist deprecation and ToS history.)

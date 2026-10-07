@@ -91,11 +91,44 @@ an obfuscated file is used only where no keychain exists). Keys never leave your
 except in requests to the provider you chose. You pay the provider directly at their
 published rates; Pixelforge shows a cost estimate per job.
 
-Signing in with a ChatGPT / Grok / Gemini **subscription** instead of an API key is not
-supported in 0.1.0: Google forbids subscription use of the API, xAI's subscription
-OAuth is partner-only, and OpenAI's "Sign in with ChatGPT" is not yet documented for
-image endpoints (details in `docs/ai-research.md`). Pixelforge will never ship
-reverse-engineered auth.
+## Using your ChatGPT subscription
+
+Pixelforge only uses sign-in flows the vendor officially documents for apps like it, and
+never reverse-engineered or borrowed credentials. Sources and dates: `docs/ai-research.md`
+section 5.
+
+**ChatGPT (Plus / Pro): sign-in works, images still need an API key.** In **Edit > AI
+Providers > ChatGPT**, set *Authentication* to **ChatGPT subscription** and click **Sign in
+with ChatGPT**. Your browser opens OpenAI's sign-in page ("Sign in with ChatGPT", the flow
+OpenAI offers to open-source local apps); after you approve, it redirects to a one-shot
+listener on `127.0.0.1` and Pixelforge stores the tokens in your OS keychain. Then:
+
+- **What works:** ✨ **Improve prompt** runs on your plan (OpenAI allows text Responses on
+  plan tokens). Pixelforge shows your e-mail, refreshes the token by itself, and **Sign out**
+  revokes it. Usage counts against the per-app limit you set at
+  [chatgpt.com/settings/usage](https://chatgpt.com/settings/usage).
+- **What doesn't:** image generation and editing. OpenAI's
+  [preview limitations](https://developers.openai.com/siwc/token-sharing-open-source/preview-limitations)
+  list *image generation* among the tools that are unavailable with ChatGPT plan usage, so
+  image requests on the subscription stop with "Your ChatGPT plan can't generate images
+  through third-party apps — use an API key for images." **Check image access** shows the
+  documented verdict; an optional live test sends one small request in case OpenAI opens
+  this up for your account. Switch *Authentication* back to **API key** for images.
+- **Limits:** when the plan's limit is hit you get a clear message (with the reset time if
+  OpenAI sends one). Nothing silently switches to your API key; tick **Fall back to API key
+  when the plan limit is hit** if you want that.
+- OpenAI doesn't share your plan name with apps, so the dialog shows only your e-mail.
+
+**Grok (SuperGrok / X Premium): built, waiting on xAI.** xAI lets a few named open-source
+agents sign in with a subscription, but they all use xAI's own shared client, and xAI has not
+published a way for other apps to register. Pixelforge won't borrow that client, so the Grok
+card shows "Sign in with SuperGrok — awaiting xAI approval for Pixelforge" until xAI issues
+Pixelforge a client ID. The device-code flow is implemented: paste the ID into the Grok card
+(or set `PF_XAI_OAUTH_CLIENT_ID`) and it lights up. Use an xAI API key meanwhile.
+
+**Gemini (Google AI Pro / Ultra): not possible.** Google says AI plan benefits apply only
+inside Google AI Studio and the Gemini API is billed separately
+([source](https://ai.google.dev/gemini-api/docs/google-ai-plans)). Use an API key.
 
 ## Building from source
 
@@ -188,6 +221,29 @@ cancel) and `!block` (moderation). Options: `--size 512`, `--delay 1200`.
 
 The override only changes the host; requests still carry the stored key. Leave the
 variables unset for real providers.
+
+### Exercising subscription sign-in without an account
+
+`scripts/fake-openai-auth.mjs` emulates OpenAI's "Sign in with ChatGPT" authorization
+server (consent page that auto-continues, PKCE-checked token endpoint, refresh, revoke),
+the plan's `/v1/models` + streaming `/v1/responses`, and xAI's device flow with Grok
+Imagine. It answers image requests on the ChatGPT plan with OpenAI's documented
+"unsupported capability" error unless `FAKE_SIWC_IMAGES=allow`.
+
+```powershell
+node scripts/fake-openai-auth.mjs --port 8791 --auto 2500   # one terminal
+
+$b = "http://127.0.0.1:8791"
+$env:PF_OPENAI_AUTH_BASE = $b; $env:PF_AI_BASE_URL_OPENAI = $b   # ChatGPT sign-in + API
+$env:PF_XAI_AUTH_BASE = $b;    $env:PF_AI_BASE_URL_XAI = $b      # xAI device flow + images
+$env:PF_XAI_OAUTH_CLIENT_ID = "pixelforge-dev-fake"              # any value; the fake accepts it
+$env:PF_KEYSTORE = "file"                                        # keep dev tokens out of the keychain
+npm run tauri dev                                                # another terminal
+```
+
+A prompt containing `!limit` returns the plan usage-limit error; `FAKE_SIWC_DENY=1` makes
+the consent page decline; `FAKE_EXPIRES_IN=30` issues 30-second tokens to exercise refresh;
+`FAKE_XAI_IMAGES=deny` makes Grok Imagine reject the subscription token.
 
 ### Layout
 

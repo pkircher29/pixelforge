@@ -1,12 +1,15 @@
 //! Process-wide state shared by commands via `tauri::State<AppState>`.
 
+use std::collections::HashMap;
 use std::fmt;
 use std::path::Path;
 use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex, OnceLock};
 
+use pf_ai::oauth::OAuthSession;
 use pf_ai::{AutoKeyStore, CustomRegistry, JobManager, KeyStore, ProviderId};
 use serde::{Deserialize, Serialize};
+use tokio::sync::Notify;
 
 /// User settings, persisted as `settings.json` in the app config directory by the
 /// `settings_*` commands. Unknown keys round-trip through `extra` so other modules
@@ -57,6 +60,10 @@ pub struct AppState {
     pub custom_providers: OnceLock<Arc<CustomRegistry>>,
     /// `true` once the `ai://job/<id>` event forwarder task is running.
     pub ai_forwarder_started: AtomicBool,
+    /// Subscription sign-ins in progress (cancel handle per provider).
+    pub oauth_pending: Mutex<HashMap<ProviderId, Arc<Notify>>>,
+    /// Signed-in sessions, shared so refreshes are serialised across jobs.
+    pub oauth_sessions: Mutex<HashMap<ProviderId, Arc<OAuthSession>>>,
 }
 
 impl Default for AppState {
@@ -68,6 +75,8 @@ impl Default for AppState {
             keys: OnceLock::new(),
             custom_providers: OnceLock::new(),
             ai_forwarder_started: AtomicBool::new(false),
+            oauth_pending: Mutex::new(HashMap::new()),
+            oauth_sessions: Mutex::new(HashMap::new()),
         }
     }
 }
