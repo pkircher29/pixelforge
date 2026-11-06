@@ -28,9 +28,9 @@ export function customIdOf(id: ProviderId): string | null {
 }
 
 /** Wire names of the custom provider kinds (`crates/pf-ai/src/custom.rs`). */
-export type CustomKind = "openai_compat" | "hugging_face" | "ollama" | "comfy_ui" | "a1111" | "replicate" | "fal";
+export type CustomKind = "openai_compat" | "hugging_face" | "ollama" | "comfy_ui" | "a1111" | "replicate" | "fal" | "lama";
 
-export const CUSTOM_KINDS: readonly CustomKind[] = ["openai_compat", "hugging_face", "ollama", "comfy_ui", "a1111", "replicate", "fal"];
+export const CUSTOM_KINDS: readonly CustomKind[] = ["openai_compat", "hugging_face", "ollama", "comfy_ui", "a1111", "replicate", "fal", "lama"];
 
 /** Static per-kind data from `ai_custom_kinds`. */
 export interface CustomKindInfo {

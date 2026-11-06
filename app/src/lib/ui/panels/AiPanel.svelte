@@ -66,6 +66,7 @@
     return docStore.doc;
   });
   const provider = $derived(aiUi.provider);
+  const offline = $derived(provider?.kind === "lama");
   const caps = $derived(provider?.capabilities ?? null);
   const resolution = $derived.by(() => {
     void version;
@@ -76,7 +77,7 @@
   const effectiveModel = $derived(aiUi.model || (isEdit ? (provider?.editModel ?? "") : (provider?.defaultModel ?? "")));
   const maxRefs = $derived(Math.max(0, (caps?.maxRefs ?? 1) - 1));
   const maxN = $derived(Math.min(4, caps?.maxVariants ?? 1));
-  const variantCount = $derived(aiUi.generativeFill ? 3 : aiUi.n);
+  const variantCount = $derived(offline ? 1 : aiUi.generativeFill ? 3 : aiUi.n);
 
   const qualityOptions = $derived.by((): string[] => {
     if (!provider) return [];
@@ -131,7 +132,8 @@
       : null,
   );
 
-  const canRun = $derived(Boolean(provider && aiUi.prompt.trim().length > 0 && !busy && (!aiUi.generativeFill || (mode === "mask" && maxN >= 3)) && ((provider ? isReady(provider) : false) || !hasTauri())));
+  const supportedMode = $derived(mode === "generate" ? caps?.generate : mode === "instruct" ? caps?.instructEdit : caps?.maskEdit || caps?.instructEdit);
+  const canRun = $derived(Boolean(provider && supportedMode && (offline || aiUi.prompt.trim().length > 0) && !busy && (offline || !aiUi.generativeFill || (mode === "mask" && maxN >= 3)) && ((provider ? isReady(provider) : false) || !hasTauri())));
   const assistants = $derived(assistProviders(aiUi.providers));
   let improving = $state(false);
 
@@ -278,15 +280,15 @@
     const req: AiRunRequest = {
       provider,
       model: effectiveModel,
-      prompt: aiUi.prompt,
+      prompt: offline ? "Remove selected content" : aiUi.prompt,
       negativePrompt: aiUi.negativePrompt.trim() || undefined,
-      size: chosenSize,
+      size: offline ? undefined : chosenSize,
       n: variantCount,
-      generativeFill: aiUi.generativeFill,
+      generativeFill: !offline && aiUi.generativeFill,
       quality: aiUi.quality || undefined,
       ...aiUi.sampling,
       transparent: aiUi.transparent && provider.capabilities.transparentBg,
-      refs: aiUi.refs.map((r) => r.raster),
+      refs: offline ? [] : aiUi.refs.map((r) => r.raster),
       timeoutSecs: aiUi.timeoutSecs !== 180 ? aiUi.timeoutSecs : undefined,
       newDocument: aiUi.newDocument,
       forcedMode: aiUi.forcedMode,

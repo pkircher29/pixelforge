@@ -42,11 +42,13 @@ pub enum CustomKind {
     Replicate,
     /// fal.ai queued image endpoints.
     Fal,
+    /// Offline masked inpainting using a local LaMa ONNX file.
+    Lama,
 }
 
 impl CustomKind {
     /// Every kind, in "+ Add" menu order.
-    pub const ALL: [CustomKind; 7] = [
+    pub const ALL: [CustomKind; 8] = [
         CustomKind::OpenAiCompat,
         CustomKind::HuggingFace,
         CustomKind::Ollama,
@@ -54,6 +56,7 @@ impl CustomKind {
         CustomKind::A1111,
         CustomKind::Replicate,
         CustomKind::Fal,
+        CustomKind::Lama,
     ];
 
     /// Wire / registry string (`openai_compat`, ...).
@@ -66,6 +69,7 @@ impl CustomKind {
             CustomKind::A1111 => "a1111",
             CustomKind::Replicate => "replicate",
             CustomKind::Fal => "fal",
+            CustomKind::Lama => "lama",
         }
     }
 
@@ -79,6 +83,7 @@ impl CustomKind {
             CustomKind::A1111 => "Stable Diffusion WebUI / Forge",
             CustomKind::Replicate => "Replicate",
             CustomKind::Fal => "fal.ai",
+            CustomKind::Lama => "LaMa (offline)",
         }
     }
 
@@ -94,6 +99,7 @@ impl CustomKind {
             CustomKind::A1111 => "Stable Diffusion WebUI / Forge (local, inpainting)",
             CustomKind::Replicate => "Replicate (hosted, any public model)",
             CustomKind::Fal => "fal.ai (hosted image generation and editing)",
+            CustomKind::Lama => "Local LaMa inpainting (CPU, no account required)",
         }
     }
 
@@ -107,6 +113,7 @@ impl CustomKind {
             CustomKind::A1111 => "http://127.0.0.1:7860",
             CustomKind::Replicate => "https://api.replicate.com",
             CustomKind::Fal => "https://queue.fal.run",
+            CustomKind::Lama => "",
         }
     }
 
@@ -120,6 +127,7 @@ impl CustomKind {
             CustomKind::A1111 => "https://github.com/AUTOMATIC1111/stable-diffusion-webui",
             CustomKind::Replicate => "https://replicate.com/account/api-tokens",
             CustomKind::Fal => "https://fal.ai/dashboard/keys",
+            CustomKind::Lama => "https://huggingface.co/Carve/LaMa-ONNX",
         }
     }
 
@@ -132,7 +140,7 @@ impl CustomKind {
     pub fn is_local_by_default(self) -> bool {
         matches!(
             self,
-            CustomKind::Ollama | CustomKind::ComfyUi | CustomKind::A1111 | CustomKind::OpenAiCompat
+            CustomKind::Ollama | CustomKind::ComfyUi | CustomKind::A1111 | CustomKind::OpenAiCompat | CustomKind::Lama
         )
     }
 
@@ -175,6 +183,7 @@ impl CustomKind {
             CustomKind::Ollama => Capabilities::default(),
             CustomKind::ComfyUi | CustomKind::A1111 => sd,
             CustomKind::Fal => Capabilities { mask_edit: false, ..sd },
+            CustomKind::Lama => Capabilities { generate: false, instruct_edit: false, max_variants: 1, max_px: 8192, ..sd },
             CustomKind::Replicate => Capabilities {
                 mask_edit: false,
                 instruct_edit: false,
@@ -240,7 +249,7 @@ impl SamplingOptions {
 impl CustomProvider {
     /// Build a job-local configuration without changing the provider registry.
     pub fn with_sampling(&self, sampling: SamplingOptions) -> Result<Self, Error> {
-        if !sampling.is_empty() && self.kind == CustomKind::Ollama {
+        if !sampling.is_empty() && matches!(self.kind, CustomKind::Ollama | CustomKind::Lama) {
             return Err(Error::InvalidRequest("This provider does not support image sampling controls".into()));
         }
         if sampling.seed.is_some_and(|v| v > 2_147_483_647)
@@ -333,6 +342,10 @@ impl CustomProvider {
             return Err(Error::InvalidRequest(
                 "custom provider needs a name".to_owned(),
             ));
+        }
+        if self.kind == CustomKind::Lama {
+            if self.model.trim().is_empty() { return Err(Error::InvalidRequest("Choose or download a LaMa ONNX model first".into())); }
+            return Ok(());
         }
         let url = reqwest::Url::parse(&self.base())
             .map_err(|e| Error::InvalidRequest(format!("base URL {:?}: {e}", self.base_url)))?;
@@ -649,7 +662,7 @@ mod tests {
         assert_eq!(reg.load().expect("load").len(), 1);
         reg.remove("hf").expect("remove twice is fine");
         let kinds: Vec<&str> = CustomKind::ALL.iter().map(|k| k.as_str()).collect();
-        assert_eq!(kinds.len(), 7);
+        assert_eq!(kinds.len(), 8);
         assert_eq!(
             serde_json::to_string(&CustomKind::OpenAiCompat).expect("ser"),
             "\"openai_compat\""

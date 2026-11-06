@@ -32,6 +32,7 @@ import {
 
 /** Offline fallback for the kind table (mirrors `CustomKind::*` in Rust). */
 export const KIND_FALLBACK: CustomKindInfo[] = [
+  { kind: "lama", label: "LaMa (offline)", description: "Local LaMa inpainting (CPU, no account required)", defaultBaseUrl: "", helpUrl: "https://huggingface.co/Carve/LaMa-ONNX", requiresAuth: false, promptAssist: false, defaultCapabilities: caps({ maskEdit: true, maxVariants: 1, maxPx: 8192 }) },
   { kind: "fal", label: "fal.ai", description: "fal.ai (hosted image generation and editing)", defaultBaseUrl: "https://queue.fal.run", helpUrl: "https://fal.ai/dashboard/keys", requiresAuth: true, promptAssist: false, defaultCapabilities: caps({ generate: true, instructEdit: true }) },
   { kind: "openai_compat", label: "OpenAI-compatible server", description: "OpenAI-compatible server (LocalAI, LM Studio, vLLM, or any vendor)", defaultBaseUrl: "http://localhost:8080", helpUrl: "https://localai.io/docs/features/image-generation/", requiresAuth: false, promptAssist: false, defaultCapabilities: caps({ generate: true, maxPx: 4096 }) },
   { kind: "hugging_face", label: "Hugging Face", description: "Hugging Face (Inference API / Endpoint)", defaultBaseUrl: "https://router.huggingface.co/hf-inference", helpUrl: "https://huggingface.co/settings/tokens", requiresAuth: true, promptAssist: false, defaultCapabilities: caps({ generate: true }) },
