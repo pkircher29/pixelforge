@@ -8,7 +8,7 @@ Svelte 5 and Rust. Pixels live
 in the webview and are composited with WebGL2; Rust handles codecs, the project format,
 PSD import, AI providers and OS integration.
 
-MIT licensed. Windows, macOS and Linux. Current release: **0.2.0** (see
+MIT licensed. Windows, macOS and Linux. Current release: **0.2.1** (see
 [CHANGELOG.md](CHANGELOG.md)).
 
 ## The pitch: chain three AI providers on one document
@@ -294,12 +294,13 @@ See [docs/architecture.md](docs/architecture.md), [docs/ipc.md](docs/ipc.md),
 and [PLAN.md](PLAN.md).
 
 ```
-crates/pf-ai    AI provider trait + OpenAI / xAI / Gemini + custom kinds, job queue, key store (Rust)
+crates/pf-ai    AI provider trait + OpenAI / xAI / Gemini + custom kinds, OAuth, job queue, key store (Rust)
 crates/pf-io    codecs, PSD import, .pfproj project format, thumbnails (Rust)
 app/src-tauri   Tauri shell: commands, state, plugins (Rust)
 app/src/lib     engine (document, raster, selection, history, WebGL2 compositor),
                 tools, filters, ai, io, stores, ui (Svelte 5)
-scripts/        fake-ai-server.mjs (built-in providers), fake-local-ai.mjs (custom / local kinds)
+scripts/        fake-ai-server.mjs (built-in providers), fake-local-ai.mjs (custom / local kinds),
+                fake-openai-auth.mjs (subscription sign-in), fake-ai-draw.mjs (shared PNG renderer)
 ```
 
 ## Window chrome
