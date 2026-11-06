@@ -12,7 +12,7 @@
 //! | `ai_job_status` | `{ job }` | `JobStatus` |
 //! | `ai_cancel` | `{ job }` | `bool` (was it still running / queued) |
 //! | `ai_take_result` | `{ job }` | raw body: binary frame (`ArrayBuffer` in JS) |
-//! | `ai_test_key` | `{ provider }` | `()` |
+//! | `ai_test_key` | `{ provider, model? }` | `()` |
 //! | `ai_custom_kinds` | - | `CustomKindInfo[]` |
 //! | `ai_custom_list` | - | `CustomProvider[]` |
 //! | `ai_custom_add` | `{ provider, auth? }` | `CustomProvider[]` |
@@ -31,6 +31,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use pf_ai::ipc::{decode_edit_body, decode_frame, encode_results, GenerateParams};
+use pf_ai::custom::SamplingOptions;
 use pf_ai::providers::custom::hf::{hub_search_default, HubModel};
 use pf_ai::{
     build_custom_provider, build_provider_from_env, capabilities_for, probe_custom, prompt_assist,
@@ -132,7 +133,7 @@ pub fn provider_rows(
                 _ => default_model.clone(),
             };
             let row = auth.get(&id).cloned().unwrap_or_default();
-            let on_plan = row.active == AuthMode::Subscription;
+            let on_plan = row.active != AuthMode::ApiKey;
             let account = row.account.map(|(email, plan)| AccountInfo { email, plan });
             ProviderInfo {
                 // ChatGPT on the plan rewrites prompts (text Responses are allowed).
@@ -191,7 +192,7 @@ pub fn custom_rows(
                 has_key: has_key(&id),
                 key_backend: backend.to_owned(),
                 default_model: c.model.trim().to_owned(),
-                edit_model: c.model.trim().to_owned(),
+                edit_model: if c.kind == CustomKind::Fal { c.extra_str("editModel").unwrap_or(c.model.trim()).to_owned() } else { c.model.trim().to_owned() },
                 models,
                 capabilities,
                 kind: c.kind.as_str().to_owned(),
@@ -280,11 +281,12 @@ async fn resolve_provider(
     app: &AppHandle,
     state: &AppState,
     id: &ProviderId,
+    sampling: SamplingOptions,
 ) -> CommandResult<SharedProvider> {
     let store = key_store(app, state)?;
     match id {
         ProviderId::Custom(cid) => {
-            let cfg = custom_entry(custom_registry(app, state)?, cid).await?;
+            let cfg = custom_entry(custom_registry(app, state)?, cid).await?.with_sampling(sampling)?;
             let auth = load_key_opt(store, id.clone()).await?;
             if auth.is_none() && cfg.kind.requires_auth() {
                 return Err(pf_ai::Error::NotConfigured(id.clone()).into());
@@ -292,6 +294,9 @@ async fn resolve_provider(
             Ok(build_custom_provider(&cfg, auth)?)
         }
         builtin => {
+            if !sampling.is_empty() {
+                return Err(pf_ai::Error::InvalidRequest("This provider does not support seed or sampling steps".into()).into());
+            }
             // Subscription mode (ChatGPT / Grok sign-in) never falls back silently.
             if let Some(p) = subscription_provider(app, state, builtin).await? {
                 return Ok(p);
@@ -310,8 +315,9 @@ async fn submit(
     provider: ProviderId,
     kind: JobKind,
     timeout: Option<Duration>,
+    sampling: SamplingOptions,
 ) -> CommandResult<JobId> {
-    let provider = resolve_provider(app, state, &provider).await?;
+    let provider = resolve_provider(app, state, &provider, sampling).await?;
     ensure_forwarder(app, state);
     let id = state.jobs.submit(JobSpec {
         provider,
@@ -331,12 +337,14 @@ pub async fn ai_submit_generate(
 ) -> CommandResult<JobId> {
     let provider = params.provider.clone();
     let timeout = timeout_override(params.timeout_secs);
+    let sampling = SamplingOptions { seed: params.seed, steps: params.steps };
     submit(
         &app,
         &state,
         provider,
         JobKind::Generate(params.into()),
         timeout,
+        sampling,
     )
     .await
 }
@@ -360,12 +368,14 @@ pub async fn ai_submit_edit(
     let envelope = decode_edit_body(body)?;
     let provider = envelope.params.provider.clone();
     let timeout = timeout_override(envelope.params.timeout_secs);
+    let sampling = SamplingOptions { seed: envelope.params.seed, steps: envelope.params.steps };
     submit(
         &app,
         &state,
         provider,
         JobKind::Edit(envelope.into_request()),
         timeout,
+        sampling,
     )
     .await
 }
@@ -425,9 +435,14 @@ pub async fn ai_test_key(
     app: AppHandle,
     state: State<'_, AppState>,
     provider: ProviderId,
+    model: Option<String>,
 ) -> CommandResult<()> {
-    let p = resolve_provider(&app, &state, &provider).await?;
-    p.test_key().await?;
+    let p = resolve_provider(&app, &state, &provider, SamplingOptions::default()).await?;
+    if let Some(model) = model {
+        p.test_model(&model).await?;
+    } else {
+        p.test_key().await?;
+    }
     Ok(())
 }
 

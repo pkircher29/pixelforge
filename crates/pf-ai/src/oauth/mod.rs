@@ -16,6 +16,7 @@
 //! refresh before expiry and once after a 401), the device-code poller, and two provider
 //! wrappers ([`BearerOAuthProvider`], [`PlanFallbackProvider`]).
 
+pub mod google;
 pub mod openai_siwc;
 pub mod xai_device;
 
@@ -149,6 +150,9 @@ pub struct ImageAccess {
 #[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct OAuthTokens {
+    /// Desktop OAuth client secret, stored only in the credential store (Google).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub client_secret: Option<String>,
     /// Bearer token for API calls.
     pub access_token: String,
     /// Refresh token (rotates on every refresh where the vendor rotates it).
@@ -545,6 +549,9 @@ impl OAuthSession {
         if let Some(r) = self.refresh.resource.as_deref() {
             form.push(("resource", r));
         }
+        if let Some(secret) = tokens.client_secret.as_deref() {
+            form.push(("client_secret", secret));
+        }
         match post_token_form(&self.client, &self.refresh.token_url, &form, true).await {
             Ok(resp) => {
                 tokens.apply_response(&resp, now_unix());
@@ -739,7 +746,7 @@ impl Loopback {
                         "OK",
                         &callback_page(
                             true,
-                            "You're signed in. You can close this window and return to Pixelforge.",
+                            "Authorization received. You can close this window and return to Pixelforge to check the sign-in result.",
                         ),
                     )
                     .await;
@@ -803,7 +810,7 @@ fn html_escape(s: &str) -> String {
 /// The page shown in the browser after the redirect.
 pub fn callback_page(ok: bool, message: &str) -> String {
     let (title, color) = if ok {
-        ("Signed in", "#43d17a")
+        ("Authorization received", "#43d17a")
     } else {
         ("Sign-in failed", "#ff5c7a")
     };

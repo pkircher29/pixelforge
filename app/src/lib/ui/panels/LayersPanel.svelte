@@ -41,8 +41,8 @@
   import Popover from "../controls/Popover.svelte";
   import LayerThumb from "./LayerThumb.svelte";
   import { layersUi, KIND_FILTERS, type FilterMode } from "./Layers.store.svelte";
-  import { buildRows, selectOnClick, contextMenuState, SetLayersVisibleCommand, MoveLayerToCommand, EFFECT_ORDER, EFFECT_LABEL, type PanelRow, type LayerRowModel } from "./Layers.model";
-  import { computeDrop, resolveDrop, type RowGeom, type DropTarget } from "./layer-reorder";
+  import { buildRows, selectOnClick, contextMenuState, SetLayersVisibleCommand, MoveLayersToCommand, EFFECT_ORDER, EFFECT_LABEL, type PanelRow, type LayerRowModel } from "./Layers.model";
+  import { computeDrop, resolveMultiDrop, movingLayerIds, type RowGeom, type DropTarget } from "./layer-reorder";
   import { thumbDims, rowHeight } from "./thumbnail";
   import { ADJUSTMENT_MENU, FILL_MENU } from "../commands/layer";
 
@@ -326,7 +326,7 @@
 
   // ---------------------------------------------------------------- drag reorder
 
-  let drag = $state<{ id: LayerId; alt: boolean; y: number } | null>(null);
+  let drag = $state<{ id: LayerId; ids: LayerId[]; alt: boolean; y: number } | null>(null);
   let dropTarget = $state<DropTarget | null>(null);
   let dropLineY = $state<number | null>(null);
 
@@ -347,20 +347,23 @@
     const el = e.currentTarget as HTMLElement;
     const sx = e.clientX;
     const sy = e.clientY;
+    const selected = layersUi.isSelected(l.id, doc.activeLayerId) ? [...layersUi.selectedLayerIds, ...(doc.activeLayerId ? [doc.activeLayerId] : [])] : [l.id];
+    const moving = movingLayerIds(doc, selected);
+    const roots = moving.filter(id => { const row = doc!.layers.find(x => x.id === id)!; return !row.parentId || !moving.includes(row.parentId); });
+    const hasGroup = roots.some(id => doc!.layers.find(x => x.id === id)?.kind === "group");
     let started = false;
     const move = (ev: PointerEvent) => {
       if (!started) {
         if (Math.hypot(ev.clientX - sx, ev.clientY - sy) < 4) return;
         started = true;
         el.setPointerCapture(e.pointerId);
-        drag = { id: l.id, alt: ev.altKey, y: ev.clientY };
+        drag = { id: l.id, ids: moving, alt: ev.altKey, y: ev.clientY };
       }
       if (!list || !doc) return;
-      drag = { id: l.id, alt: ev.altKey, y: ev.clientY };
+      drag = { id: l.id, ids: moving, alt: ev.altKey, y: ev.clientY };
       const y = ev.clientY - list.getBoundingClientRect().top + list.scrollTop;
-      const children = doc.layers.filter((x) => x.parentId === l.id).map((x) => x.id);
       const geoms = rowGeoms();
-      const t = computeDrop(geoms, y, l.id, children, l.kind === "group");
+      const t = computeDrop(geoms, y, l.id, moving, hasGroup);
       dropTarget = t;
       if (t && t.pos !== "into") {
         const g = geoms.find((x) => x.id === t.id)!;
@@ -384,18 +387,20 @@
         selectRow(l, ev);
         return;
       }
-      if (!t || !doc || !d) return;
-      let movingId = l.id;
+      if (!t || !doc || !d || ev.type === "pointercancel") return;
+      let movedRoots = roots;
       if (d.alt) {
-        const dup = new DuplicateLayerCommand(l.id);
-        docStore.exec(dup);
-        movingId = dup.copyIds[0] ?? l.id;
+        movedRoots = roots.map(id => {
+          const dup = new DuplicateLayerCommand(id);
+          docStore.exec(dup);
+          return dup.copyIds[0] ?? id;
+        });
       }
-      const res = resolveDrop(doc, movingId, t);
+      const res = resolveMultiDrop(doc, movedRoots, t);
       if (res) {
-        docStore.exec(new MoveLayerToCommand(movingId, res.toIndex, res.parentId));
-        layersUi.setSelection([movingId]);
-        docStore.setActiveLayer(movingId);
+        docStore.exec(new MoveLayersToCommand(movedRoots, res.toIndex, res.parentId));
+        layersUi.setSelection(movedRoots);
+        docStore.setActiveLayer(movedRoots[0]!);
       }
     };
     el.addEventListener("pointermove", move);
@@ -495,7 +500,7 @@
             class:selected={r.selected}
             class:active={r.active}
             class:hidden={!r.visible}
-            class:dragging={drag?.id === l.id}
+            class:dragging={drag?.ids.includes(l.id)}
             class:drop-into={dropTarget?.pos === "into" && dropTarget.id === l.id}
             data-row-id={l.id}
             role="option"

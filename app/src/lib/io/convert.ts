@@ -9,9 +9,12 @@
 import {
   BlendMode,
   Raster,
+  TiledRaster,
+  Rect,
   Selection,
   createDocument,
   createGroupLayer,
+  generativeFromFile,
   createRasterLayer,
   createAdjustmentLayer,
   createFillLayer,
@@ -50,6 +53,12 @@ function unit(v: number): number {
 }
 
 export const PFPROJ_FORMAT = 2;
+
+function validRenderSize(value: unknown): { width: number; height: number } | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const { width, height } = value as Record<string, unknown>;
+  return typeof width === "number" && typeof height === "number" && Number.isInteger(width) && Number.isInteger(height) && width > 0 && height > 0 && width <= 8192 && height <= 8192 ? { width, height } : undefined;
+}
 
 /** `color-dodge` (engine) ↔ `color_dodge` (pfproj / IPC). */
 export function blendToFile(m: BlendMode): string {
@@ -159,9 +168,9 @@ export function documentFromOpenFrame(frame: Frame<OpenHeader>, name: string): D
     let raster: Raster;
     if (e.blob !== null && frame.blobs[e.blob] && e.w > 0 && e.h > 0) {
       const bytes = frame.blobs[e.blob]!;
-      raster = bytes.byteLength === e.w * e.h * 4 ? Raster.fromBytes(e.w, e.h, bytes) : new Raster(e.w, e.h);
+      raster = bytes.byteLength === e.w * e.h * 4 ? TiledRaster.fromBytes(e.w, e.h, bytes) : new TiledRaster(e.w, e.h);
     } else {
-      raster = new Raster(Math.max(1, e.w), Math.max(1, e.h));
+      raster = new TiledRaster(Math.max(1, e.w), Math.max(1, e.h));
     }
     doc.layers.push(createRasterLayer(doc, { ...common, raster, offset: { x: e.x, y: e.y }, parentId }));
   }
@@ -209,6 +218,8 @@ export interface ManifestLayer {
   // ---- format 2 (all optional for format-1 readers/writers)
   fill_opacity?: number;
   mask_enabled?: boolean;
+  mask_density?: number;
+  mask_feather?: number;
   mask_linked?: boolean;
   clip_to_below?: boolean;
   lock?: LayerLock;
@@ -289,7 +300,7 @@ function fillToFile(f: FillSpec): ManifestFill {
       type: "pattern",
       scale: f.scale,
       offset: { x: f.offset.x, y: f.offset.y },
-      pattern: { width: f.pattern.width, height: f.pattern.height, rgba: bytesToBase64(bytesOf(f.pattern.data)) },
+      pattern: { width: f.pattern.width, height: f.pattern.height, rgba: bytesToBase64(bytesOf(f.pattern.readPixels(f.pattern.bounds()))) },
     };
   }
   return JSON.parse(JSON.stringify(f)) as ManifestFill;
@@ -387,6 +398,17 @@ function textFromFile(v: unknown): TextSpec | null {
     tracking: typeof o.tracking === "number" ? o.tracking : 0,
     bold: o.bold === true,
     italic: o.italic === true,
+    allCaps: o.allCaps === true,
+    smallCaps: o.smallCaps === true,
+    underline: o.underline === true,
+    strikethrough: o.strikethrough === true,
+    paragraphWidth: typeof o.paragraphWidth === "number" && Number.isFinite(o.paragraphWidth) && o.paragraphWidth > 0 ? o.paragraphWidth : null,
+    indentLeft: typeof o.indentLeft === "number" && Number.isFinite(o.indentLeft) ? o.indentLeft : 0,
+    indentRight: typeof o.indentRight === "number" && Number.isFinite(o.indentRight) ? o.indentRight : 0,
+    firstLineIndent: typeof o.firstLineIndent === "number" && Number.isFinite(o.firstLineIndent) ? o.firstLineIndent : 0,
+    spaceBefore: typeof o.spaceBefore === "number" && Number.isFinite(o.spaceBefore) ? Math.max(0, o.spaceBefore) : 0,
+    spaceAfter: typeof o.spaceAfter === "number" && Number.isFinite(o.spaceAfter) ? Math.max(0, o.spaceAfter) : 0,
+    justification: ["left", "center", "right", "all"].includes(String(o.justification)) ? o.justification as NonNullable<TextSpec["justification"]> : "none",
     vertical: o.vertical === true,
     antialias: o.antialias !== false,
   };
@@ -433,6 +455,8 @@ export function documentFromProjectFrame(frame: Frame<ProjectHeader>): Document 
       blendMode: blendFromFile(e.blend_mode),
       fillOpacity: typeof e.fill_opacity === "number" ? unit(e.fill_opacity) : 1,
       maskEnabled: e.mask_enabled !== false,
+      maskDensity: typeof e.mask_density === "number" && Number.isFinite(e.mask_density) ? unit(e.mask_density) : 1,
+      maskFeather: typeof e.mask_feather === "number" && Number.isFinite(e.mask_feather) ? Math.max(0, Math.min(250, e.mask_feather)) : 0,
       maskLinked: e.mask_linked !== false,
       clipToBelow: e.clip_to_below === true,
       lock: lockFromFile(e.lock, e.locked ?? false),
@@ -441,10 +465,13 @@ export function documentFromProjectFrame(frame: Frame<ProjectHeader>): Document 
       color: LAYER_COLORS.includes(e.color as LayerColor) ? (e.color as LayerColor) : null,
       parentId: e.parent ? (idMap.get(e.parent) ?? null) : null,
       offset: { x: e.x ?? 0, y: e.y ?? 0 },
+      renderSize: validRenderSize(e.render_size),
     };
     let layer: Layer;
     if (kind === "group") {
       layer = createGroupLayer(doc, { ...common, passThrough: e.pass_through !== false });
+      const generative = generativeFromFile(e.generative);
+      if (generative) { layer.generative = generative; layer.collapsed = true; }
     } else if (kind === "adjustment" && e.adjustment && typeof e.adjustment.op === "string") {
       layer = createAdjustmentLayer(doc, { ...common, op: e.adjustment.op, params: (e.adjustment.params ?? {}) as ParamValues });
     } else if (kind === "fill" && fillFromFile(e.fill)) {
@@ -467,8 +494,8 @@ export function documentFromProjectFrame(frame: Frame<ProjectHeader>): Document 
       const hh = ref?.height ?? e.height;
       let raster: Raster;
       const blob = ref ? frame.blobs[ref.blob] : undefined;
-      if (blob && blob.byteLength === w * hh * 4) raster = Raster.fromBytes(w, hh, blob);
-      else raster = new Raster(Math.max(1, w), Math.max(1, hh));
+      if (blob && blob.byteLength === w * hh * 4) raster = TiledRaster.fromBytes(w, hh, blob);
+      else raster = new TiledRaster(Math.max(1, w), Math.max(1, hh));
       layer = createRasterLayer(doc, { ...common, raster });
     }
     const mref = masks.get(e.id);
@@ -531,7 +558,7 @@ function grayToRaster(bytes: Uint8Array, w: number, h: number): Raster {
 function layerSpec(l: Layer): Partial<ManifestLayer> {
   switch (l.kind) {
     case "group":
-      return { pass_through: l.passThrough };
+      return { pass_through: l.passThrough, ...(l.generative ? { generative: { ...l.generative, variantIds: l.generative.variantIds.slice() } } : {}) };
     case "adjustment":
       return { adjustment: { op: l.op, params: JSON.parse(JSON.stringify(l.params)) as ParamValues } };
     case "fill":
@@ -575,8 +602,10 @@ export function projectFrameParts(
     name: l.name,
     kind: l.kind,
     parent: l.parentId,
-    x: l.kind === "group" ? 0 : l.offset.x,
-    y: l.kind === "group" ? 0 : l.offset.y,
+    x: l.offset.x,
+    y: l.offset.y,
+    ...(l.renderSize ? { render_size: { ...l.renderSize } } : {}),
+    ...(!isPixelLayer(l) && l.mask ? { mask_size: { width: l.mask.width, height: l.mask.height } } : {}),
     width: isPixelLayer(l) ? l.raster.width : 0,
     height: isPixelLayer(l) ? l.raster.height : 0,
     opacity: l.opacity,
@@ -585,6 +614,8 @@ export function projectFrameParts(
     locked: l.locked || l.lock.all,
     fill_opacity: l.fillOpacity,
     mask_enabled: l.maskEnabled,
+    mask_density: l.maskDensity,
+    mask_feather: l.maskFeather,
     mask_linked: l.maskLinked,
     clip_to_below: l.clipToBelow,
     lock: { ...l.lock },
@@ -596,7 +627,7 @@ export function projectFrameParts(
   for (const l of fileOrder) {
     if (isPixelLayer(l)) {
       layers.push({ id: l.id, width: l.raster.width, height: l.raster.height, blob: blobs.length, encoding: "rgba" });
-      blobs.push(bytesOf(l.raster.data));
+      blobs.push(bytesOf(l.raster.readPixels(l.raster.bounds())));
     }
     if (l.mask) {
       masks.push({ id: l.id, width: l.mask.width, height: l.mask.height, blob: blobs.length, encoding: "gray" });
@@ -636,7 +667,7 @@ export function projectFrameParts(
   if (thumbnail) {
     manifest.thumbnail = "thumb.png";
     header.thumbnail = { width: thumbnail.width, height: thumbnail.height, blob: blobs.length, encoding: "rgba" };
-    blobs.push(bytesOf(thumbnail.data));
+    blobs.push(bytesOf(thumbnail.readPixels(thumbnail.bounds())));
   }
   return { header, blobs };
 }
@@ -647,7 +678,10 @@ export function bytesOf(d: Uint8ClampedArray): Uint8Array {
 
 function redChannel(r: Raster): Uint8Array {
   const out = new Uint8Array(r.width * r.height);
-  for (let i = 0, p = 0; i < out.length; i++, p += 4) out[i] = r.data[p]!;
+  for (let y = 0; y < r.height; y++) {
+    const row = r.readPixels(Rect.make(0, y, r.width, 1));
+    for (let x = 0; x < r.width; x++) out[y * r.width + x] = row[x * 4]!;
+  }
   return out;
 }
 

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Swatch from "$lib/ui/controls/Swatch.svelte";
   /**
    * Swatches panel (PS CC 2020+): search field, the flat default grid, collapsible
    * group folders, and the [new group] [new swatch] [delete] bar. Click = foreground,
@@ -12,7 +13,7 @@
   import { openDialog } from "../dialogs/dialogs.svelte";
   import Icon from "../icons/Icon.svelte";
   import HistorySnapshotDialog from "./HistorySnapshotDialog.svelte";
-  import { swatchStore, filterSwatches, type Swatch, type SwatchGroup } from "./Swatches.store.svelte";
+  import { swatchStore, filterSwatches, type Swatch as SavedSwatch, type SwatchGroup } from "./Swatches.store.svelte";
   import { rgbToHex } from "./color-model";
 
   $effect(() => {
@@ -23,20 +24,23 @@
   const items = $derived(filterSwatches(swatchStore.items, q));
   const groups = $derived(swatchStore.groups.map((g) => ({ g, list: filterSwatches(g.swatches, q) })).filter((x) => !q || x.list.length > 0));
   const fgHex = $derived(rgbToHex(toolStore.fg));
+  function isForeground(s: SavedSwatch): boolean {
+    return rgbToHex(s.color) === fgHex && (s.color.a ?? 255) === toolStore.fg.a;
+  }
 
   type NameProps = { title: string; label: string; initial: string; okLabel: string };
   const askName = (title: string, initial: string): Promise<string | null> => openDialog<NameProps, string>(HistorySnapshotDialog, { title, label: "Name:", initial, okLabel: "OK" });
 
-  function pick(e: MouseEvent, s: Swatch): void {
+  function pick(e: MouseEvent, s: SavedSwatch): void {
     if (e.altKey) {
       swatchStore.remove(s.id);
       return;
     }
-    const c = { r: s.color.r, g: s.color.g, b: s.color.b, a: 255 };
+    const c = { ...s.color, a: s.color.a ?? 255 };
     if (e.ctrlKey || e.metaKey) toolStore.setBg(c);
     else toolStore.setFg(c);
   }
-  function tip(s: Swatch): string {
+  function tip(s: SavedSwatch): string {
     return `${s.name}  ${rgbToHex(s.color).toUpperCase()}`;
   }
   async function addFg(groupId: string | null = null): Promise<void> {
@@ -48,11 +52,11 @@
     if (name !== null) swatchStore.addGroup(name);
   }
   function deleteCurrent(): void {
-    const hit = swatchStore.all.find((s) => rgbToHex(s.color) === fgHex);
+    const hit = swatchStore.all.find(isForeground);
     if (hit) swatchStore.remove(hit.id);
     else toast.info("No swatch matches the foreground color.");
   }
-  function menuFor(e: MouseEvent, s: Swatch): void {
+  function menuFor(e: MouseEvent, s: SavedSwatch): void {
     e.preventDefault();
     contextMenu.open(e.clientX, e.clientY, [
       { label: "Rename Swatch…", run: async () => { const n = await askName("Swatch Name", s.name); if (n !== null) swatchStore.rename(s.id, n); } },
@@ -80,7 +84,7 @@
   <div class="list">
     <div class="grid" aria-label="Default swatches">
       {#each items as s (s.id)}
-        <button type="button" class="sw" class:on={rgbToHex(s.color) === fgHex} style:background={rgbToHex(s.color)} title={tip(s)} aria-label={s.name} onclick={(e) => pick(e, s)} oncontextmenu={(e) => menuFor(e, s)}></button>
+        <button type="button" class="sw" class:on={isForeground(s)} title={tip(s)} aria-label={s.name} onclick={(e) => pick(e, s)} oncontextmenu={(e) => menuFor(e, s)}><Swatch color={s.color} /></button>
       {/each}
     </div>
     {#each groups as { g, list } (g.id)}
@@ -94,7 +98,7 @@
         {#if !g.collapsed || q}
           <div class="grid indent" aria-label={g.name}>
             {#each list as s (s.id)}
-              <button type="button" class="sw" class:on={rgbToHex(s.color) === fgHex} style:background={rgbToHex(s.color)} title={tip(s)} aria-label={s.name} onclick={(e) => pick(e, s)} oncontextmenu={(e) => menuFor(e, s)}></button>
+              <button type="button" class="sw" class:on={isForeground(s)} title={tip(s)} aria-label={s.name} onclick={(e) => pick(e, s)} oncontextmenu={(e) => menuFor(e, s)}><Swatch color={s.color} /></button>
             {/each}
           </div>
         {/if}

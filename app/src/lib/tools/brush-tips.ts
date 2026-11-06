@@ -178,6 +178,11 @@ export function tipById(id: string): BrushTip {
 }
 
 const userTips = new Map<string, BrushTip>();
+/** Restore stored alpha directly; luminance conversion has already happened. */
+export function restoreBrushTip(tip: BrushTip): void {
+  if (tip.kind === "custom" && tip.raster) userTips.set(tip.id, tip);
+}
+export function removeBrushTip(id: string): void { userTips.delete(id); }
 
 /** Register a custom tip from a raster (PNG loaded by the user): luminance → alpha (dark = paint). */
 export function tipFromRaster(id: string, name: string, src: Raster, spacing = 25): BrushTip {

@@ -10,6 +10,148 @@
 
 ---
 
+## Continuation status (2026-10-07)
+
+Implemented on `feat/v03-oauth-polish`:
+- Google OAuth for Gemini using a registered Desktop app, loopback PKCE, protected
+  token/client-secret storage, refresh/revocation, and an explicit Cloud quota project.
+  This is separately billed API access, not Google AI Pro / Ultra plan usage.
+- Existing ChatGPT and Grok sign-in paths retained. ChatGPT plan image restrictions
+  and the requirement for an xAI-issued Pixelforge client ID still apply.
+- Polish item 13: Ctrl+F opens Search, Ctrl+K remains an alias, Last Filter uses Ctrl+Alt+F.
+- Polish item 11, color-view portion: explicit RG/RB/GB display modes suppress the
+  hidden color component in CPU and GL rendering. Hiding every color displays black
+  instead of accidentally restoring RGB. Model/CPU tests and real WebGL display-pixel
+  checks cover all three pairs and the empty view; 675 frontend tests pass. Browser
+  Channels eye interaction passes without errors; screenshot:
+  `docs/screenshots/two-channel-view.png`.
+  Alpha eyes now tint the color view; selecting an alpha alone still shows grayscale.
+  Overlays use each channel's color/opacity, with cached combined tint separate from
+  document pixels. CPU Canvas and GL display checks agree, including color changes
+  and painting invalidation. Channel shortcuts synchronize eye states. Browser flow
+  verifies grayscale → RGB tint → hidden tint → grayscale without errors; screenshot:
+  `docs/screenshots/alpha-overlay.png`. All 677 frontend tests, Svelte check and frontend
+  build pass. Native/cross-OS verification remains open.
+- Polish item 12: font permission requests start directly from the picker gesture;
+  native `fonts_list` uses font-kit on a blocking worker to enumerate installed families.
+  Successful discovery lists installed families instead of merging uninstalled fallback
+  names. Failures remain retryable, and Refresh installed fonts picks up changes.
+  Linux build workflows include Fontconfig/FreeType development packages. Frontend
+  tests cover permission rejection, native fallback and refresh; all 673 tests and
+  Svelte/Rust checks pass. The rebuilt Windows picker displays 87 installed families;
+  search and refresh pass without page errors. Screenshot:
+  `docs/screenshots/installed-fonts-native.png`. macOS/Linux runtime checks remain open.
+- Polish item 14: `npm run build:release` builds frontend assets before the native app.
+- Polish item 1: app-root tooltips flip/shift inside the viewport, wrap long labels,
+  honor Show Tool Tips, and support focus/Escape with `aria-describedby` cleanup.
+  Browser verification checked all 84 visible tooltip controls at 1000×720, including
+  right/bottom edges; no page errors. Screenshot: `docs/screenshots/tooltips-edge-aware.png`.
+  Svelte check and frontend build pass. Native/cross-OS checks remain part of Wave 11.
+- Polish item 2: panel registrations declare minimum group heights; Navigator reserves
+  180 px including its zoom row. Dock weights distribute the remaining space; crowded
+  docks scroll. Browser checks cover expand, divider shrinking/growing, window resize,
+  reload and collapse/reopen. Screenshot: `docs/screenshots/navigator-min-height.png`.
+  This also fixes tooltip focusout during removal of a focused panel control.
+- Polish item 3: custom brush cursors trace the tip alpha with marching squares using
+  paint-engine size, angle, roundness and flip transforms. Bounded per-tip caches and
+  a capped sampling resolution keep high-zoom outlines bounded. Tests cover contours
+  at image edges, holes/islands, rotation/roundness, reuse and large-size scaling.
+  Live browser verification shows the Triangle tip outline at 200 px with no errors;
+  screenshot: `docs/screenshots/brush-outline.png`. All 666 frontend tests, Svelte check,
+  and production frontend build pass. Native/cross-OS verification remains open.
+- Polish item 4: shared `Swatch.svelte` and `ColorSwatchInput.svelte` show checkerboards
+  under alpha in Properties, toolbar, Color/Swatches/Character, shape fill pickers,
+  gradient previews, and color dialogs. The Color Picker exposes opacity and preserves
+  alpha; foreground/background and saved/exported swatches retain it. Legacy palette
+  files remain compatible. Svelte check passes; frontend suite: 662 tests. Browser and
+  rebuilt Windows tests verify 50% previews, saving a swatch, picker reopening and no
+  runtime errors. Screenshot: `docs/screenshots/swatch-alpha-native.png`.
+- Polish item 5: `History.dropAfter(index)` permanently truncates states. Delete State
+  uses it in linear mode; the persisted Allow Non-Linear History option retains later
+  states when branching and deletes individual rows without changing later results.
+  Branches use reversible command paths and remain under the history memory budget.
+  Tests cover already-applied paint, layer deletion, repeated branch switching and
+  independent snapshot/History Brush sources. Browser screenshots:
+  `docs/screenshots/history-options.png`, `docs/screenshots/history-nonlinear.png`.
+- Polish item 6, persistence and manager: Define Pattern / Define Brush Preset save
+  metadata and RGBA pixels in native app-data `patterns/` / `brushes/` folders, restored
+  at startup. Browser previews use IndexedDB. Preset Manager lists sampled brushes and
+  patterns, renames and deletes them. Native storage uses bounded, validated records and
+  temporary-file replacement; corrupt entries report errors without hiding valid assets.
+  Three Rust storage tests pass. Browser reload and a full Windows process restart both
+  preserve defined assets; rename/delete pass without runtime errors. Brushes-panel
+  changes now use serialized asset writes. Presets sharing a sampled tip retain their
+  independent settings; deleting one preserves the others, and deleting the asset
+  removes all references. A Windows restart check verifies panel rename, shared-tip
+  deletion, surviving preset restoration and manager cleanup. The 679-test frontend
+  suite and all three targeted persistence tests (including a subsequent pending-save
+  deletion regression), Svelte checks and native build pass. Screenshot:
+  `docs/screenshots/preset-manager-native.png`. Cross-OS verification remains open.
+- Polish item 7, character styles: All Caps, Small Caps, Underline and Strikethrough
+  are editable style flags, with defaults for new type and project-file persistence.
+  All Caps no longer rewrites the original text; synthetic small caps renders lowercase
+  letters as 70% capitals. Displayed-glyph measurements drive rasterization, horizontal
+  caret placement and selection, including uppercase expansions such as ß to SS.
+  Type-mask previews share the renderer. Tests cover undo, mixed-case source retention,
+  project round-trip, glyph advances and continuous decorations across spaces.
+  All 683 frontend tests, Svelte checks and Windows native build pass. Browser and
+  Windows canvas checks verify caps toggling restores exact original pixels and
+  reopening preserves the source text. Screenshot: `docs/screenshots/text-character-styles.png`.
+  Paragraph formatting now stores width, left/right/first-line indents, space before/
+  after and four justification modes. Width 0 preserves point type; positive widths
+  wrap at words with a glyph fallback for long words. Paragraph breaks remain in the
+  original source; visual lines retain UTF-16 positions for caret placement, selection
+  and Home/End/Up/Down navigation. Rendering and type-mask previews share that layout.
+  All 687 frontend tests pass, including project round-trip, paragraph geometry,
+  Unicode offsets, spacing, wrapping and justification; subsequent keyboard assertions
+  pass in the targeted text suite. Browser checks verify visible last-line alignment,
+  original source retention and visual-line keyboard movement. Svelte checks pass.
+  The Windows native build and the same paragraph-control, visible-justification and
+  wrapped-line navigation checks pass without runtime errors. Screenshot:
+  `docs/screenshots/text-paragraph-formatting.png`.
+  Image Size now scales paragraph width and horizontal indents by the width ratio,
+  and paragraph spacing by the height ratio, preserving point-type defaults and
+  em-relative tracking. Structural undo snapshots now retain editable TextSpec,
+  shape geometry/stroke and independent saved paths as well as rendered pixels.
+  Regression tests verify wrapping and line positions after uniform resize,
+  nonuniform paragraph scaling, text undo/redo and shape/path restoration across
+  resize branches. All 710 tests and Svelte checks pass. Browser and rebuilt Windows
+  UI checks resize to 50%, verify all six paragraph measurements halve, then verify
+  undo restores the original editable values and redo restores the scaled values.
+  No page errors; screenshot: `docs/screenshots/paragraph-resize-native.png`.
+- Polish item 9, drag portion: dragging a selected row moves the full selection in
+  stack order, carries group children once, and excludes every moved row as a target.
+  Multi-layer reparenting is one undoable move; pointer cancellation no longer commits.
+  Alt-drag duplicates selected root blocks. Tests cover separated rows, group/child
+  selections, self-drop rejection, group destinations and exact undo/redo. Browser
+  verification covers nonadjacent multi-selection drag and undo/redo without errors;
+  screenshot: `docs/screenshots/layers-multi-drag.png`.
+  Group clipping now uses the children's combined isolated silhouette, with group mask,
+  opacity and blend mode applied consistently. Group bases are accepted by the layer
+  commands. The GL path uploads a CPU-composited group clipping unit on recomposition;
+  ordinary groups stay on the GPU. Real WebGL pixels match CPU pixels exactly in eight
+  checks (including child edits and visibility changes) via
+  `app/src/tests/engine/group-clip-demo/index.html`. All 670 tests pass. Large-document
+  performance and native/cross-OS verification remain open; this is not the tiled GPU gate.
+- Polish item 10: Density and Feather are layer render parameters with undo, preserved
+  in `.pfproj` and layer/structural snapshots. CPU and GL compositors share cached
+  effective masks for pixels, groups, adjustments, effects and clipping. Painted mask
+  bytes are untouched; Apply Mask explicitly bakes the rendered result. The frontend
+  suite passes 660 tests. Browser pixel checks verify both settings affect the canvas
+  and resetting them restores the original image exactly, including slider state after undo.
+  The same pixel checks pass in the rebuilt Windows executable with no page errors;
+  screenshot: `docs/screenshots/mask-params-native.png`.
+
+Windows native verification (2026-10-07): rebuilt the debug executable and exercised
+items 1, 2 and 5 through the real WebView: permanent deletion, retained branches,
+single-state deletion, Navigator minimum height/zoom visibility and edge-aware tooltip.
+No page errors; screenshot `docs/screenshots/polish-native.png`. Frontend suite: 653
+passing tests, plus a passing branch-eviction regression added afterward; Svelte check
+has no errors or warnings. Cross-OS and live-provider release gates remain open.
+
+The remaining Wave 8–11 work and cross-OS/live-provider release gates below remain open.
+See `docs/oauth-setup.md` for configuration and verification boundaries.
+
 ## 0. Decisions (do not re-litigate)
 
 | Topic | Decision |
@@ -29,6 +171,57 @@
 
 ## 1. Polish backlog (from v0.2 QA — all must close)
 
+Tiling implementation progress: `TiledRaster` now provides sparse 256×256 RGBA tiles
+behind `IRaster`/`Raster`, copy-on-write clones, sparse pixel/fill/clear/crop operations,
+alpha bounds and detached tile readback. Empty/cleared tiles hold no pixel buffer;
+transparent pixels with nonzero RGB are preserved. The legacy writable `data` getter
+explicitly materializes a contiguous buffer, preserving old callers' mutation contract.
+Resampling and inherited transforms still take that compatibility path. Nine tests cover
+tile edges, clipping, pixel equivalence, snapshot isolation, array compatibility and
+200 retained snapshots across 30 empty 4000×3000 rasters with one-pixel edits. That
+isolated test retains 50 MiB of unique pixel buffers; it is **not** an app memory
+benchmark. Region readback, dense/sparse and sparse/sparse blits, opacity, replacement,
+overlapping self-copy, imports and filled construction now preserve sparse storage.
+Full-bounds captures share tiles; tests exercise actual PaintCommand capture/finish/
+undo/redo on a tiled layer. New pixel layers now default to tiled storage. Edge tiles
+allocate only valid pixels, so tiny history patches retain their expected byte cost.
+CPU blending, clipping alpha and thumbnails preserve sparse sources. GL full uploads
+reset the texture then transfer populated tiles; dirty uploads transfer only intersected
+tile regions, including zero bytes when a tile was cleared. GPU textures are still
+layer-sized. All 697 tests and Svelte checks pass. Real-browser CPU/GL checks verify
+edge tiles, four-region boundary edits, tile deletion and full clears with pixel parity
+and source storage remaining tiled; existing clipping/channel/overlay checks pass too.
+The Windows native build passes; its fill/define-pattern/define-brush flow, shared-tip
+rename/delete and full-process-restart persistence smoke test pass without runtime errors.
+Project save frames now use detached readback without changing live storage; project
+and image/PSD frame readers construct tiled pixel layers directly. Imports copy tile
+rows without an extra full-canvas Raster copy. Tests cover byte-view offsets, edge
+tiles, masks, transparent RGB and queued-save isolation for tiled and legacy layers.
+All 700 tests, Svelte checks and the frontend build pass. Browser GPU checks confirm
+project-frame reopen pixel parity with both live and restored sources remaining tiled.
+The existing file/IPC format still requires contiguous transfer blobs, so save-time
+peak allocation is not resolved by this change.
+The shared BrushStroke engine now keeps coverage in sparse float tiles, reads only
+the current dab region and writes changed pixels without expanding the live raster
+or pre-stroke snapshot. Target effects read only the current region of their cache;
+smudge uses bounded readback too. Seven added tests cover dense/tiled parity for
+color, erase, source, target and smudge, selection and edge clipping, cancellation,
+unchanged shared tiles and small-stroke allocation on a 4000×3000 canvas. All 707
+tests, Svelte checks and the frontend build pass. Real-browser GL checks verify a
+boundary-crossing stroke and cancellation while storage stays tiled, comparing alpha
+and premultiplied color to account for RGBA8 GPU rounding. The Windows native build
+passes; an isolated native window paints a stroke and restores exact canvas screenshot
+pixels through undo and redo without page errors (`docs/screenshots/tiled-brush-native.png`).
+Pointer leave now clears brush hover feedback through an optional tool lifecycle hook.
+Browser checks confirm the outline disappears on leave, stays absent when brush size
+changes outside the canvas, and returns on reentry. The rebuilt Windows app passes
+the paint/undo/redo screenshot check with the pointer moved into the toolbar, where
+the stale outline previously remained. Legacy healing coverage readback still allocates a full float array;
+this is not completion of the application memory gate.
+Legacy pixel writers, remaining bulk operations, sparse GPU allocation, workers
+and the full 1.5 GB benchmark gate remain open. Non-destructive cropping now has
+engine, project-file and native save/reopen coverage (see `docs/crop-preserve.md`).
+
 1. Tooltips clip at panel/window edges → one tooltip layer at app root with edge-aware placement (flip/shift).
 2. Navigator group too short when expanded → per-group min height (Navigator ≥ 180 px incl. zoom row); dock respects mins when distributing.
 3. Custom brush tips show a round cursor → cursor renders the actual tip outline (marching-squares of the tip alpha at current size/angle/roundness, cached).
@@ -36,7 +229,7 @@
 5. Delete History State only steps back → engine `History.dropAfter(index)` and real non-linear history option (PS "Allow Non-Linear History").
 6. Patterns from Define Pattern and tips from Define Brush Preset don't persist → saved to app data (`patterns/`, `brushes/`), managed in a Preset Manager dialog.
 7. Character panel: underline, strikethrough, small caps, real all caps (style flag, not text rewrite); Paragraph: indents, space before/after, justification modes → `TextSpec` v2.
-8. Crop "Delete Cropped Pixels" off → keep hidden pixels (needs tiling: layers may extend beyond the canvas).
+8. Crop "Delete Cropped Pixels" off → keep hidden pixels (implemented locally; native crop, undo/redo and save/reopen verified, see [crop evidence](docs/crop-preserve.md)).
 9. Multi-select drag in Layers moves the whole selection; clipping to a group base.
 10. Mask Density/Feather become non-destructive mask render params.
 11. Channels: two-channel views and alpha-channel overlay tint like PS.
@@ -71,6 +264,10 @@
 - **Remove tool** (brush over object → AI or local inpaint).
 - **Local inpainting model** option (ONNX LaMa via `ort` crate) so Remove/Content-Aware works offline.
 - fal.ai provider; per-provider seed/steps where supported; prompt library.
+  Per-request seed/steps for the custom image adapters are implemented and
+  native-fixture verified ([evidence](docs/ai-sampling.md)). The fal.ai queue adapter
+  is implemented with native-fixture checks for generation, edits, quota errors and
+  remote cancellation ([evidence](docs/fal-provider.md)); live account use remains unverified.
 - Live verification harness: `cargo run -p pf-ai --example live -- --all` producing a report Paul can run with his keys.
 
 ### 2.5 Files

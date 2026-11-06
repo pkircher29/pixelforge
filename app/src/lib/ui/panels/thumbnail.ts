@@ -45,19 +45,19 @@ export function sampleRaster(raster: Raster, offset: { x: number; y: number }, s
   const fh = Math.max(1, Math.round(srcRect.h * scale));
   const ox = Math.floor((tw - fw) / 2);
   const oy = Math.floor((th - fh) / 2);
-  const d = raster.data;
+  const pixel = { r: 0, g: 0, b: 0, a: 0 };
   for (let y = 0; y < fh; y++) {
     const dy = Math.floor(srcRect.y + ((y + 0.5) / fh) * srcRect.h) - offset.y;
     if (dy < 0 || dy >= raster.height) continue;
     for (let x = 0; x < fw; x++) {
       const dx = Math.floor(srcRect.x + ((x + 0.5) / fw) * srcRect.w) - offset.x;
       if (dx < 0 || dx >= raster.width) continue;
-      const si = (dy * raster.width + dx) * 4;
+      raster.getPixel(dx, dy, pixel);
       const oi = ((oy + y) * tw + ox + x) * 4;
-      out[oi] = d[si]!;
-      out[oi + 1] = d[si + 1]!;
-      out[oi + 2] = d[si + 2]!;
-      out[oi + 3] = d[si + 3]!;
+      out[oi] = pixel.r;
+      out[oi + 1] = pixel.g;
+      out[oi + 2] = pixel.b;
+      out[oi + 3] = pixel.a;
     }
   }
 }

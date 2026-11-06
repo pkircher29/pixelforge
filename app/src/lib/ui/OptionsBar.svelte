@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Swatch from "$lib/ui/controls/Swatch.svelte";
   /**
    * Options bar (28 px): tool preset picker at left, then the tool's option schema in PS
    * idioms — scrubby numbers with ▾ sliders, selection-mode segmented icons, PS checkboxes,
@@ -101,7 +102,7 @@
       {@const c = o.key === "fg" ? toolStore.fg : toolStore.bg}
       <label class="opt" title={o.label || "Set the text color"}>
         {#if o.label}<span class="lbl">{o.label}:</span>{/if}
-        <span class="swatch" style:background={rgbaToHex(c)}>
+        <span class="swatch"><Swatch color={c} />
           <input type="color" value={rgbaToHex(c)} oninput={(e) => { const v = hexToRgba(e.currentTarget.value); if (v) (o.key === "fg" ? toolStore.setFg(v) : toolStore.setBg(v)); }} aria-label={o.label || "Color"} />
         </span>
       </label>

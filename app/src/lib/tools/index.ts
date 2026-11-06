@@ -18,6 +18,7 @@ import { WandTool } from "./wand";
 import { CropTool } from "./crop";
 import { EyedropperTool, ColorSamplerTool, RulerTool } from "./eyedropper";
 import { SpotHealingTool, HealingBrushTool, PatchTool, RedEyeTool } from "./healing";
+import { RemoveTool } from "./remove";
 import { BrushTool } from "./brush";
 import { ColorReplacementTool } from "./color-replacement";
 import { CloneStampTool, PatternStampTool, HistoryBrushTool } from "./stamp";
@@ -57,6 +58,7 @@ export const TOOLS: readonly Tool[] = [
   new ColorSamplerTool(),
   new RulerTool(),
   new SpotHealingTool(),
+  new RemoveTool(),
   new HealingBrushTool(),
   new PatchTool(),
   new RedEyeTool(),
@@ -172,6 +174,7 @@ export const TOOL_GROUPS: readonly ToolGroupDef[] = [
     key: "J",
     members: [
       { id: "healing-spot", name: "Spot Healing Brush Tool" },
+      { id: "remove", name: "Remove Tool" },
       { id: "healing-brush", name: "Healing Brush Tool" },
       { id: "patch", name: "Patch Tool" },
       { id: "content-aware-move", name: "Content-Aware Move Tool" },

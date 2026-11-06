@@ -40,17 +40,20 @@ pub enum CustomKind {
     A1111,
     /// Replicate predictions API (hosted, per-model inputs).
     Replicate,
+    /// fal.ai queued image endpoints.
+    Fal,
 }
 
 impl CustomKind {
     /// Every kind, in "+ Add" menu order.
-    pub const ALL: [CustomKind; 6] = [
+    pub const ALL: [CustomKind; 7] = [
         CustomKind::OpenAiCompat,
         CustomKind::HuggingFace,
         CustomKind::Ollama,
         CustomKind::ComfyUi,
         CustomKind::A1111,
         CustomKind::Replicate,
+        CustomKind::Fal,
     ];
 
     /// Wire / registry string (`openai_compat`, ...).
@@ -62,6 +65,7 @@ impl CustomKind {
             CustomKind::ComfyUi => "comfy_ui",
             CustomKind::A1111 => "a1111",
             CustomKind::Replicate => "replicate",
+            CustomKind::Fal => "fal",
         }
     }
 
@@ -74,6 +78,7 @@ impl CustomKind {
             CustomKind::ComfyUi => "ComfyUI",
             CustomKind::A1111 => "Stable Diffusion WebUI / Forge",
             CustomKind::Replicate => "Replicate",
+            CustomKind::Fal => "fal.ai",
         }
     }
 
@@ -88,6 +93,7 @@ impl CustomKind {
             CustomKind::ComfyUi => "ComfyUI (local, full control, inpainting)",
             CustomKind::A1111 => "Stable Diffusion WebUI / Forge (local, inpainting)",
             CustomKind::Replicate => "Replicate (hosted, any public model)",
+            CustomKind::Fal => "fal.ai (hosted image generation and editing)",
         }
     }
 
@@ -100,6 +106,7 @@ impl CustomKind {
             CustomKind::ComfyUi => "http://127.0.0.1:8188",
             CustomKind::A1111 => "http://127.0.0.1:7860",
             CustomKind::Replicate => "https://api.replicate.com",
+            CustomKind::Fal => "https://queue.fal.run",
         }
     }
 
@@ -112,12 +119,13 @@ impl CustomKind {
             CustomKind::ComfyUi => "https://github.com/comfyanonymous/ComfyUI",
             CustomKind::A1111 => "https://github.com/AUTOMATIC1111/stable-diffusion-webui",
             CustomKind::Replicate => "https://replicate.com/account/api-tokens",
+            CustomKind::Fal => "https://fal.ai/dashboard/keys",
         }
     }
 
     /// Whether a secret is mandatory (`true`), optional (`false`).
     pub fn requires_auth(self) -> bool {
-        matches!(self, CustomKind::HuggingFace | CustomKind::Replicate)
+        matches!(self, CustomKind::HuggingFace | CustomKind::Replicate | CustomKind::Fal)
     }
 
     /// Kinds that normally run on the user's own machine.
@@ -166,6 +174,7 @@ impl CustomKind {
             },
             CustomKind::Ollama => Capabilities::default(),
             CustomKind::ComfyUi | CustomKind::A1111 => sd,
+            CustomKind::Fal => Capabilities { mask_edit: false, ..sd },
             CustomKind::Replicate => Capabilities {
                 mask_edit: false,
                 instruct_edit: false,
@@ -215,7 +224,38 @@ fn empty_object() -> Value {
     Value::Object(serde_json::Map::new())
 }
 
+/// Per-job sampling overrides. Absent values retain the saved provider defaults.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct SamplingOptions {
+    pub seed: Option<u64>,
+    pub steps: Option<u32>,
+}
+
+impl SamplingOptions {
+    pub fn is_empty(self) -> bool {
+        self.seed.is_none() && self.steps.is_none()
+    }
+}
+
 impl CustomProvider {
+    /// Build a job-local configuration without changing the provider registry.
+    pub fn with_sampling(&self, sampling: SamplingOptions) -> Result<Self, Error> {
+        if !sampling.is_empty() && self.kind == CustomKind::Ollama {
+            return Err(Error::InvalidRequest("This provider does not support image sampling controls".into()));
+        }
+        if sampling.seed.is_some_and(|v| v > 2_147_483_647)
+            || sampling.steps.is_some_and(|v| !(1..=150).contains(&v))
+        {
+            return Err(Error::InvalidRequest("Seed must be 0–2147483647 and steps must be 1–150".into()));
+        }
+        let mut cfg = self.clone();
+        if sampling.is_empty() { return Ok(cfg); }
+        if !cfg.extra.is_object() { cfg.extra = empty_object(); }
+        if let Some(seed) = sampling.seed { cfg.extra["seed"] = Value::from(seed); }
+        if let Some(steps) = sampling.steps { cfg.extra["steps"] = Value::from(steps); }
+        Ok(cfg)
+    }
+
     /// A new entry with the kind's defaults.
     pub fn new(id: impl Into<String>, name: impl Into<String>, kind: CustomKind) -> Self {
         Self {
@@ -223,9 +263,9 @@ impl CustomProvider {
             name: name.into(),
             kind,
             base_url: kind.default_base_url().to_owned(),
-            model: String::new(),
+            model: if kind == CustomKind::Fal { "fal-ai/flux/dev".into() } else { String::new() },
             capabilities: kind.default_capabilities(),
-            extra: empty_object(),
+            extra: if kind == CustomKind::Fal { serde_json::json!({ "editModel": "fal-ai/flux/dev/image-to-image" }) } else { empty_object() },
             has_auth: false,
         }
     }
@@ -609,7 +649,7 @@ mod tests {
         assert_eq!(reg.load().expect("load").len(), 1);
         reg.remove("hf").expect("remove twice is fine");
         let kinds: Vec<&str> = CustomKind::ALL.iter().map(|k| k.as_str()).collect();
-        assert_eq!(kinds.len(), 6);
+        assert_eq!(kinds.len(), 7);
         assert_eq!(
             serde_json::to_string(&CustomKind::OpenAiCompat).expect("ser"),
             "\"openai_compat\""

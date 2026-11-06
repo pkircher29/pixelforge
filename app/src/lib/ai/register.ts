@@ -63,6 +63,16 @@ registerCommands([
     run: () => aiUi.focusPrompt("mask"),
   },
   {
+    id: "ai.generativeFill",
+    label: "Generative Fill…",
+    menu: "AI",
+    order: 115,
+    icon: WandSparkles,
+    keywords: ["inpaint", "variants", "selection"],
+    enabled: () => Boolean(docStore.doc && !docStore.doc.selection.isEmpty && !docStore.doc.selection.isAll),
+    run: () => aiUi.focusGenerativeFill(),
+  },
+  {
     id: "ai.shootout",
     label: "Generate with all models…",
     menu: "AI",

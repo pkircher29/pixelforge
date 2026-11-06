@@ -20,9 +20,12 @@ export interface SegItem {
   title: string;
 }
 
-/** Segmented items: Gemini gets none (no subscription sign-in exists). */
+/** OAuth API billing and subscription billing are distinct choices. */
 export function authItems(id: BuiltinProviderId): SegItem[] {
-  if (id === "gemini") return [];
+  if (id === "gemini") return [
+    { value: "api_key", label: "API key", title: "Use your Gemini API key" },
+    { value: "oauth", label: "Google OAuth", title: "Sign in with Google; Gemini API usage is billed to your Cloud project" },
+  ];
   const sub = id === "open_ai" ? "ChatGPT subscription" : "SuperGrok subscription";
   return [
     { value: "api_key", label: "API key", title: "Use your own API key (billed by the vendor per request)" },

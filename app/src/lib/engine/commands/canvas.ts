@@ -63,6 +63,7 @@ function scalePathInPlace(p: Path, sx: number, sy: number): void {
 
 /** Shift / re-frame one layer for a canvas change (`dx, dy` = where the old canvas origin lands). */
 function reframeLayer(doc: Document, layer: Layer, w: number, h: number, dx: number, dy: number): void {
+  layer.renderSize = undefined;
   if (layer.kind === "raster") {
     const ox = layer.offset.x + dx;
     const oy = layer.offset.y + dy;
@@ -92,16 +93,22 @@ function reframeLayer(doc: Document, layer: Layer, w: number, h: number, dx: num
   layer.offset = { x: 0, y: 0 };
 }
 
-function reframeDocument(doc: Document, w: number, h: number, dx: number, dy: number): void {
+function reframeDocument(doc: Document, w: number, h: number, dx: number, dy: number, preserve = false): void {
   // Shape / text layers read `doc.width/height` when rasterizing: set the size first.
   const oldW = doc.width;
   const oldH = doc.height;
   doc.width = w;
   doc.height = h;
-  for (const layer of doc.layers) reframeLayer(doc, layer, w, h, dx, dy);
-  const sel = doc.selection.translate(dx, dy);
+  for (const layer of doc.layers) {
+    if (!preserve) { reframeLayer(doc, layer, w, h, dx, dy); continue; }
+    if (layer.kind === "shape" || layer.kind === "text" || layer.kind === "fill") {
+      layer.renderSize ??= { width: layer.raster?.width ?? oldW, height: layer.raster?.height ?? oldH };
+    }
+    layer.offset = { x: layer.offset.x + dx, y: layer.offset.y + dy };
+  }
+  const sel = doc.selection;
   const resized = new Raster(w, h);
-  resized.blit(sel.toLuminanceMask(), 0, 0, undefined, { mode: "replace" });
+  resized.blit(sel.toLuminanceMask(), dx, dy, undefined, { mode: "replace" });
   doc.selection = selectionFromLuminance(resized);
   doc.alphaChannels = doc.alphaChannels.map((c) => ({ ...c, mask: reframeChannel(c.mask, w, h, dx, dy, 0) }));
   if (doc.quickMask.raster) doc.quickMask.raster = reframeChannel(doc.quickMask.raster, w, h, dx, dy, 0);
@@ -156,6 +163,7 @@ export class ResizeImageCommand extends StructuralCommand {
     doc.width = this.w;
     doc.height = this.h;
     for (const layer of doc.layers) {
+      if (layer.renderSize) layer.renderSize = { width: Math.max(1, Math.round(layer.renderSize.width * sx)), height: Math.max(1, Math.round(layer.renderSize.height * sy)) };
       if (layer.kind === "raster") {
         const nw = Math.max(1, Math.round(layer.raster.width * sx));
         const nh = Math.max(1, Math.round(layer.raster.height * sy));
@@ -173,7 +181,20 @@ export class ResizeImageCommand extends StructuralCommand {
         continue;
       }
       if (layer.kind === "text") {
-        layer.text = { ...layer.text, x: layer.text.x * sx, y: layer.text.y * sy, size: layer.text.size * Math.sqrt(sx * sy), leading: layer.text.leading === null ? null : layer.text.leading * sy };
+        const text = layer.text;
+        layer.text = {
+          ...text, x: text.x * sx, y: text.y * sy,
+          size: text.size * Math.sqrt(sx * sy),
+          leading: text.leading === null ? null : text.leading * sy,
+        };
+        for (const key of ["paragraphWidth", "indentLeft", "indentRight", "firstLineIndent"] as const) {
+          const value = text[key];
+          if (value != null) layer.text[key] = value * sx;
+        }
+        for (const key of ["spaceBefore", "spaceAfter"] as const) {
+          const value = text[key];
+          if (value !== undefined) layer.text[key] = value * sy;
+        }
         layer.offset = { x: Math.round(layer.offset.x * sx), y: Math.round(layer.offset.y * sy) };
         if (layer.mask) layer.mask = layer.mask.resize(this.w, this.h, this.method);
         rerasterizeText(doc, layer);
@@ -193,7 +214,7 @@ export class CropCanvasCommand extends StructuralCommand {
   readonly label = "Crop";
   private readonly rect: Rect;
 
-  constructor(rect: Rect) {
+  constructor(rect: Rect, private readonly deletePixels = true) {
     super();
     checkSize(rect.w, rect.h);
     this.rect = { ...rect };
@@ -201,6 +222,29 @@ export class CropCanvasCommand extends StructuralCommand {
 
   protected apply(doc: Document): void {
     const r = this.rect;
+    reframeDocument(doc, r.w, r.h, -r.x, -r.y, !this.deletePixels);
+  }
+}
+
+/** Extend the canvas and select only the new area for outpainting, in one undo step. */
+export class PrepareExpandCommand extends StructuralCommand {
+  readonly label = "Prepare Generative Expand";
+  private readonly rect: Rect;
+
+  constructor(rect: Rect) {
+    super();
+    checkSize(rect.w, rect.h);
+    if (!Number.isInteger(rect.x) || !Number.isInteger(rect.y)) throw new RangeError("Expansion origin must use whole pixels");
+    this.rect = { ...rect };
+  }
+
+  protected apply(doc: Document): void {
+    const r = this.rect;
+    if (r.x > 0 || r.y > 0 || r.x + r.w < doc.width || r.y + r.h < doc.height || (r.w === doc.width && r.h === doc.height)) {
+      throw new RangeError("Extend the crop beyond the canvas while keeping the original image inside");
+    }
+    const original = { x: -r.x, y: -r.y, w: doc.width, h: doc.height };
     reframeDocument(doc, r.w, r.h, -r.x, -r.y);
+    doc.selection = Selection.fromRect(r.w, r.h, original).invert();
   }
 }

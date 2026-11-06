@@ -1,9 +1,9 @@
 <script lang="ts">
+  import Swatch from "$lib/ui/controls/Swatch.svelte";
   /**
    * Character panel (PS): font family / style, size, leading, tracking, color, faux
-   * bold / italic, All Caps. Bound to the live type session, else the active text layer,
-   * else the Type tool defaults. Underline / small caps / baseline shift need engine
-   * TextSpec support and are shown disabled.
+   * bold / italic and character styles. Bound to the live type session, else the active
+   * text layer, else the Type tool defaults. Case styles preserve the original text.
    */
   import ScrubbyNumber from "../controls/ScrubbyNumber.svelte";
   import PsSelect from "../controls/PsSelect.svelte";
@@ -20,13 +20,8 @@
     { value: "italic", label: "Italic" },
     { value: "boldItalic", label: "Bold Italic" },
   ];
-  const allCaps = $derived(s.text.length > 0 && s.text === s.text.toUpperCase() && /[A-Z]/.test(s.text));
   function setStyle(v: string) {
     applyTypePatch({ bold: v === "bold" || v === "boldItalic", italic: v === "italic" || v === "boldItalic" });
-  }
-  function toggleCaps() {
-    if (!s.text) return;
-    applyTypePatch({ text: allCaps ? s.text.toLowerCase() : s.text.toUpperCase() });
   }
 </script>
 
@@ -44,17 +39,17 @@
   </div>
   <div class="row">
     <span class="lbl">Color:</span>
-    <span class="swatch" style:background={rgbaToHex(s.color)}>
+    <span class="swatch"><Swatch color={s.color} />
       <input type="color" value={rgbaToHex(s.color)} aria-label="Text color" oninput={(e) => { const c = hexToRgba(e.currentTarget.value); if (c) applyTypePatch({ color: c }); }} />
     </span>
   </div>
   <div class="toggles" role="group" aria-label="Type style">
     <button type="button" class="tg" class:on={s.bold} title="Faux Bold" aria-pressed={s.bold} onclick={() => applyTypePatch({ bold: !s.bold })}><b>T</b></button>
     <button type="button" class="tg" class:on={s.italic} title="Faux Italic" aria-pressed={s.italic} onclick={() => applyTypePatch({ italic: !s.italic })}><i>T</i></button>
-    <button type="button" class="tg" class:on={allCaps} title="All Caps" aria-pressed={allCaps} disabled={!s.text} onclick={toggleCaps}>TT</button>
-    <button type="button" class="tg" disabled title="Small Caps (not supported yet)">Tt</button>
-    <button type="button" class="tg" disabled title="Underline (not supported yet)"><u>T</u></button>
-    <button type="button" class="tg" disabled title="Strikethrough (not supported yet)"><s>T</s></button>
+    <button type="button" class="tg" class:on={s.allCaps} title="All Caps" aria-pressed={!!s.allCaps} onclick={() => applyTypePatch({ allCaps: !s.allCaps })}>TT</button>
+    <button type="button" class="tg" class:on={s.smallCaps} title="Small Caps" aria-pressed={!!s.smallCaps} onclick={() => applyTypePatch({ smallCaps: !s.smallCaps })}>Tt</button>
+    <button type="button" class="tg" class:on={s.underline} title="Underline" aria-pressed={!!s.underline} onclick={() => applyTypePatch({ underline: !s.underline })}><u>T</u></button>
+    <button type="button" class="tg" class:on={s.strikethrough} title="Strikethrough" aria-pressed={!!s.strikethrough} onclick={() => applyTypePatch({ strikethrough: !s.strikethrough })}><s>T</s></button>
   </div>
   <div class="row">
     <span class="lbl">Anti-aliasing:</span>

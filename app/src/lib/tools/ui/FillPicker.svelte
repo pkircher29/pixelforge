@@ -4,7 +4,8 @@
    * switches between the three and offers a color input or the gradient presets + editor.
    */
   import Popover from "$lib/ui/controls/Popover.svelte";
-  import Icon from "$lib/ui/icons/Icon.svelte";
+  import Swatch from "$lib/ui/controls/Swatch.svelte";
+  import { swatchCss } from "$lib/ui/controls/swatch";
   import { openDialog } from "$lib/ui/dialogs/dialogs.svelte";
   import GradientEditorDialog from "$lib/ui/dialogs/GradientEditorDialog.svelte";
   import { toolStore, rgbaToHex, hexToRgba } from "$lib/stores/tool.svelte";
@@ -53,15 +54,15 @@
   }
   function swatchStyle(): string {
     if (!fill) return "";
-    if (fill.type === "solid") return `background:${rgbaToHex(fill.color)}`;
+    if (fill.type === "solid") return swatchCss(fill.color);
     const stops = fill.gradient.stops.map((s) => `rgba(${Math.round(s.color.r)},${Math.round(s.color.g)},${Math.round(s.color.b)},${s.color.a / 255}) ${Math.round(s.pos * 100)}%`).join(",");
-    return `background:linear-gradient(90deg,${stops})`;
+    return `linear-gradient(90deg,${stops})`;
   }
 </script>
 
 <span class="wrap">
   {#if label}<span class="lbl">{label}:</span>{/if}
-  <button type="button" class="sw" class:none={!fill} bind:this={btn} style={swatchStyle()} aria-label="{label} picker" onclick={() => (open = !open)}></button>
+  <button type="button" class="sw" class:none={!fill} bind:this={btn} aria-label="{label} picker" onclick={() => (open = !open)}>{#if fill}<Swatch background={swatchStyle()} />{/if}</button>
   <Popover anchor={btn} open={open} onclose={() => (open = false)} minWidth={230}>
     <div class="pop">
       <div class="modes">
@@ -72,11 +73,11 @@
       {#if mode === "solid" && fill?.type === "solid"}
         <div class="recent">
           {#each RECENT as hex (hex)}
-            <button type="button" class="chip" style:background={hex} aria-label={hex} onclick={() => setSolid(hex)}></button>
+            <button type="button" class="chip" aria-label={hex} onclick={() => setSolid(hex)}><Swatch color={hex} /></button>
           {/each}
-          <label class="chip picker" style:background={rgbaToHex(fill.color)} title="Pick a color">
+          <label class="chip picker" title="Pick a color">
             <input type="color" value={rgbaToHex(fill.color)} oninput={(e) => setSolid(e.currentTarget.value)} aria-label="Color" />
-            <Icon name="color" size={12} />
+            <Swatch color={fill.color} />
           </label>
         </div>
       {:else if mode === "gradient"}

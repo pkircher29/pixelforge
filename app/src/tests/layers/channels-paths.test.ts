@@ -37,7 +37,7 @@ describe("Channels panel model", () => {
     let rows = buildChannelRows(doc, null, st.view, st.hidden);
     // Hide Red → still composite (G+B visible).
     let n = toggleChannelEye(rows, rows[1]!, st.view, st.hidden);
-    expect(n).toEqual({ view: "rgb", hidden: ["r"] });
+    expect(n).toEqual({ view: "gb", hidden: ["r"] });
     // Hide Green → only Blue left → view "b".
     rows = buildChannelRows(doc, null, n.view, n.hidden);
     n = toggleChannelEye(rows, rows[2]!, n.view, n.hidden);
@@ -45,15 +45,16 @@ describe("Channels panel model", () => {
     // Show Red again → two visible → rgb.
     rows = buildChannelRows(doc, null, n.view, n.hidden);
     n = toggleChannelEye(rows, rows[1]!, n.view, n.hidden);
-    expect(n.view).toBe("rgb");
+    expect(n.view).toBe("rb");
     expect(n.hidden).toEqual(["g"]);
-    // Turn the alpha eye on → view alpha; off → back to colours.
+    // Turn the alpha eye on → tint over the color pair; off → plain color pair.
     rows = buildChannelRows(doc, null, "rgb", ["g", aid]);
     n = toggleChannelEye(rows, rows[4]!, "rgb", ["g", aid]);
-    expect(n.view).toBe(`alpha:${aid}`);
-    rows = buildChannelRows(doc, null, n.view, n.hidden);
+    expect(n.view).toBe("rb");
+    expect(n.overlays).toEqual([aid]);
+    rows = buildChannelRows(doc, null, n.view, n.hidden, n.overlays);
     n = toggleChannelEye(rows, rows[4]!, n.view, n.hidden);
-    expect(n.view).toBe("rgb");
+    expect(n.view).toBe("rb");
     // Hiding RGB hides all colours.
     rows = buildChannelRows(doc, null, "rgb", []);
     n = toggleChannelEye(rows, rows[0]!, "rgb", []);

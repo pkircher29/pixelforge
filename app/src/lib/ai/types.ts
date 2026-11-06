@@ -28,9 +28,9 @@ export function customIdOf(id: ProviderId): string | null {
 }
 
 /** Wire names of the custom provider kinds (`crates/pf-ai/src/custom.rs`). */
-export type CustomKind = "openai_compat" | "hugging_face" | "ollama" | "comfy_ui" | "a1111" | "replicate";
+export type CustomKind = "openai_compat" | "hugging_face" | "ollama" | "comfy_ui" | "a1111" | "replicate" | "fal";
 
-export const CUSTOM_KINDS: readonly CustomKind[] = ["openai_compat", "hugging_face", "ollama", "comfy_ui", "a1111", "replicate"];
+export const CUSTOM_KINDS: readonly CustomKind[] = ["openai_compat", "hugging_face", "ollama", "comfy_ui", "a1111", "replicate", "fal"];
 
 /** Static per-kind data from `ai_custom_kinds`. */
 export interface CustomKindInfo {
@@ -135,7 +135,7 @@ export interface ProviderInfo {
   account?: AccountInfo;
 }
 
-export type AuthMode = "api_key" | "subscription";
+export type AuthMode = "api_key" | "subscription" | "oauth";
 
 export interface AccountInfo {
   email?: string;
@@ -208,21 +208,26 @@ export function onSubscription(p: ProviderInfo): boolean {
   return p.authActive === "subscription";
 }
 
+/** Browser credentials, either a subscription or separately billed API OAuth. */
+export function onOAuth(p: ProviderInfo): boolean {
+  return p.authActive === "oauth" || onSubscription(p);
+}
+
 /** Ready to run: has a key (API-key mode), is signed in (subscription mode), or the key is optional. */
 export function isReady(p: ProviderInfo): boolean {
-  if (onSubscription(p)) return p.account !== undefined;
+  if (onOAuth(p)) return p.account !== undefined;
   return p.hasKey || p.keyOptional;
 }
 
 /** `ChatGPT (subscription)` / `ChatGPT (API key)` where both modes exist; plain name otherwise. */
 export function authLabel(p: ProviderInfo): string {
   if (!p.authModes || p.authModes.length < 2) return p.name;
-  return `${p.name} (${onSubscription(p) ? "subscription" : "API key"})`;
+  return `${p.name} (${p.authActive === "oauth" ? "Google OAuth" : onSubscription(p) ? "subscription" : "API key"})`;
 }
 
 /** What to show when the provider is not ready. */
 export function notReadyNote(p: ProviderInfo): string {
-  return onSubscription(p) ? "not signed in" : "no key";
+  return onOAuth(p) ? "not signed in" : "no key";
 }
 
 export type JobId = string;
@@ -265,6 +270,7 @@ export interface GenerateParams {
   quality?: string;
   transparent?: boolean;
   seed?: number;
+  steps?: number;
   /** 10..3600, clamped by Rust. */
   timeoutSecs?: number;
 }

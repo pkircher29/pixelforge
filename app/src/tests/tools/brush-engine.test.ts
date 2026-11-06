@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { Raster, Rect, Selection } from "../../lib/engine";
+import { Raster, Rect, Selection, TiledRaster } from "../../lib/engine";
 import {
   BrushStroke,
   DEFAULT_BRUSH_SETTINGS,
@@ -14,6 +14,7 @@ import {
   spacingPx,
   type BrushSettings,
   type PlacementState,
+  type StrokeBlend,
 } from "../../lib/tools/brush-engine";
 import { builtinTips, sampleTip, tipById, tipFromRaster, TIP_SIZE } from "../../lib/tools/brush-tips";
 import { Rng } from "../../lib/tools/rng";
@@ -229,6 +230,60 @@ describe("BrushStroke", () => {
     const s = new BrushStroke(r, { ...base, settings: S({ size: 8, hardness: 100, spacing: 10 }), blend: { mode: "smudge", strength: 0.8, fingerColor: null } });
     for (let x = 4; x <= 24; x += 1) s.moveTo({ x, y: 5 });
     expect(r.getPixel(16, 5).r).toBeGreaterThan(40);
+  });
+});
+
+describe("tiled brush storage", () => {
+  const blends: StrokeBlend[] = [
+    { mode: "color", color: { r: 210, g: 30, b: 80, a: 180 } },
+    { mode: "erase" },
+    { mode: "source", sourceAt: (x, y, out) => Object.assign(out, { r: x % 256, g: y % 256, b: 50, a: 190 }) },
+    { mode: "target", margin: 8, computeTarget: (before, rect) => {
+      const target = before.crop(rect);
+      target.fill({ r: 10, g: 220, b: 40, a: 100 });
+      return target;
+    } },
+    { mode: "smudge", strength: 0.8, fingerColor: null },
+  ];
+  for (const blend of blends) it(`matches dense ${blend.mode} strokes across tiles and clipped edges`, () => {
+    const dense = new Raster(530, 270), tiled = new TiledRaster(530, 270);
+    const selection = Selection.fromRect(530, 270, Rect.make(0, 0, 528, 268));
+    for (const raster of [dense, tiled]) {
+      raster.fill({ r: 90, g: 120, b: 180, a: 170 }, Rect.make(248, 244, 282, 26));
+      raster.fill({ r: 250, g: 40, b: 0, a: 255 }, Rect.make(253, 245, 8, 20));
+    }
+    const original = tiled.clone();
+    const strokes = [dense, tiled].map(raster => new BrushStroke(raster, {
+      settings: S({ size: 18, hardness: 60, spacing: 15 }), blend,
+      opacity: 0.7, flow: 0.6, selection, offset: { x: 0, y: 0 }, seed: 9,
+    }));
+    for (const stroke of strokes) {
+      stroke.moveTo({ x: 250, y: 252 });
+      stroke.moveTo({ x: 270, y: 260 });
+      stroke.moveTo({ x: 529, y: 269 });
+    }
+    expect(tiled.readPixels(tiled.bounds())).toEqual(dense.data);
+    expect(tiled.storageMode).toBe("tiled");
+    expect((strokes[1]!.before as TiledRaster).storageMode).toBe("tiled");
+    strokes[1]!.abort();
+    expect(tiled.readPixels(tiled.bounds())).toEqual(original.readPixels(original.bounds()));
+    expect(tiled.storageMode).toBe("tiled");
+  });
+
+  it("allocates coverage and snapshot pixels only where a large canvas is painted", () => {
+    const raster = new TiledRaster(4000, 3000);
+    const stroke = new BrushStroke(raster, {
+      settings: S({ size: 12 }), blend: blends[0]!, opacity: 1, flow: 1,
+      selection: null, offset: { x: 0, y: 0 }, seed: 1,
+    });
+    expect(stroke.coverageBytes).toBe(0);
+    stroke.moveTo({ x: 100, y: 100 });
+    expect(stroke.coverageBytes).toBe(256 * 256 * 4);
+    expect(stroke.coverageAt(100, 100)).toBeGreaterThan(0);
+    expect(stroke.coverageAt(3500, 2500)).toBe(0);
+    expect(TiledRaster.retainedPixelBytes([raster, stroke.before as TiledRaster])).toBe(256 * 256 * 4);
+    stroke.abort();
+    expect(raster.byteLength()).toBe(0);
   });
 });
 

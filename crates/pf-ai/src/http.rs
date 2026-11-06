@@ -57,13 +57,21 @@ pub(crate) fn map_error(
     let body = scrub(truncate(raw_body, MAX_ERROR_BODY));
     let info = ProviderErrorInfo::parse(&body);
     let message = info.message.clone().unwrap_or_else(|| body.clone());
+    if matches!(status, 400 | 402 | 429) && info.is_billing_quota() {
+        return Error::Quota {
+            provider: provider.clone(),
+            message,
+        };
+    }
     match status {
         401 | 403 => Error::Auth(format!("{provider} rejected the API key: {message}")),
         429 => Error::RateLimited {
             retry_after_secs: retry_after,
         },
         400 | 422 => {
-            if info.is_moderation() {
+            if info.is_invalid_key() {
+                Error::Auth(format!("{provider} rejected the API key: {message}"))
+            } else if info.is_moderation() {
                 Error::Moderation {
                     provider: provider.clone(),
                     categories: info.categories,
@@ -94,6 +102,39 @@ pub(crate) struct ProviderErrorInfo {
 }
 
 impl ProviderErrorInfo {
+    fn is_billing_quota(&self) -> bool {
+        matches!(
+            self.code.as_deref(),
+            Some(
+                "insufficient_quota"
+                    | "credit_balance_exhausted"
+                    | "organization_spend_limit_exceeded"
+                    | "project_spend_limit_exceeded"
+                    | "organization_usage_limit_exceeded"
+                    | "billing_hard_limit_reached"
+            )
+        )
+    }
+
+    /// Some providers report credential rejection as INVALID_ARGUMENT / HTTP 400.
+    fn is_invalid_key(&self) -> bool {
+        let code = self
+            .code
+            .as_deref()
+            .unwrap_or_default()
+            .to_ascii_lowercase();
+        let message = self
+            .message
+            .as_deref()
+            .unwrap_or_default()
+            .to_ascii_lowercase();
+        matches!(
+            code.as_str(),
+            "invalid_api_key" | "api_key_invalid" | "unauthenticated"
+        ) || message.starts_with("incorrect api key provided")
+            || message.starts_with("api key not valid")
+    }
+
     /// Best-effort parse of the three providers' error shapes:
     /// OpenAI `{error:{message,code,type,moderation_details:{categories}}}`,
     /// xAI `{error:"...", code:"..."}` or OpenAI-style, Gemini `{error:{code,message,status}}`.
@@ -336,6 +377,40 @@ mod tests {
     }
 
     #[test]
+    fn billing_quota_errors_keep_diagnostics_and_are_not_retried() {
+        for code in [
+            "insufficient_quota",
+            "credit_balance_exhausted",
+            "project_spend_limit_exceeded",
+            "organization_spend_limit_exceeded",
+            "organization_usage_limit_exceeded",
+            "billing_hard_limit_reached",
+        ] {
+            let body = serde_json::json!({"error": {"code": code, "message": "Review project credits: sk-example-secret-for-redaction"}}).to_string();
+            let error = map_error(&ProviderId::OpenAi, 429, Some(5), &body);
+            assert_eq!(error.code(), "ai_quota");
+            assert!(!error.is_retryable());
+            assert!(error.to_string().contains("Review project credits"));
+            assert!(!error.to_string().contains("sk-example-secret"));
+        }
+        let limited = map_error(
+            &ProviderId::OpenAi,
+            429,
+            Some(5),
+            r#"{"error":{"code":"rate_limit_exceeded","message":"Slow down"}}"#,
+        );
+        assert_eq!(limited.code(), "ai_rate_limited");
+        assert!(limited.is_retryable());
+        let ambiguous = map_error(
+            &ProviderId::Gemini,
+            429,
+            None,
+            r#"{"error":{"code":429,"status":"RESOURCE_EXHAUSTED"}}"#,
+        );
+        assert_eq!(ambiguous.code(), "ai_rate_limited");
+    }
+
+    #[test]
     fn xai_string_error_shape() {
         let info = ProviderErrorInfo::parse(
             r#"{"code":"invalid_argument","error":"Content moderation: prompt rejected"}"#,
@@ -345,6 +420,47 @@ mod tests {
         let info = ProviderErrorInfo::parse("not json");
         assert_eq!(info, ProviderErrorInfo::default());
         assert!(!info.is_moderation());
+    }
+
+    #[test]
+    fn invalid_keys_reported_as_bad_requests_are_auth_errors() {
+        for (provider, body) in [
+            (
+                ProviderId::XAi,
+                r#"{"code":"InvalidArgument","error":"Incorrect API key provided. You can obtain an API key from https://console.x.ai."}"#,
+            ),
+            (
+                ProviderId::Gemini,
+                r#"{"error":{"code":400,"message":"API key not valid. Please pass a valid API key.","status":"INVALID_ARGUMENT"}}"#,
+            ),
+            (
+                ProviderId::OpenAi,
+                r#"{"error":{"code":"invalid_api_key","message":"Key rejected"}}"#,
+            ),
+        ] {
+            assert!(matches!(
+                map_error(&provider, 400, None, body),
+                Error::Auth(_)
+            ));
+        }
+        assert!(matches!(
+            map_error(
+                &ProviderId::XAi,
+                400,
+                None,
+                r#"{"error":"Unknown image model","code":"InvalidArgument"}"#
+            ),
+            Error::BadRequest { .. }
+        ));
+        assert!(matches!(
+            map_error(
+                &ProviderId::OpenAi,
+                400,
+                None,
+                r#"{"error":{"code":"billing_hard_limit_reached","message":"Billing limit reached"}}"#
+            ),
+            Error::Quota { .. }
+        ));
     }
 
     #[test]

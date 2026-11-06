@@ -92,7 +92,7 @@ const historyMenu: CommandDef[] = [
 
 registerPanel({ id: "color", title: "Color", dock: "right", order: 1, group: "color", component: ColorPanel, icon: "color", preferredSize: 200, menu: colorMenu });
 registerPanel({ id: "swatches", title: "Swatches", dock: "right", order: 2, group: "color", component: SwatchesPanel, icon: "swatches", preferredSize: 200, menu: swatchesMenu });
-registerPanel({ id: "navigator", title: "Navigator", dock: "right", order: 5, group: "navigator", component: NavigatorPanel, icon: "navigator", preferredSize: 200, menu: navigatorMenu });
+registerPanel({ id: "navigator", title: "Navigator", dock: "right", order: 5, group: "navigator", component: NavigatorPanel, icon: "navigator", preferredSize: 200, minSize: 180, menu: navigatorMenu });
 registerPanel({ id: "info", title: "Info", dock: "right", order: 6, group: "navigator", component: InfoPanel, icon: "info", preferredSize: 200, menu: infoMenu });
 registerPanel({ id: "history", title: "History", dock: "right", order: 30, group: "history", component: HistoryPanel, icon: "history", preferredSize: 240, menu: historyMenu });
 

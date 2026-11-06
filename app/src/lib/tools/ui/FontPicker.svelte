@@ -18,20 +18,24 @@
 
   $effect(() => {
     if (!open) return;
-    void listFonts().then((f) => (fonts = f));
     queueMicrotask(() => filterEl?.focus());
   });
+  function toggle(): void {
+    if (!open) void listFonts().then(f => (fonts = f));
+    open = !open;
+  }
   const shown = $derived(filter ? fonts.filter((f) => f.toLowerCase().includes(filter.toLowerCase())) : fonts);
 </script>
 
 <span class="wrap">
-  <button type="button" class="sel" bind:this={btn} style:width="{width}px" aria-label="Font family" aria-haspopup="listbox" onclick={() => (open = !open)}>
+  <button type="button" class="sel" bind:this={btn} style:width="{width}px" aria-label="Font family" aria-haspopup="listbox" onclick={toggle}>
     <span class="cur" style:font-family={quoteFamily(value)}>{value}</span>
     <Icon name="caret-small" size={12} />
   </button>
   <Popover anchor={btn} open={open} onclose={() => (open = false)} minWidth={300}>
     <div class="pop">
       <input class="input filter" type="text" placeholder="Search fonts" bind:value={filter} bind:this={filterEl} onkeydown={(e) => e.stopPropagation()} />
+      <button type="button" class="btn sm" onclick={() => void listFonts(true).then(f => (fonts = f))}>Refresh installed fonts</button>
       <div class="list" role="listbox" aria-label="Fonts">
         {#each shown as f (f)}
           <button type="button" role="option" class="row" class:on={f === value} aria-selected={f === value} onclick={() => { onchange(f); open = false; }}>

@@ -22,6 +22,8 @@
  * the cache is invalidated by `markDirty` on that layer or by any change of its
  * raster / mask / effects / fill opacity. Adjustment ops without usable GLSL fall back
  * to a CPU read-back → op → upload per composite.
+ * Groups used as clipping bases are isolated and composited on the CPU, then
+ * uploaded on recomposition. Ordinary groups retain the GPU path.
  *
  * `render()` is cheap when nothing changed: it diffs layer props (O(layers)), uploads
  * only what `markDirty` reported, re-composites only the union dirty rect (scissored)
@@ -33,14 +35,15 @@
 
 import { Rect } from "../rect";
 import { Raster } from "../raster";
+import { TiledRaster, RASTER_TILE_SIZE } from "../raster-tiled";
 import type { Selection } from "../selection";
 import { BLEND_MODE_INDEX } from "../blend";
-import { topLevelLayers, childrenOf } from "../document";
+import { topLevelLayers, childrenOf, compositeToRaster } from "../document";
 import { StyleCache, bindDocStyleCache, layerVisualRect, maskActive } from "../layer-source";
 import { opById } from "../ops/registry";
 import { buildOpFragmentSource } from "../ops/glsl";
 import type { GlslPass, UniformValue } from "../ops/types";
-import { parseViewChannel } from "../channels";
+import { AlphaOverlayCache, parseViewChannel } from "../channels";
 import { BlendMode, type AdjustmentLayer, type Document, type ICompositor, type Layer, type LayerId, type RenderOptions, type RenderStats } from "../types";
 import type { Viewport } from "../viewport";
 import { DirtyTracker } from "./dirty";
@@ -134,7 +137,7 @@ const CONTEXT_ATTRS: WebGLContextAttributes = {
 const QUICK_MASK_ID = "@quickmask";
 
 function layerProps(l: Layer): string {
-  let s = `${l.opacity}|${l.fillOpacity}|${l.blendMode}|${l.visible ? 1 : 0}|${l.parentId ?? ""}|${l.clipToBelow ? 1 : 0}|${l.maskEnabled ? 1 : 0}|${l.offset.x},${l.offset.y}`;
+  let s = `${l.opacity}|${l.fillOpacity}|${l.blendMode}|${l.visible ? 1 : 0}|${l.parentId ?? ""}|${l.clipToBelow ? 1 : 0}|${l.maskEnabled ? 1 : 0}|${l.maskDensity}|${l.maskFeather}|${l.offset.x},${l.offset.y}`;
   if (l.effects) s += `|fx:${JSON.stringify(l.effects)}`;
   if (l.kind === "adjustment") s += `|adj:${l.op}:${JSON.stringify(l.params)}`;
   if (l.kind === "group") s += `|pt:${l.passThrough ? 1 : 0}`;
@@ -186,6 +189,9 @@ export class GlCompositor implements ICompositor {
   private channelTex: WebGLTexture | null = null;
   private channelRaster: Raster | null = null;
   private channelKey = "";
+  private readonly alphaOverlays = new AlphaOverlayCache();
+  private overlayTex: WebGLTexture | null = null;
+  private overlayRaster: Raster | null = null;
   private qmTex: WebGLTexture | null = null;
   private qmRaster: Raster | null = null;
   private qmDirty = true;
@@ -247,6 +253,7 @@ export class GlCompositor implements ICompositor {
     gl.uniform1i(this.presentU.u_selection, 1);
     gl.uniform1i(this.presentU.u_channel, 2);
     gl.uniform1i(this.presentU.u_qm, 3);
+    gl.uniform1i(this.presentU.u_alphaOverlay, 4);
     gl.disable(gl.DEPTH_TEST);
     gl.disable(gl.BLEND);
     gl.disable(gl.DITHER);
@@ -270,6 +277,9 @@ export class GlCompositor implements ICompositor {
     this.channelRaster = null;
     this.channelKey = "";
     this.qmTex = null;
+    this.overlayTex = null;
+    this.overlayRaster = null;
+    this.alphaOverlays.invalidate();
     this.qmRaster = null;
     this.qmDirty = true;
     this.docW = 0;
@@ -318,6 +328,7 @@ export class GlCompositor implements ICompositor {
   }
 
   invalidateAll(): void {
+    this.alphaOverlays.invalidate();
     for (const id of this.layers.keys()) this.dirty.mark(id);
     this.styles.clear();
     this.lastSelection = null;
@@ -339,7 +350,11 @@ export class GlCompositor implements ICompositor {
     if (this.channelTex) gl.deleteTexture(this.channelTex);
     this.channelTex = null;
     if (this.qmTex) gl.deleteTexture(this.qmTex);
+    if (this.overlayTex) gl.deleteTexture(this.overlayTex);
     this.qmTex = null;
+    this.overlayTex = null;
+    this.overlayRaster = null;
+    this.alphaOverlays.invalidate();
     if (this.blendSwitch) gl.deleteProgram(this.blendSwitch.prog);
     for (const p of this.blendPerMode.values()) gl.deleteProgram(p.prog);
     this.blendPerMode.clear();
@@ -390,6 +405,9 @@ export class GlCompositor implements ICompositor {
     this.docW = w;
     this.docH = h;
     this.result = createFbo(gl, w, h);
+    // A resized result texture starts with NEAREST, regardless of the old texture's
+    // cached filter. Let present() restore LINEAR when the image is zoomed out.
+    this.resultFilterNearest = true;
     this.ping = [createFbo(gl, w, h), createFbo(gl, w, h)];
     if (this.selTex) gl.deleteTexture(this.selTex);
     this.selBuf = new Uint8Array(w * h);
@@ -399,7 +417,11 @@ export class GlCompositor implements ICompositor {
     this.channelTex = null;
     this.channelKey = "";
     if (this.qmTex) gl.deleteTexture(this.qmTex);
+    if (this.overlayTex) gl.deleteTexture(this.overlayTex);
     this.qmTex = null;
+    this.overlayTex = null;
+    this.overlayRaster = null;
+    this.alphaOverlays.invalidate();
     this.qmDirty = true;
     return true;
   }
@@ -429,6 +451,14 @@ export class GlCompositor implements ICompositor {
     const gl = this.gl;
     gl.bindTexture(gl.TEXTURE_2D, tex);
     gl.pixelStorei(gl.UNPACK_ALIGNMENT, 4);
+    if (raster instanceof TiledRaster && raster.storageMode === "tiled") {
+      // Clear old pixels (including tiles removed since the previous upload), then
+      // transfer only populated tiles. GPU allocation is still layer-sized for now.
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, raster.width, raster.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+      this.stats.uploads++;
+      for (const rect of raster.populatedTileRects()) this.uploadRect(tex, raster, rect);
+      return;
+    }
     if (realloc) {
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, raster.width, raster.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, raster.data);
     } else {
@@ -444,6 +474,16 @@ export class GlCompositor implements ICompositor {
     if (Rect.isEmpty(r)) return;
     gl.bindTexture(gl.TEXTURE_2D, tex);
     gl.pixelStorei(gl.UNPACK_ALIGNMENT, 4);
+    if (raster instanceof TiledRaster && raster.storageMode === "tiled") {
+      for (let ty = Math.floor(r.y / RASTER_TILE_SIZE); ty <= Math.floor((r.y + r.h - 1) / RASTER_TILE_SIZE); ty++) {
+        for (let tx = Math.floor(r.x / RASTER_TILE_SIZE); tx <= Math.floor((r.x + r.w - 1) / RASTER_TILE_SIZE); tx++) {
+          const part = Rect.intersect(r, Rect.make(tx * RASTER_TILE_SIZE, ty * RASTER_TILE_SIZE, RASTER_TILE_SIZE, RASTER_TILE_SIZE));
+          gl.texSubImage2D(gl.TEXTURE_2D, 0, part.x, part.y, part.w, part.h, gl.RGBA, gl.UNSIGNED_BYTE, raster.readPixels(part));
+          this.stats.uploads++;
+        }
+      }
+      return;
+    }
     gl.pixelStorei(gl.UNPACK_ROW_LENGTH, raster.width);
     gl.pixelStorei(gl.UNPACK_SKIP_PIXELS, r.x);
     gl.pixelStorei(gl.UNPACK_SKIP_ROWS, r.y);
@@ -557,6 +597,7 @@ export class GlCompositor implements ICompositor {
       const props = layerProps(layer);
       if (layer.kind === "group") {
         const g = this.groups.get(layer.id);
+        const maskMoved = !g || g.props !== props;
         if (!g) {
           this.groups.set(layer.id, { props });
           change(full, ti);
@@ -566,7 +607,7 @@ export class GlCompositor implements ICompositor {
         }
         // A group's mask is applied at composite time from the CPU raster → treat as a
         // layer texture only when needed (handled in compositeGroup via lerp/blend).
-        if (layer.mask !== (this.layers.get(layer.id)?.mask ?? null) || this.dirty.peek(layer.id) !== undefined) {
+        if (maskMoved || structural || this.styles.mask(layer) !== (this.layers.get(layer.id)?.mask ?? null) || this.dirty.peek(layer.id) !== undefined) {
           this.dirty.take(layer.id);
           this.syncMask(layer, this.ensureGroupEntry(layer));
           change(full, ti);
@@ -575,14 +616,15 @@ export class GlCompositor implements ICompositor {
       }
       const isAdj = layer.kind === "adjustment";
       let e = this.layers.get(layer.id);
+      const maskMoved = !e || e.props !== props;
       const dirtyRegion = this.dirty.take(layer.id);
       if (dirtyRegion !== undefined) this.styles.invalidate(layer.id);
       const src = isAdj ? null : this.styles.styledSource(doc, layer);
       const docRect = isAdj ? full : layerVisualRect(doc, layer);
       if (!e) {
         const uploaded = src ? src.raster : new Raster(1, 1);
-        const tex = createTexture(gl, uploaded.width, uploaded.height, gl.RGBA8, gl.RGBA, uploaded.data);
-        st.uploads++;
+        const tex = createTexture(gl, 1, 1, gl.RGBA8, gl.RGBA);
+        this.uploadFull(tex, uploaded, true);
         e = {
           tex,
           w: uploaded.width,
@@ -629,7 +671,7 @@ export class GlCompositor implements ICompositor {
       }
       // Layer mask texture (only needed when the source is not already styled).
       if (!e.styled && maskActive(layer)) {
-        if (layer.mask !== e.mask || dirtyRegion !== undefined) {
+        if ((isAdj && (maskMoved || structural)) || this.styles.mask(layer) !== e.mask || dirtyRegion !== undefined) {
           this.syncMask(layer, e);
           change(docRect, ti);
         }
@@ -719,22 +761,38 @@ export class GlCompositor implements ICompositor {
 
   private syncMask(layer: Layer, e: LayerGpu): void {
     const gl = this.gl;
-    if (layer.mask) {
-      if (e.maskTex && e.mask && e.mask.width === layer.mask.width && e.mask.height === layer.mask.height) {
-        this.uploadFull(e.maskTex, layer.mask, false);
+    const mask = this.styles.mask(layer);
+    if (mask) {
+      if (layer.kind === "group" || layer.kind === "adjustment") {
+        const aligned = Raster.filled(this.docW, this.docH, { r: 255, g: 255, b: 255, a: 255 });
+        aligned.blit(mask, layer.offset.x, layer.offset.y, undefined, { mode: "replace" });
+        if (!e.maskTex) e.maskTex = createTexture(gl, 1, 1, gl.RGBA8, gl.RGBA);
+        this.uploadFull(e.maskTex, aligned, true);
+      } else if (e.maskTex && e.mask && e.mask.width === mask.width && e.mask.height === mask.height) {
+        this.uploadFull(e.maskTex, mask, false);
       } else {
         if (e.maskTex) gl.deleteTexture(e.maskTex);
-        e.maskTex = createTexture(gl, layer.mask.width, layer.mask.height, gl.RGBA8, gl.RGBA, layer.mask.data);
-        this.stats.uploads++;
+        e.maskTex = createTexture(gl, 1, 1, gl.RGBA8, gl.RGBA);
+        this.uploadFull(e.maskTex, mask, true);
       }
     } else if (e.maskTex) {
       gl.deleteTexture(e.maskTex);
       e.maskTex = null;
     }
-    e.mask = layer.mask;
+    e.mask = mask;
   }
 
   private syncChannelView(doc: Document, opts: RenderOptions): void {
+    if ((opts.alphaOverlayIds ?? []).some(id => this.channelDirty.has(id))) {
+      this.alphaOverlays.invalidate();
+      for (const id of opts.alphaOverlayIds ?? []) this.channelDirty.delete(id);
+    }
+    const overlay = this.alphaOverlays.get(doc, opts.alphaOverlayIds);
+    if (overlay && overlay !== this.overlayRaster) {
+      if (!this.overlayTex) this.overlayTex = createTexture(this.gl, doc.width, doc.height, this.gl.RGBA8, this.gl.RGBA, overlay.data);
+      else this.uploadFull(this.overlayTex, overlay, true);
+    }
+    this.overlayRaster = overlay;
     const gl = this.gl;
     const view = opts.viewChannel ?? "rgb";
     const parsed = parseViewChannel(view);
@@ -826,7 +884,17 @@ export class GlCompositor implements ICompositor {
     const layer = unit.layer;
     if (!layer.visible) return;
     if (layer.kind === "group") {
-      this.drawGroup(doc, chain, layer, rect);
+      if (unit.chain.some(c => c.visible)) {
+        // Flatten just this isolated clipping unit, never its backdrop. Ordinary
+        // groups continue through GPU passes; this source updates only on recompose.
+        const base = { ...layer, opacity: 1, blendMode: BlendMode.Normal, passThrough: false };
+        const sourceDoc = { ...doc, layers: doc.layers.map(l => l.id === layer.id ? base : l) };
+        const raster = compositeToRaster(sourceDoc, { layerIds: [layer.id, ...unit.chain.map(c => c.id)], cache: this.styles });
+        const entry = this.ensureGroupEntry(layer);
+        this.uploadFull(entry.tex, raster, entry.w !== raster.width || entry.h !== raster.height);
+        entry.w = raster.width; entry.h = raster.height;
+        this.drawBlend(chain, entry.tex, Rect.ofSize(this.docW, this.docH), layer.opacity, layer.blendMode, null, null, false, "normal");
+      } else this.drawGroup(doc, chain, layer, rect);
       return;
     }
     const visibleChain = unit.chain.filter((c) => c.visible);
@@ -955,7 +1023,7 @@ export class GlCompositor implements ICompositor {
     gl.enable(gl.SCISSOR_TEST);
     gl.scissor(rect.x, rect.y, rect.w, rect.h);
     gl.viewport(0, 0, this.docW, this.docH);
-    const maskTex = maskActive(layer) && e?.maskTex && e.mask && e.mask.width === this.docW && e.mask.height === this.docH ? e.maskTex : null;
+    const maskTex = maskActive(layer) && e?.maskTex ? e.maskTex : null;
     this.drawBlend(chain, resultTex, Rect.ofSize(this.docW, this.docH), opacity, mode, maskTex, clipTex, false, "adjust");
   }
 
@@ -1107,6 +1175,9 @@ export class GlCompositor implements ICompositor {
     gl.bindTexture(gl.TEXTURE_2D, this.channelTex ?? this.selTex);
     gl.activeTexture(gl.TEXTURE3);
     gl.bindTexture(gl.TEXTURE_2D, this.qmTex ?? this.selTex);
+    gl.activeTexture(gl.TEXTURE4);
+    gl.bindTexture(gl.TEXTURE_2D, this.overlayTex ?? this.selTex);
+    gl.uniform1i(u.u_hasAlphaOverlay, this.overlayRaster ? 1 : 0);
 
     viewport.inverseMatrix(this.mat, dpr);
     gl.uniformMatrix3fv(u.u_screenToDoc, false, this.mat);
@@ -1128,6 +1199,10 @@ export class GlCompositor implements ICompositor {
     if (view.kind === "r") mode = 1;
     else if (view.kind === "g") mode = 2;
     else if (view.kind === "b") mode = 3;
+    else if (view.kind === "rg") mode = 5;
+    else if (view.kind === "rb") mode = 6;
+    else if (view.kind === "gb") mode = 7;
+    else if (view.kind === "none") mode = 8;
     else if ((view.kind === "alpha" || view.kind === "mask") && this.channelTex && this.channelKey !== "") mode = 4;
     gl.uniform1i(u.u_viewMode, mode);
     const qm = doc.quickMask;
@@ -1188,11 +1263,9 @@ export function buildUnits(siblings: readonly Layer[]): Unit[] {
     const layer = siblings[i]!;
     const chain: Layer[] = [];
     let j = i + 1;
-    if (layer.kind !== "group") {
-      while (j < siblings.length && siblings[j]!.clipToBelow && siblings[j]!.kind !== "group") {
-        chain.push(siblings[j]!);
-        j++;
-      }
+    while (j < siblings.length && siblings[j]!.clipToBelow && siblings[j]!.kind !== "group") {
+      chain.push(siblings[j]!);
+      j++;
     }
     units.push({ layer, chain });
     i = j;

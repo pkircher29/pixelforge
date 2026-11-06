@@ -32,6 +32,7 @@ import {
 
 /** Offline fallback for the kind table (mirrors `CustomKind::*` in Rust). */
 export const KIND_FALLBACK: CustomKindInfo[] = [
+  { kind: "fal", label: "fal.ai", description: "fal.ai (hosted image generation and editing)", defaultBaseUrl: "https://queue.fal.run", helpUrl: "https://fal.ai/dashboard/keys", requiresAuth: true, promptAssist: false, defaultCapabilities: caps({ generate: true, instructEdit: true }) },
   { kind: "openai_compat", label: "OpenAI-compatible server", description: "OpenAI-compatible server (LocalAI, LM Studio, vLLM, or any vendor)", defaultBaseUrl: "http://localhost:8080", helpUrl: "https://localai.io/docs/features/image-generation/", requiresAuth: false, promptAssist: false, defaultCapabilities: caps({ generate: true, maxPx: 4096 }) },
   { kind: "hugging_face", label: "Hugging Face", description: "Hugging Face (Inference API / Endpoint)", defaultBaseUrl: "https://router.huggingface.co/hf-inference", helpUrl: "https://huggingface.co/settings/tokens", requiresAuth: true, promptAssist: false, defaultCapabilities: caps({ generate: true }) },
   { kind: "ollama", label: "Ollama", description: "Ollama (local, prompt assist)", defaultBaseUrl: "http://localhost:11434", helpUrl: "https://ollama.com", requiresAuth: false, promptAssist: true, defaultCapabilities: caps({}) },
@@ -62,7 +63,7 @@ function caps(over: Partial<Capabilities>): Capabilities {
 /** A blank entry for the "+ Add" menu. */
 export function newCustomProvider(kind: CustomKind, kinds: CustomKindInfo[] = KIND_FALLBACK): CustomProvider {
   const info = kinds.find((k) => k.kind === kind) ?? KIND_FALLBACK.find((k) => k.kind === kind)!;
-  return { id: "", name: info.label, kind, baseUrl: info.defaultBaseUrl, model: "", capabilities: { ...info.defaultCapabilities }, extra: {}, hasAuth: false };
+  return { id: "", name: info.label, kind, baseUrl: info.defaultBaseUrl, model: kind === "fal" ? "fal-ai/flux/dev" : "", capabilities: { ...info.defaultCapabilities }, extra: kind === "fal" ? { editModel: "fal-ai/flux/dev/image-to-image" } : {}, hasAuth: false };
 }
 
 /** `"My ComfyUI"` -> `my-comfyui`, unique against `taken`. */

@@ -137,6 +137,8 @@ export interface Tool {
   onDeactivate?(ctx: ToolContext): void;
   /** Draw on the 2D overlay (CSS px; use `ctx.viewport.docToScreen`). */
   drawOverlay?(g: CanvasRenderingContext2D, ctx: ToolContext): void;
+  /** Clear hover feedback when the pointer leaves; an active captured gesture continues. */
+  onPointerLeave?(ctx: ToolContext): void;
 }
 
 /** Common modifier→selection-mode mapping (Photoshop): Shift add, Alt subtract, both intersect. */

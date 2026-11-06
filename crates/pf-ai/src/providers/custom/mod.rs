@@ -4,6 +4,7 @@
 
 pub mod a1111;
 pub mod comfy;
+pub mod fal;
 pub mod hf;
 pub mod ollama;
 pub mod openai_compat;
@@ -235,6 +236,7 @@ pub fn build_custom_provider(
         CustomKind::ComfyUi => Arc::new(comfy::ComfyProvider::new(ctx)),
         CustomKind::A1111 => Arc::new(a1111::A1111Provider::new(ctx)),
         CustomKind::Replicate => Arc::new(replicate::ReplicateProvider::new(ctx)),
+        CustomKind::Fal => Arc::new(fal::FalProvider::new(ctx)?),
     })
 }
 
@@ -250,6 +252,7 @@ pub async fn probe(cfg: &CustomProvider, auth: Option<SecretString>) -> Result<P
         CustomKind::ComfyUi => comfy::ComfyProvider::new(ctx).probe().await,
         CustomKind::A1111 => a1111::A1111Provider::new(ctx).probe().await,
         CustomKind::Replicate => replicate::ReplicateProvider::new(ctx).probe().await,
+        CustomKind::Fal => fal::FalProvider::new(ctx)?.probe().await,
     };
     Ok(outcome.unwrap_or_else(|e| ProbeResult::from_error(&e)))
 }

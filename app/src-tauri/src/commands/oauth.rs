@@ -10,11 +10,12 @@
 //! | `ai_oauth_check_images` | `{ provider, live? }` | `ImageAccess` |
 //! | `ai_auth_configure` | `{ provider, mode?, fallbackToKey?, xaiClientId? }` | `OAuthStatus` |
 //!
-//! Only OpenAI ("Sign in with ChatGPT", loopback PKCE) and xAI (device flow, **only with
-//! a client ID issued to Pixelforge**) exist; Gemini answers `ai_oauth_unavailable`.
+//! OpenAI and Google use loopback PKCE; xAI uses a device flow with an issued client ID.
+//! Google OAuth uses separately billed Gemini API access, not subscription benefits.
 
 use std::sync::Arc;
 
+use pf_ai::oauth::google::{self, GoogleConfig};
 use pf_ai::oauth::openai_siwc::{self, SiwcConfig, SiwcProvider};
 use pf_ai::oauth::xai_device::{self, XaiOAuthConfig};
 use pf_ai::oauth::{
@@ -42,6 +43,9 @@ const AUTH_KEY: &str = "aiAuth";
 const XAI_CLIENT_KEY: &str = "xaiOAuthClientId";
 /// Settings key: stable SIWC `ext_agent_host_id`.
 const HOST_ID_KEY: &str = "siwcHostId";
+const GOOGLE_CLIENT_KEY: &str = "googleOAuthClientId";
+const GOOGLE_PROJECT_KEY: &str = "googleOAuthProject";
+const GOOGLE_SECRET_ACCOUNT: &str = "oauth-config:google-client-secret";
 
 /// Gemini note (docs/ai-research.md section 3 / 5.3).
 const GEMINI_NOTE: &str = "Google AI Pro / Ultra benefits apply only inside Google AI Studio; the Gemini API (API keys or external apps) is billed separately, so there is no subscription sign-in for Gemini.";
@@ -57,6 +61,8 @@ pub enum AuthMode {
     ApiKey,
     /// Signed-in subscription.
     Subscription,
+    /// Google OAuth, billed to the configured API project.
+    Oauth,
 }
 
 impl AuthMode {
@@ -65,6 +71,7 @@ impl AuthMode {
         match self {
             AuthMode::ApiKey => "api_key",
             AuthMode::Subscription => "subscription",
+            AuthMode::Oauth => "oauth",
         }
     }
 }
@@ -119,6 +126,30 @@ pub fn settings_xai_client_id(settings: &Settings) -> Option<String> {
 /// Does `provider` offer subscription sign-in in this build (regardless of config)?
 pub fn supports_subscription(provider: &ProviderId) -> bool {
     matches!(provider, ProviderId::OpenAi | ProviderId::XAi)
+}
+
+fn supports_oauth(provider: &ProviderId) -> bool {
+    supports_subscription(provider) || *provider == ProviderId::Gemini
+}
+
+fn google_config(app: &AppHandle, state: &AppState) -> CommandResult<GoogleConfig> {
+    let settings = settings_snapshot(app, state)?;
+    let value = |key: &str| {
+        settings
+            .extra
+            .get(key)
+            .and_then(|v| v.as_str())
+            .unwrap_or_default()
+            .to_owned()
+    };
+    let secret = key_store(app, state)?
+        .get_account(GOOGLE_SECRET_ACCOUNT)?
+        .unwrap_or_else(|| pf_ai::SecretString::new(String::new()));
+    Ok(GoogleConfig::new(
+        value(GOOGLE_CLIENT_KEY),
+        secret,
+        value(GOOGLE_PROJECT_KEY),
+    ))
 }
 
 /// Progress event on `ai://oauth`.
@@ -282,6 +313,7 @@ fn refresh_config(
     match provider {
         ProviderId::OpenAi => Ok(SiwcConfig::from_env().refresh_config()),
         ProviderId::XAi => Ok(xai_config(app, state)?.refresh_config()),
+        ProviderId::Gemini => Ok(google_config(app, state)?.refresh_config()),
         other => Err(unavailable(other)),
     }
 }
@@ -344,7 +376,7 @@ pub(crate) async fn subscription_provider(
     }
     let settings = settings_snapshot(app, state)?;
     let pref = auth_pref(&settings, provider);
-    if pref.mode != AuthMode::Subscription {
+    if pref.mode == AuthMode::ApiKey {
         return Ok(None);
     }
     let session = session_for(app, state, provider).await?;
@@ -363,6 +395,11 @@ pub(crate) async fn subscription_provider(
             let cfg = xai_config(app, state)?;
             cfg.require_client_id()?;
             xai_device::build_provider(session, &cfg)
+        }
+        ProviderId::Gemini => {
+            let cfg = google_config(app, state)?;
+            cfg.validate()?;
+            google::build_provider(session, cfg)
         }
         other => return Err(unavailable(other)),
     };
@@ -394,13 +431,20 @@ pub fn auth_rows(
     ProviderId::BUILTIN
         .into_iter()
         .map(|id| {
-            let row = if supports_subscription(&id) {
+            let row = if supports_oauth(&id) {
                 let account = load_tokens(store, &id)
                     .ok()
                     .flatten()
                     .map(|t| (t.email, t.plan));
                 AuthRow {
-                    modes: vec!["api_key", "subscription"],
+                    modes: vec![
+                        "api_key",
+                        if id == ProviderId::Gemini {
+                            "oauth"
+                        } else {
+                            "subscription"
+                        },
+                    ],
                     active: auth_pref(settings, &id).mode,
                     account,
                 }
@@ -427,7 +471,7 @@ async fn status(
         .lock()
         .map_err(|_| CommandError::poisoned("oauth pending"))?
         .contains_key(provider);
-    let tokens = if supports_subscription(provider) {
+    let tokens = if supports_oauth(provider) {
         read_tokens(key_store(app, state)?, provider.clone()).await?
     } else {
         None
@@ -453,6 +497,18 @@ async fn status(
                 "device",
                 Some(src),
                 None,
+            )
+        }
+        ProviderId::Gemini => {
+            let cfg = google_config(app, state)?;
+            let reason = cfg.validate().err().map(|e| e.to_string());
+            (
+                reason.is_none(),
+                reason,
+                google::DOCS_URL.to_owned(),
+                "loopback",
+                None,
+                Some("https://myaccount.google.com/connections".to_owned()),
             )
         }
         _ => (
@@ -526,6 +582,16 @@ async fn complete(
 ) {
     use tauri::Manager;
     let state = app.state::<AppState>();
+    // An older/cancelled attempt must not overwrite a newer sign-in or its UI state.
+    let current = state
+        .oauth_pending
+        .lock()
+        .ok()
+        .and_then(|map| map.get(&provider).map(|c| Arc::ptr_eq(c, &cancel)))
+        .unwrap_or(false);
+    if !current {
+        return;
+    }
     clear_pending(&app, &provider, &cancel);
     let outcome: CommandResult<OAuthTokens> = async {
         let tokens = result?;
@@ -533,7 +599,11 @@ async fn complete(
         forget_session(&state, &provider);
         update_settings(&app, &state, |s| {
             let mut pref = auth_pref(s, &provider);
-            pref.mode = AuthMode::Subscription;
+            pref.mode = if provider == ProviderId::Gemini {
+                AuthMode::Oauth
+            } else {
+                AuthMode::Subscription
+            };
             set_auth_pref(s, &provider, pref);
         })?;
         Ok(tokens)
@@ -581,6 +651,34 @@ pub async fn ai_oauth_start(
     provider: ProviderId,
 ) -> CommandResult<OAuthStart> {
     match &provider {
+        ProviderId::Gemini => {
+            let cfg = google_config(&app, &state)?;
+            cfg.validate()?;
+            let lb = Loopback::bind().await?;
+            let req = google::authorize(&cfg, &lb.redirect_uri())?;
+            let cancel = register_pending(&state, &provider)?;
+            let browser_failed = !open_browser(&app, &req.url);
+            let auth_url = req.url.clone();
+            let app2 = app.clone();
+            let p = provider.clone();
+            tauri::async_runtime::spawn(async move {
+                let result = async {
+                    let client = pf_ai::oauth::http_client()?;
+                    let cb = lb
+                        .wait(&req.state, LOOPBACK_TIMEOUT, Arc::clone(&cancel))
+                        .await?;
+                    google::exchange(&cfg, &client, &req, &cb).await
+                }
+                .await;
+                complete(app2, p, cancel, result).await;
+            });
+            Ok(OAuthStart {
+                flow: "loopback",
+                auth_url,
+                browser_failed,
+                ..OAuthStart::default()
+            })
+        }
         ProviderId::OpenAi => {
             let cfg = SiwcConfig::from_env();
             let host_id = ensure_host_id(&app, &state)?;
@@ -713,8 +811,16 @@ pub async fn ai_oauth_sign_out(
     state: State<'_, AppState>,
     provider: ProviderId,
 ) -> CommandResult<OAuthStatus> {
-    if !supports_subscription(&provider) {
+    if !supports_oauth(&provider) {
         return Err(unavailable(&provider));
+    }
+    if let Some(cancel) = state
+        .oauth_pending
+        .lock()
+        .map_err(|_| CommandError::poisoned("oauth pending"))?
+        .remove(&provider)
+    {
+        cancel.notify_one();
     }
     forget_session(&state, &provider);
     let store = key_store(&app, &state)?;
@@ -722,6 +828,7 @@ pub async fn ai_oauth_sign_out(
         let client = http_client()?;
         let revoked = match provider {
             ProviderId::OpenAi => openai_siwc::revoke(&SiwcConfig::from_env(), &client, &t).await,
+            ProviderId::Gemini => google::revoke(&google_config(&app, &state)?, &client, &t).await,
             _ => xai_device::revoke(&xai_config(&app, &state)?, &client, &t).await,
         };
         if let Err(e) = revoked {
@@ -785,7 +892,16 @@ pub async fn ai_oauth_check_images(
     Ok(access)
 }
 
-/// Change the auth mode, the plan-limit fallback, or the xAI client ID.
+/// Google desktop configuration input. Never returned over IPC or logged.
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GoogleAuthConfigure {
+    client_id: String,
+    client_secret: String,
+    project: String,
+}
+
+/// Change the auth mode, plan-limit fallback, or provider client configuration.
 #[tauri::command]
 pub async fn ai_auth_configure(
     app: AppHandle,
@@ -794,11 +910,88 @@ pub async fn ai_auth_configure(
     mode: Option<AuthMode>,
     fallback_to_key: Option<bool>,
     xai_client_id: Option<String>,
+    google: Option<GoogleAuthConfigure>,
 ) -> CommandResult<OAuthStatus> {
+    let (google_client_id, google_client_secret, google_project) = match google {
+        Some(config) => {
+            GoogleConfig::new(
+                config.client_id.trim().to_owned(),
+                pf_ai::SecretString::new(config.client_secret.trim().to_owned()),
+                config.project.trim().to_owned(),
+            )
+            .validate()?;
+            (
+                Some(config.client_id),
+                Some(config.client_secret),
+                Some(config.project),
+            )
+        }
+        None => (None, None, None),
+    };
+    if mode == Some(AuthMode::Oauth) && provider != ProviderId::Gemini {
+        return Err(unavailable(&provider));
+    }
     if !supports_subscription(&provider) && mode == Some(AuthMode::Subscription) {
         return Err(unavailable(&provider));
     }
+    if xai_client_id.is_some() && provider != ProviderId::XAi {
+        return Err(CommandError::new(
+            "ai_invalid_request",
+            "xAI configuration belongs to Grok.",
+        ));
+    }
+    let google_changed =
+        google_client_id.is_some() || google_client_secret.is_some() || google_project.is_some();
+    if google_changed && provider != ProviderId::Gemini {
+        return Err(CommandError::new(
+            "ai_invalid_request",
+            "Google configuration belongs to Gemini.",
+        ));
+    }
+    if google_changed {
+        let pending = state
+            .oauth_pending
+            .lock()
+            .map_err(|_| CommandError::poisoned("oauth pending"))?
+            .contains_key(&provider);
+        if pending
+            || read_tokens(key_store(&app, &state)?, provider.clone())
+                .await?
+                .is_some()
+        {
+            return Err(CommandError::new(
+                "ai_invalid_request",
+                "Cancel sign-in or sign out before changing Google configuration.",
+            ));
+        }
+        if let Some(secret) = google_client_secret.as_ref() {
+            let store = key_store(&app, &state)?;
+            let secret = secret.clone();
+            tauri::async_runtime::spawn_blocking(move || {
+                if secret.trim().is_empty() {
+                    store.delete_account(GOOGLE_SECRET_ACCOUNT)
+                } else {
+                    store.set_account(
+                        GOOGLE_SECRET_ACCOUNT,
+                        &pf_ai::SecretString::new(secret.trim().to_owned()),
+                    )
+                }
+            })
+            .await??;
+        }
+    }
     update_settings(&app, &state, |s| {
+        for (key, value) in [
+            (GOOGLE_CLIENT_KEY, &google_client_id),
+            (GOOGLE_PROJECT_KEY, &google_project),
+        ] {
+            if let Some(value) = value {
+                s.extra.insert(
+                    key.to_owned(),
+                    serde_json::Value::String(value.trim().to_owned()),
+                );
+            }
+        }
         let mut pref = auth_pref(s, &provider);
         if let Some(m) = mode {
             pref.mode = m;
@@ -821,6 +1014,9 @@ pub async fn ai_auth_configure(
     })?;
     if xai_client_id.is_some() {
         forget_session(&state, &ProviderId::XAi);
+    }
+    if google_changed {
+        forget_session(&state, &ProviderId::Gemini);
     }
     status(&app, &state, &provider).await
 }
@@ -889,6 +1085,6 @@ mod tests {
             Some("me@x.y")
         );
         assert!(rows[&ProviderId::XAi].account.is_none());
-        assert_eq!(rows[&ProviderId::Gemini].modes, vec!["api_key"]);
+        assert_eq!(rows[&ProviderId::Gemini].modes, vec!["api_key", "oauth"]);
     }
 }

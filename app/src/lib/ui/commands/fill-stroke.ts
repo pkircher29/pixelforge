@@ -197,8 +197,16 @@ export interface UserPattern {
 }
 
 const userPatterns: UserPattern[] = [];
+export function restorePattern(pattern: UserPattern): void {
+  const index = userPatterns.findIndex(p => p.id === pattern.id);
+  if (index < 0) userPatterns.push(pattern); else userPatterns[index] = pattern;
+}
+export function removePattern(id: string): void {
+  const index = userPatterns.findIndex(p => p.id === id);
+  if (index >= 0) userPatterns.splice(index, 1);
+}
 
-/** Edit ▸ Define Pattern… (session-only: patterns are kept until the app closes). */
+/** Create the in-memory pattern; the Define command persists it before reporting success. */
 export function definePattern(name: string, raster: Raster): UserPattern {
   const p: UserPattern = { id: `user-pattern-${userPatterns.length + 1}-${Date.now().toString(36)}`, name, raster };
   userPatterns.push(p);

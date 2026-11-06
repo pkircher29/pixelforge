@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Swatch from "$lib/ui/controls/Swatch.svelte";
   /** Edit ▸ Fill… (Shift+F5): Contents, Blending (mode, opacity, preserve transparency). */
   import { BLEND_MODES_MENU, BLEND_MODE_LABEL, type BlendMode } from "$lib/engine";
   import { builtinPatterns } from "$lib/tools/patterns";
@@ -7,7 +8,6 @@
   import PsSelect from "../controls/PsSelect.svelte";
   import { openColorPicker } from "./color-picker";
   import { FILL_CONTENTS, getUserPatterns, normalizeFill, type FillContents, type FillOptions } from "../commands/fill-stroke";
-  import { rgbToHex } from "../panels/color-model";
 
   interface Props {
     initial: FillOptions;
@@ -46,7 +46,7 @@
       <span class="lbl">Contents:</span>
       <PsSelect value={o.contents} choices={contents} width={170} onchange={(v) => void setContents(v)} />
       {#if o.contents === "color"}
-        <button type="button" class="well" style:background={rgbToHex(o.color)} aria-label="Fill color" onclick={() => void pickColor()}></button>
+        <button type="button" class="well" aria-label="Fill color" onclick={() => void pickColor()}><Swatch color={o.color} /></button>
       {/if}
     </div>
     {#if o.contents === "pattern"}
