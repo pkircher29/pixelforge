@@ -53,6 +53,9 @@ export function resolveMode(ctx: ModeContext): ModeResolution {
   if (!ctx.hasPixels) {
     return { mode: "generate", emulated: false, reason: "The document has no visible pixels to edit." };
   }
+  if (!canInstruct && canMask && !ctx.selectionEmpty && !ctx.selectionIsAll && ctx.forced !== "instruct") {
+    return { mode: "mask", emulated: false, reason: "The selection is sent as a native mask." };
+  }
   if (!canInstruct) {
     return { mode: "generate", emulated: false, reason: "This provider cannot edit images, only generate." };
   }

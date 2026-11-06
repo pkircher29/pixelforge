@@ -604,6 +604,13 @@ pub async fn ai_custom_probe(
     Ok(probe_custom(&provider, secret).await?)
 }
 
+/// User-requested, checksum-verified offline model download (no credentials).
+#[tauri::command]
+pub async fn ai_lama_install(app: AppHandle) -> CommandResult<String> {
+    let directory = super::settings::config_dir(&app)?.join("models");
+    Ok(pf_ai::providers::custom::lama::install_model(directory).await?.to_string_lossy().into_owned())
+}
+
 /// Header of the `ai_prompt_assist` frame.
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]

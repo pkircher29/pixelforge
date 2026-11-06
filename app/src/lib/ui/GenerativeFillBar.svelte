@@ -25,6 +25,7 @@
     return contextualPosition(selection.bbox, entry.viewport, width, height, barWidth, barHeight);
   });
   const provider = $derived(aiUi.provider);
+  const offline = $derived(provider?.kind === "lama");
   const expanding = $derived.by(() => {
     void entry.version;
     return aiUi.expansion?.docId === entry.id && aiUi.expansion.selection === entry.doc.selection;
@@ -35,8 +36,8 @@
   });
   const model = $derived(provider?.editModel || provider?.defaultModel || "");
   const activeJob = $derived(jobStore.active.find((j) => j.docId === entry.id));
-  const compatible = $derived(Boolean(provider && provider.capabilities.instructEdit && provider.capabilities.maxVariants >= 3));
-  const canRun = $derived(Boolean(placement && provider && isReady(provider) && compatible && aiUi.prompt.trim() && !busy && !activeJob));
+  const compatible = $derived(Boolean(provider && (offline ? provider.capabilities.maskEdit : provider.capabilities.instructEdit && provider.capabilities.maxVariants >= 3)));
+  const canRun = $derived(Boolean(placement && provider && isReady(provider) && compatible && (offline || aiUi.prompt.trim()) && !busy && !activeJob));
   const cost = $derived(provider && !onSubscription(provider) ? estimateCost({ provider: provider.id, model, mode: "mask", n: 3, local: provider.local }) : null);
 
   onMount(() => { if (!aiUi.providersLoaded) void aiUi.refreshProviders(); });
@@ -62,8 +63,8 @@
     failed = false;
     notice = "";
     const req = {
-      provider, model, prompt: aiUi.prompt.trim(), n: 3, refs: [], newDocument: false,
-      forcedMode: "mask" as const, generativeFill: true, feather: expanding ? 0 : 2,
+      provider, model, prompt: offline ? "Remove selected content" : aiUi.prompt.trim(), n: offline ? 1 : 3, refs: [], newDocument: false,
+      forcedMode: "mask" as const, generativeFill: !offline, feather: expanding ? 0 : 2,
       selection: entry.doc.selection.clone(),
       ...aiUi.sampling,
     };
@@ -74,7 +75,7 @@
       if (docStore.activeId !== entry.id) throw new Error("Return to this document to generate its fill.");
       const run = await runAi(req);
       failed = run.job.state !== "completed";
-      notice = failed ? (run.job.error?.detail || "Generative Fill was cancelled.") : "Three variants added. Choose one in Properties.";
+      notice = failed ? (run.job.error?.detail || "Edit was cancelled.") : offline ? "Offline result added as a new layer." : "Three variants added. Choose one in Properties.";
     } catch (e) {
       failed = true;
       notice = toFriendlyError(e).detail;
@@ -100,16 +101,16 @@
     onsubmit={(e) => { e.preventDefault(); void generate(); }}>
     <div class="top">
       <strong>{expanding ? "Generative Expand" : removing ? "Remove" : "Generative Fill"}</strong>
-      <span class="details" title={cost?.note ?? "Provider billing and account limits apply"}>3 variants · {cost ? formatUsd(cost.usd, cost.approx) : provider && onSubscription(provider) ? "Plan access" : "Provider pricing"}</span>
+      <span class="details" title={offline ? "Runs on your CPU" : cost?.note ?? "Provider billing and account limits apply"}>{offline ? "1 result · Free · Offline" : `3 variants · ${cost ? formatUsd(cost.usd, cost.approx) : provider && onSubscription(provider) ? "Plan access" : "Provider pricing"}`}</span>
       <button type="button" class="icon-btn" aria-label="Hide selection task bar" title="Hide until the selection changes" onclick={() => (dismissed = entry.doc.selection)}>×</button>
     </div>
     <ProviderPicker providers={aiUi.providers} selected={aiUi.providerId} onselect={selectProvider} onmanage={() => void manage()} />
     <div class="prompt-row">
-      <input class="input" aria-label="Generative Fill prompt" placeholder="Describe what should fill the selection…" bind:value={aiUi.prompt} disabled={busy || Boolean(activeJob)} />
+      {#if offline}<span class="details">Fill the selected area using its surroundings.</span>{:else}<input class="input" aria-label="Generative Fill prompt" placeholder="Describe what should fill the selection…" bind:value={aiUi.prompt} disabled={busy || Boolean(activeJob)} />{/if}
       {#if activeJob}
         <button class="btn" type="button" onclick={() => void cancel()}>Cancel</button>
       {:else}
-        <button class="btn primary" type="submit" disabled={!canRun}>{busy ? "Applying…" : "Generate"}</button>
+        <button class="btn primary" type="submit" disabled={!canRun}>{busy ? "Applying…" : offline ? "Remove locally" : "Generate"}</button>
       {/if}
     </div>
     <div class="bottom">

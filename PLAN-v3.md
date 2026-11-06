@@ -13,6 +13,11 @@
 ## Continuation status (2026-10-07)
 
 Implemented on `feat/v03-oauth-polish`:
+- Offline LaMa provider with local-model setup, a pinned checksum-verified download
+  action, CPU masked inpainting, and a one-result Remove locally selection action.
+  Real-model and native Windows removal, undo/redo, and project save/reopen checks
+  passed. Download-button and cross-platform packaging verification remain open;
+  see `docs/offline-inpainting.md`. This does not close the live cloud-provider gate.
 - Google OAuth for Gemini using a registered Desktop app, loopback PKCE, protected
   token/client-secret storage, refresh/revocation, and an explicit Cloud quota project.
   This is separately billed API access, not Google AI Pro / Ultra plan usage.
