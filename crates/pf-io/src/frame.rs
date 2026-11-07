@@ -46,6 +46,9 @@ impl Frame<'_> {
     }
 }
 
+const MAX_HEADER_BYTES: usize = 16 * 1024 * 1024;
+const MAX_BLOBS: usize = 65_536;
+
 /// Serialize `header` (must be a JSON object) plus `blobs` into one buffer.
 pub fn encode_frame<T: Serialize>(header: &T, blobs: &[&[u8]]) -> Result<Vec<u8>> {
     let mut obj = match serde_json::to_value(header)? {
@@ -65,7 +68,14 @@ pub fn encode_frame<T: Serialize>(header: &T, blobs: &[&[u8]]) -> Result<Vec<u8>
     let header_len = u32::try_from(header_bytes.len())
         .map_err(|_| Error::Frame("frame header exceeds 4 GiB".to_owned()))?;
 
-    let total = 4 + header_bytes.len() + blobs.iter().map(|b| b.len()).sum::<usize>();
+    let mut total = 4usize
+        .checked_add(header_bytes.len())
+        .ok_or_else(|| Error::Frame("frame size overflow".to_owned()))?;
+    for b in blobs {
+        total = total
+            .checked_add(b.len())
+            .ok_or_else(|| Error::Frame("frame size overflow".to_owned()))?;
+    }
     let mut out = Vec::with_capacity(total);
     out.extend_from_slice(&header_len.to_le_bytes());
     out.extend_from_slice(&header_bytes);
@@ -81,6 +91,11 @@ pub fn decode_frame(bytes: &[u8]) -> Result<Frame<'_>> {
         return Err(Error::Frame("frame shorter than 4 bytes".to_owned()));
     }
     let header_len = u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]) as usize;
+    if header_len > MAX_HEADER_BYTES {
+        return Err(Error::Frame(format!(
+            "header length {header_len} exceeds maximum of {MAX_HEADER_BYTES} bytes"
+        )));
+    }
     let header_end = 4usize
         .checked_add(header_len)
         .filter(|&end| end <= bytes.len())
@@ -103,16 +118,24 @@ pub fn decode_frame(bytes: &[u8]) -> Result<Frame<'_>> {
     };
     let lengths: Vec<usize> = match header.get(BLOBS_KEY) {
         None => Vec::new(),
-        Some(Value::Array(items)) => items
-            .iter()
-            .map(|v| {
-                v.as_u64()
-                    .and_then(|n| usize::try_from(n).ok())
-                    .ok_or_else(|| {
-                        Error::Frame(format!("blob length {v} is not a non-negative integer"))
-                    })
-            })
-            .collect::<Result<_>>()?,
+        Some(Value::Array(items)) => {
+            if items.len() > MAX_BLOBS {
+                return Err(Error::Frame(format!(
+                    "frame blob count {} exceeds maximum of {MAX_BLOBS}",
+                    items.len()
+                )));
+            }
+            items
+                .iter()
+                .map(|v| {
+                    v.as_u64()
+                        .and_then(|n| usize::try_from(n).ok())
+                        .ok_or_else(|| {
+                            Error::Frame(format!("blob length {v} is not a non-negative integer"))
+                        })
+                })
+                .collect::<Result<_>>()?
+        }
         Some(other) => {
             return Err(Error::Frame(format!(
                 "`blobs` must be an array, got {}",

@@ -5,12 +5,20 @@
    * Mount anywhere in the real webview (jsdom has no WebGL2): `<FiltersDemo />`.
    */
   import { onMount } from "svelte";
-  import { Raster, Rect } from "$lib/engine";
+  import {
+    ALL_OPS,
+    Raster,
+    Rect,
+    convolve1d,
+    defaultParams,
+    fromPremul,
+    gaussianKernel,
+    toPremul,
+    type OpDef,
+    type ParamValues,
+  } from "$lib/engine";
   import { GpuOp } from "../gpu";
   import { runOp } from "../apply";
-  import { ALL_OPS } from "../ops";
-  import { convolve1d, fromPremul, gaussianKernel, toPremul } from "../cpu";
-  import { defaultParams, type OpDef, type ParamValues } from "../types";
 
   interface Row {
     op: OpDef;

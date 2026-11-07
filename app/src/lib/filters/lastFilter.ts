@@ -2,7 +2,7 @@
  * Remembers the last applied op + params for "Last Filter" (Ctrl+F).
  */
 
-import type { OpDef, ParamValues } from "./types";
+import type { OpDef, ParamValues } from "$lib/engine";
 
 let last: { op: OpDef; params: ParamValues } | null = null;
 

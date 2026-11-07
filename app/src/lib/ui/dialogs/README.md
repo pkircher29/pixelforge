@@ -6,9 +6,9 @@ Modal dialog container (`Dialog.svelte`, `DialogHost.svelte`, `dialogs.svelte.ts
 
 | File | Dialog / Purpose |
 |---|---|
-| `Dialog.svelte`, `DialogHost.svelte`, `dialogs.svelte.ts` | Accessible modal window shell, promise-based dialog queue (`openModal`, `confirmDialog`), focus management, and keyboard (`Enter` / `Escape`) handling. |
+| `Dialog.svelte`, `DialogHost.svelte`, `dialogs.svelte.ts` | Accessible modal window shell, promise-based dialog host (`openDialog`, `dialogs`), focus management, and keyboard (`Enter` / `Escape`) handling. |
 | `NewDocDialog.svelte`, `NewLayerDialog.svelte`, `ExportDialog.svelte`, `ConfirmDialog.svelte`, `NumberDialog.svelte`, `AboutDialog.svelte`, `PreferencesDialog.svelte` | Core document creation, layer creation, PNG/JPEG/WebP export with live byte-size preview, confirmation prompt, numeric input, About box, and Preferences dialog. |
-| `ImageSizeDialog.svelte`, `CanvasSizeDialog.svelte`, `TransformOverlay.svelte` | Image resampling, 9-anchor canvas resizing, and interactive on-canvas Free Transform handles (`Ctrl+T`). |
+| `ImageSizeDialog.svelte`, `CanvasSizeDialog.svelte`, `RotateCanvasDialog.svelte`, `TransformOverlay.svelte` | Image resampling, 9-anchor canvas resizing, arbitrary canvas rotation (`Image > Image Rotation > Arbitrary…`), and interactive on-canvas Free Transform handles (`Ctrl+T`). |
 | `AdjustDialog.svelte` | Shared live-preview modal for all parametric adjustments and filters (`Levels`, `Hue/Saturation`, `Gaussian Blur`, `Unsharp Mask`, etc.) with optional 256-bin histogram. |
 | `LayerStyleDialog.svelte`, `LayerStyleAngleDial.svelte`, `LayerStyleGlobalLightDialog.svelte`, `layer-style-model.ts`, `layer-style-presets.ts` | Photoshop-layout Layer Style editor (`Drop Shadow`, `Inner Shadow`, `Outer Glow`, `Inner Glow`, `Bevel & Emboss`, `Stroke`, `Color Overlay`, `Gradient Overlay`) and style presets. |
 | `LayerPropsDialog.svelte`, `LayerPropsLockDialog.svelte` | Layer name/color-label properties and lock configuration dialogs. |

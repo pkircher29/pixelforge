@@ -5,6 +5,7 @@
  * localStorage; per-document bits are keyed by document id.
  */
 import type { LayerId } from "$lib/engine";
+import { toolStore } from "$lib/stores/tool.svelte";
 
 // v2: default Thumbnail Contents became "Layer Bounds" (PS CC default); v1 prefs migrate without it.
 const LS_KEY = "pixelforge.layers.v2";
@@ -63,13 +64,23 @@ class LayersUiStore {
   /** Layers whose effects list is expanded under the row. */
   expandedEffects = $state<LayerId[]>([]);
   /** True while the active layer's mask thumbnail is the paint target (framed). */
-  maskTargeted = $state(false);
+  get maskTargeted(): boolean {
+    return toolStore.maskTarget;
+  }
+  set maskTargeted(v: boolean) {
+    toolStore.maskTarget = v;
+  }
   /** Inline-rename request from the Layer ▸ Rename Layer… command. */
   renameRequest = $state<LayerId | null>(null);
   /** Solo (Alt-click eye) bookkeeping: previous visibility per layer, per document. */
   solo = $state<{ docId: string; layerId: LayerId; prev: Record<LayerId, boolean> } | null>(null);
   /** Paths panel: the active path id (per document). */
-  activePathId = $state<string | null>(null);
+  get activePathId(): string | null {
+    return toolStore.activePathId;
+  }
+  set activePathId(v: string | null) {
+    toolStore.activePathId = v;
+  }
   /** Channels panel: ids of channels whose eye is on (R/G/B/alpha), per document. */
   hiddenChannels = $state<string[]>([]);
 

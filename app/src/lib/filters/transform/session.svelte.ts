@@ -17,6 +17,7 @@ import {
   SetTextLayerCommand,
   TransformLayerCommand,
   clonePath,
+  findLayer,
   type Command,
   type Path,
   type PixelLayer,
@@ -24,7 +25,6 @@ import {
 } from "$lib/engine";
 import { toast } from "$lib/stores/toast.svelte";
 import { docStore, type OpenDoc } from "$lib/stores/doc.svelte";
-import { rawDoc, rawLayer } from "../raw";
 import { Mat, affineResampleAsync, transformedBounds } from "./affine";
 import { CompositeCommand } from "./commands";
 
@@ -81,10 +81,10 @@ class TransformSession {
     return this.entry;
   }
 
-  /** The raw (non-proxied) layer being transformed (pixel, shape or type layer). */
+  /** The layer being transformed (pixel, shape or type layer). */
   get layer(): PixelLayer | null {
     if (!this.entry || !this.layerId) return null;
-    const l = rawLayer(this.entry, this.layerId);
+    const l = findLayer(this.entry.doc, this.layerId);
     return l && (l.kind === "raster" || l.kind === "shape" || l.kind === "text") ? l : null;
   }
 
@@ -125,9 +125,8 @@ class TransformSession {
     const entry = docStore.active;
     const active = docStore.activeLayer;
     if (!entry || !active || (active.kind !== "raster" && active.kind !== "shape" && active.kind !== "text")) return false;
-    // Mutate the raw objects only (see raw.ts).
-    const doc = rawDoc(entry);
-    const raw = rawLayer(entry, active.id);
+    const doc = entry.doc;
+    const raw = findLayer(doc, active.id);
     const layer = raw && (raw.kind === "raster" || raw.kind === "shape" || raw.kind === "text") ? raw : null;
     if (!layer || layer.locked || layer.lock.all || layer.lock.position) return false;
     // Vector (shape / type) layers always transform as a whole, like PS.
@@ -274,7 +273,7 @@ class TransformSession {
         nextOffset = { x: union.x, y: union.y };
         cmds.push(new TransformLayerCommand(layer.id, nextRaster, nextOffset, "Free Transform"));
         // Carry the selection along with the pixels.
-        const doc = rawDoc(entry);
+        const doc = entry.doc;
         const selM = Mat.mul(m, Mat.translate(-this.origin.x, -this.origin.y));
         const lum = affineResampleAsync(this.selection.toLuminanceMask(), selM, Rect.ofSize(doc.width, doc.height));
         const lumR = await lum;

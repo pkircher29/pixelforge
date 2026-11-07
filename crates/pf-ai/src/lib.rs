@@ -14,7 +14,7 @@
 //! * the per-provider [`Capabilities`] matrix ([`all_capabilities`]) used by the UI to
 //!   grey out features and by the webview to decide when to emulate a mask,
 //! * the three providers in [`providers`] (`reqwest`, rustls, base64 everywhere),
-//! * [`mask`] helpers (crop to mask bbox / composite back / OpenAI mask normalisation),
+//! * [`mask`] helpers (`to_openai_mask` and `to_a1111_mask` mask format normalisation),
 //! * [`keystore`]: OS keychain with an obfuscated-file fallback,
 //! * [`jobs`]: the Tokio job queue with cancellation, timeouts and broadcast events,
 //! * [`ipc`]: the raw-bytes wire format used by the Tauri commands,
@@ -44,7 +44,7 @@ pub use custom::{CustomKind, CustomProvider, CustomRegistry, ProbeResult};
 pub use error::{AiError, Error};
 pub use jobs::{JobConfig, JobEvent, JobEventKind, JobId, JobKind, JobManager, JobSpec, JobStatus};
 pub use keystore::{AutoKeyStore, FileStore, KeyStore, KeyringStore};
-pub use mask::{composite_back, crop_to_mask_bbox, to_openai_mask, Rect};
+pub use mask::{to_a1111_mask, to_openai_mask};
 pub use provider::{validate_edit, validate_generate, BoxedProvider, ImageProvider};
 pub use providers::custom::{build_custom_provider, probe as probe_custom, prompt_assist};
 pub use providers::{

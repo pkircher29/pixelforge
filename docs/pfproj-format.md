@@ -4,7 +4,7 @@ Format version **2** (v0.2). Implemented in `crates/pf-io/src/pfproj.rs`
 (`write_pfproj` / `read_pfproj`), exposed to the UI through `io_save_pfproj` /
 `io_open_pfproj` (see [ipc.md](ipc.md)); the engine ↔ manifest mapping lives in
 `app/src/lib/io/convert.ts`. **Readers accept format 1** (every format-2 field is optional
-and defaults to the v0.1 behaviour); writers always emit format 2.
+and defaults to the v0.1 behavior); writers always emit format 2.
 
 ## Container
 
@@ -29,7 +29,7 @@ manifest's `file` / `mask` / `channels[].file` / `selection.file` / `thumbnail` 
 ```jsonc
 {
   "format": 2,                         // integer; readers refuse values they don't know
-  "app_version": "0.2.0",              // Pixelforge version that wrote the file
+  "app_version": "0.2.1",              // Pixelforge version that wrote the file
   "created":  "2026-10-06T14:03:11Z",  // RFC 3339 UTC, set on first save
   "modified": "2026-10-06T15:20:00Z",  // RFC 3339 UTC, set on every save
 
@@ -97,7 +97,7 @@ manifest's `file` / `mask` / `channels[].file` / `selection.file` / `thumbnail` 
   "thumbnail": "thumb.png",            // omitted when no preview was written
 
   // ---- format 2
-  "channels": [                        // alpha channels (Select ▸ Save Selection); omitted when empty
+  "channels": [                        // alpha channels (Select > Save Selection); omitted when empty
     { "id": "ch-1", "name": "Alpha 1", "color": [255, 0, 0], "opacity": 0.5, "file": "channels/ch-1.png" }
   ],
   "paths": [ /* Path objects as in `shape.path` */ ],   // Paths panel; omitted when empty
@@ -131,7 +131,7 @@ as-is in camelCase. Keys: `dropShadow`, `innerShadow`, `outerGlow`, `innerGlow`,
 `"color-dodge"`), `opacity` 0..1 and Photoshop's parameter names (`angle`, `distance`,
 `spread`, `choke`, `size`, `useGlobalLight`, `position`, `depth`, `altitude`, …). Render
 order (PS): drop shadow → outer glow → fill at `fill_opacity` → inner shadow → inner glow
-→ bevel & emboss → colour overlay → gradient overlay → stroke.
+→ bevel & emboss → color overlay → gradient overlay → stroke.
 
 ### Blend modes
 

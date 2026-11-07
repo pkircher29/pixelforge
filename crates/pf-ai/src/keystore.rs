@@ -291,14 +291,28 @@ fn poisoned() -> Error {
     Error::KeyStore("file store lock poisoned".to_owned())
 }
 
-/// Write a file readable only by the owner where the OS supports it.
+/// Write a file readable only by the owner where the OS supports it (atomic via temp file).
 fn write_private(path: &Path, bytes: &[u8]) -> io::Result<()> {
-    fs::write(path, bytes)?;
+    let tmp = path.with_extension(format!("tmp.{}", uuid::Uuid::new_v4().simple()));
     #[cfg(unix)]
     {
-        use std::os::unix::fs::PermissionsExt;
-        fs::set_permissions(path, fs::Permissions::from_mode(0o600))?;
+        use std::io::Write;
+        use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
+        let mut f = fs::OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .mode(0o600)
+            .open(&tmp)?;
+        f.write_all(bytes)?;
+        f.sync_all()?;
+        fs::set_permissions(&tmp, fs::Permissions::from_mode(0o600))?;
     }
+    #[cfg(not(unix))]
+    {
+        fs::write(&tmp, bytes)?;
+    }
+    fs::rename(&tmp, path)?;
     Ok(())
 }
 

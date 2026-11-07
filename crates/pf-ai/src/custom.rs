@@ -427,6 +427,7 @@ impl RegistryFile {
 #[derive(Debug, Clone)]
 pub struct CustomRegistry {
     path: PathBuf,
+    lock: std::sync::Arc<std::sync::Mutex<()>>,
 }
 
 impl CustomRegistry {
@@ -434,6 +435,7 @@ impl CustomRegistry {
     pub fn new(dir: &Path) -> Self {
         Self {
             path: dir.join(REGISTRY_FILE),
+            lock: std::sync::Arc::new(std::sync::Mutex::new(())),
         }
     }
 
@@ -445,6 +447,11 @@ impl CustomRegistry {
     /// All entries (empty when the file does not exist). Malformed entries fail the load
     /// loudly rather than silently dropping a provider.
     pub fn load(&self) -> Result<Vec<CustomProvider>, Error> {
+        let _guard = self.lock.lock().unwrap_or_else(|p| p.into_inner());
+        self.load_unlocked()
+    }
+
+    fn load_unlocked(&self) -> Result<Vec<CustomProvider>, Error> {
         match fs::read(&self.path) {
             Ok(bytes) => {
                 let file: RegistryFile = serde_json::from_slice(&bytes)?;
@@ -457,6 +464,11 @@ impl CustomRegistry {
 
     /// Replace the whole list (atomic write).
     pub fn save(&self, providers: &[CustomProvider]) -> Result<(), Error> {
+        let _guard = self.lock.lock().unwrap_or_else(|p| p.into_inner());
+        self.save_unlocked(providers)
+    }
+
+    fn save_unlocked(&self, providers: &[CustomProvider]) -> Result<(), Error> {
         for p in providers {
             p.validate()?;
         }
@@ -476,7 +488,9 @@ impl CustomRegistry {
             version: RegistryFile::version(),
             providers: providers.to_vec(),
         };
-        let tmp = self.path.with_extension("json.tmp");
+        let tmp = self
+            .path
+            .with_extension(format!("json.{}.tmp", uuid::Uuid::new_v4().simple()));
         fs::write(&tmp, serde_json::to_vec_pretty(&file)?)?;
         fs::rename(&tmp, &self.path)?;
         Ok(())
@@ -489,7 +503,8 @@ impl CustomRegistry {
 
     /// Insert a new entry; fails when the id exists.
     pub fn add(&self, provider: CustomProvider) -> Result<Vec<CustomProvider>, Error> {
-        let mut list = self.load()?;
+        let _guard = self.lock.lock().unwrap_or_else(|p| p.into_inner());
+        let mut list = self.load_unlocked()?;
         if list.iter().any(|p| p.id == provider.id) {
             return Err(Error::InvalidRequest(format!(
                 "a custom provider with id {:?} already exists",
@@ -497,13 +512,14 @@ impl CustomRegistry {
             )));
         }
         list.push(provider);
-        self.save(&list)?;
+        self.save_unlocked(&list)?;
         Ok(list)
     }
 
     /// Replace an existing entry (matched by id).
     pub fn update(&self, provider: CustomProvider) -> Result<Vec<CustomProvider>, Error> {
-        let mut list = self.load()?;
+        let _guard = self.lock.lock().unwrap_or_else(|p| p.into_inner());
+        let mut list = self.load_unlocked()?;
         let Some(slot) = list.iter_mut().find(|p| p.id == provider.id) else {
             return Err(Error::InvalidRequest(format!(
                 "no custom provider with id {:?}",
@@ -511,15 +527,16 @@ impl CustomRegistry {
             )));
         };
         *slot = provider;
-        self.save(&list)?;
+        self.save_unlocked(&list)?;
         Ok(list)
     }
 
     /// Remove an entry (no error when absent).
     pub fn remove(&self, id: &str) -> Result<Vec<CustomProvider>, Error> {
-        let mut list = self.load()?;
+        let _guard = self.lock.lock().unwrap_or_else(|p| p.into_inner());
+        let mut list = self.load_unlocked()?;
         list.retain(|p| p.id != id);
-        self.save(&list)?;
+        self.save_unlocked(&list)?;
         Ok(list)
     }
 }

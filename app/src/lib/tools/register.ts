@@ -6,7 +6,7 @@
  */
 import { findPath, type Command } from "$lib/engine";
 import { docStore } from "$lib/stores/doc.svelte";
-import { setMaskTargetResolver, toolStore } from "$lib/stores/tool.svelte";
+import { toolStore } from "$lib/stores/tool.svelte";
 import { toast } from "$lib/stores/toast.svelte";
 import { ui } from "$lib/stores/ui.svelte";
 import { registerCommands, runCommand } from "$lib/ui/registry.svelte";
@@ -23,22 +23,12 @@ import { boxBlurRegion, dodgeBurn, mapRegion, sharpenRegion, sponge } from "./re
 import { maskGray, type StrokeBlend } from "./brush-engine";
 import type { ToolContext } from "./types";
 
-// Mask targeting: layers-v2's Layers panel owns `layersUi.maskTargeted`.
-void import("$lib/ui/panels/Layers.store.svelte")
-  .then((m) => {
-    const store = (m as { layersUi?: { maskTargeted?: boolean } }).layersUi;
-    if (store) setMaskTargetResolver(() => store.maskTargeted === true);
-  })
-  .catch(() => {});
-
 /** The work path, else the active path, else the first path. */
-import { layersUi } from "$lib/ui/panels/Layers.store.svelte";
-
 function currentPath(): ReturnType<typeof findPath> {
   const d = docStore.doc;
   if (!d) return undefined;
   // The Paths panel's targeted path wins (PS strokes / fills the selected path).
-  const active = layersUi.activePathId ? findPath(d, layersUi.activePathId) : undefined;
+  const active = toolStore.activePathId ? findPath(d, toolStore.activePathId) : undefined;
   return active ?? (d.workPathId ? findPath(d, d.workPathId) : undefined) ?? d.paths[0];
 }
 

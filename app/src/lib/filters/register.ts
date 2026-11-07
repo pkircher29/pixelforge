@@ -5,25 +5,35 @@
  */
 
 import { mount } from "svelte";
-import { CropCanvasCommand, flipLayerCommand, rotateLayer90Command } from "$lib/engine";
+import {
+  ADJUSTMENT_OPS,
+  CropCanvasCommand,
+  FILTER_OPS,
+  commandIdFor,
+  defaultParams,
+  flipLayerCommand,
+  rotateLayer90Command,
+  type OpDef,
+} from "$lib/engine";
 import { docStore } from "$lib/stores/doc.svelte";
 import { registerCommand, type CommandDef } from "$lib/ui/registry.svelte";
 import AdjustDialog from "$lib/ui/dialogs/AdjustDialog.svelte";
 import ImageSizeDialog from "$lib/ui/dialogs/ImageSizeDialog.svelte";
 import CanvasSizeDialog from "$lib/ui/dialogs/CanvasSizeDialog.svelte";
+import RotateCanvasDialog from "$lib/ui/dialogs/RotateCanvasDialog.svelte";
 import TransformOverlay from "$lib/ui/dialogs/TransformOverlay.svelte";
-import RotateCanvasDialog from "./ui/RotateCanvasDialog.svelte";
-import { closeDialog, openDialog } from "./ui/dialogHost";
-import { ADJUSTMENT_OPS, FILTER_OPS, commandIdFor } from "./ops";
+import { dialogs, openDialog } from "$lib/ui/dialogs/dialogs.svelte";
 import { activeRasterLayerOk, applyOpToActiveLayer } from "./applyToLayer";
 import { getLastFilter } from "./lastFilter";
-import { rawDoc } from "./raw";
-import { defaultParams, type OpDef } from "./types";
 import { transformSession } from "./transform/session.svelte";
 import { trimRect } from "./transform/trim";
 
 const rasterLayerEnabled = (): boolean => activeRasterLayerOk();
 const docEnabled = (): boolean => !!docStore.doc;
+
+function closeDialog(): void {
+  dialogs.cancelTop();
+}
 
 /**
  * Wrap a command so any open filters dialog is closed first (its teardown restores the
@@ -104,7 +114,7 @@ export function registerFilterCommands(): void {
     shortcut: "CmdOrCtrl+Alt+I",
     keywords: ["resample", "resize", "scale"],
     enabled: docEnabled,
-    run: guarded(() => openDialog(ImageSizeDialog, {})),
+    run: guarded(() => void openDialog(ImageSizeDialog, {})),
   });
   registerCommand({
     id: "image.canvasSize",
@@ -114,7 +124,7 @@ export function registerFilterCommands(): void {
     shortcut: "CmdOrCtrl+Alt+C",
     keywords: ["anchor", "extend", "crop"],
     enabled: docEnabled,
-    run: guarded(() => openDialog(CanvasSizeDialog, {})),
+    run: guarded(() => void openDialog(CanvasSizeDialog, {})),
   });
   registerCommand({
     id: "image.trim",
@@ -126,7 +136,7 @@ export function registerFilterCommands(): void {
     run: guarded(() => {
       const entry = docStore.active;
       if (!entry) return;
-      const doc = rawDoc(entry);
+      const doc = entry.doc;
       const r = trimRect(doc, { basis: "transparent" }) ?? trimRect(doc, { basis: "top-left" });
       if (r) docStore.exec(new CropCanvasCommand(r));
     }),
@@ -141,7 +151,7 @@ export function registerFilterCommands(): void {
     order: 223,
     keywords: ["rotate", "angle", "canvas"],
     enabled: docEnabled,
-    run: guarded(() => openDialog(RotateCanvasDialog, {})),
+    run: guarded(() => void openDialog(RotateCanvasDialog, {})),
   });
 
   // ---- Layer / Transform
@@ -158,7 +168,7 @@ export function registerFilterCommands(): void {
         if (l && l.kind === "raster") run(l.id);
       }),
     });
-  const raw = (): ReturnType<typeof rawDoc> => rawDoc(docStore.active!);
+  const raw = () => docStore.active!.doc;
   layerCmd("layer.flipH", "Flip Horizontal", 100, (id) => docStore.exec(flipLayerCommand(raw(), id, "h")));
   layerCmd("layer.flipV", "Flip Vertical", 110, (id) => docStore.exec(flipLayerCommand(raw(), id, "v")));
   layerCmd("layer.rotate90cw", "Rotate 90° Clockwise", 120, (id) => docStore.exec(rotateLayer90Command(raw(), id, true)));

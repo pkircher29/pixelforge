@@ -7,7 +7,7 @@
  * rendered in a 5x7 bitmap font), so you can see at a glance which prompt / provider
  * produced a layer. Node >= 18, no dependencies.
  *
- *   node scripts/fake-ai-server.mjs [--port 8787] [--size 512] [--delay 1500]
+ *   node scripts/fake-ai-server.mjs [--port 8787] [--size 512] [--delay 1200]
  *
  * Then start the app with the providers pointed here and any non-empty key stored:
  *

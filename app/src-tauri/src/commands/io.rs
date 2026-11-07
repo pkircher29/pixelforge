@@ -18,11 +18,11 @@ use pf_io::frame::{decode_frame, encode_frame};
 use pf_io::pfproj::{self, Image, Manifest, Pixels, ProjectDoc};
 use pf_io::{codec, recent, thumb, EncodeOptions, ImageFormat, ImportedDocument};
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 use tauri::ipc::{InvokeBody, Request, Response};
-use tauri::{AppHandle, Manager, Runtime};
+use tauri::{AppHandle, Manager, Runtime, State};
 
 use crate::error::{CommandError, CommandResult};
+use crate::state::AppState;
 
 /// Reply of [`io_ping`].
 #[derive(Debug, Clone, Serialize)]
@@ -575,7 +575,14 @@ pub fn io_thumbnail(request: Request<'_>) -> CommandResult<Response> {
 /// Recently opened / saved files, most recent first. Entries whose file no longer
 /// exists are dropped.
 #[tauri::command]
-pub fn io_recent_list<R: Runtime>(app: AppHandle<R>) -> CommandResult<Vec<String>> {
+pub fn io_recent_list<R: Runtime>(
+    app: AppHandle<R>,
+    state: State<'_, AppState>,
+) -> CommandResult<Vec<String>> {
+    let _guard = state
+        .recent_lock
+        .lock()
+        .map_err(|_| CommandError::poisoned("recent"))?;
     let path = recent_path(&app)?;
     let mut list = recent::load(&path);
     let before = list.len();
@@ -588,7 +595,15 @@ pub fn io_recent_list<R: Runtime>(app: AppHandle<R>) -> CommandResult<Vec<String
 
 /// Push `path` to the front of the recent list (max 20). Returns the updated list.
 #[tauri::command]
-pub fn io_recent_add<R: Runtime>(app: AppHandle<R>, path: String) -> CommandResult<Vec<String>> {
+pub fn io_recent_add<R: Runtime>(
+    app: AppHandle<R>,
+    state: State<'_, AppState>,
+    path: String,
+) -> CommandResult<Vec<String>> {
+    let _guard = state
+        .recent_lock
+        .lock()
+        .map_err(|_| CommandError::poisoned("recent"))?;
     let file = recent_path(&app)?;
     let mut list = recent::load(&file);
     recent::add(&mut list, &path);
@@ -600,8 +615,13 @@ pub fn io_recent_add<R: Runtime>(app: AppHandle<R>, path: String) -> CommandResu
 #[tauri::command]
 pub fn io_recent_remove<R: Runtime>(
     app: AppHandle<R>,
+    state: State<'_, AppState>,
     path: Option<String>,
 ) -> CommandResult<Vec<String>> {
+    let _guard = state
+        .recent_lock
+        .lock()
+        .map_err(|_| CommandError::poisoned("recent"))?;
     let file = recent_path(&app)?;
     let mut list = recent::load(&file);
     match path {
@@ -611,11 +631,6 @@ pub fn io_recent_remove<R: Runtime>(
     recent::save(&file, &list)?;
     Ok(list)
 }
-
-/// Keep `serde_json::Value` referenced so the manifest's opaque `ai_history` type is
-/// obviously part of this module's contract.
-#[allow(dead_code)]
-type OpaqueJson = Value;
 
 #[cfg(test)]
 mod tests {

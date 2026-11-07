@@ -15,4 +15,4 @@ Offline integration test suite for `pf-ai`, exercising provider wire protocols a
 | `oauth.rs` | OpenAI SIWC PKCE loopback flow, ID-token verification, token refresh, streaming `/v1/responses`, xAI RFC 8628 device flow, and `PlanFallbackProvider` tests. |
 | `jobs.rs` | `JobManager` concurrency limits, queueing, cancellation, timeouts, and `take_result` lifecycle tests. |
 | `keystore.rs` | `FileStore` obfuscation, `AutoKeyStore` fallback, and account key round-trip tests. |
-| `mask.rs` | `crop_to_mask_bbox`, `composite_back`, and `to_openai_mask` pixel accuracy tests. |
+| `mask.rs` | `to_openai_mask` and `to_a1111_mask` pixel accuracy and validation tests. |

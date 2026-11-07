@@ -2,6 +2,10 @@
 
 Rust crate (`pixelforge` / `pixelforge_lib`) providing the native desktop window, Tauri plugin registration (`dialog`, `fs`, `clipboard-manager`, `opener`, `window-state`), process-wide `AppState`, and IPC command handlers. Enforces `#![forbid(unsafe_code)]`.
 
+## Build Prerequisite
+
+`tauri::generate_context!()` embeds `../dist` (`app/dist/`) at compile time. Run `npm run build` from the repository root at least once before running `cargo build`, `cargo check`, `cargo clippy`, or `cargo test` on the workspace.
+
 ## Key Files
 
 | Path | Role |

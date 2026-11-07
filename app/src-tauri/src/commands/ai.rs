@@ -21,6 +21,7 @@
 //! | `ai_custom_probe` | `{ provider, auth? }` | `ProbeResult` |
 //! | `ai_prompt_assist` | raw body: frame `{ provider, text }` + optional image blob | `string` |
 //! | `ai_hub_search` | `{ query, pipelineTag?, limit? }` | `HubModel[]` |
+//! | `ai_comfy_templates` | - | `&[(&str, &str)]` |
 //!
 //! Events: every `pf_ai::JobEvent` is emitted twice, on `ai://job/<id>` and on the
 //! catch-all `ai://jobs` (listen to the latter *before* invoking submit so the `queued`

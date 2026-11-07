@@ -22,4 +22,3 @@ Core raster, vector, typography, layer-style, selection, channel, undo-history, 
 | `commands/` | Undoable `Command` implementations for layers, paint strokes, selections, channels, canvas resizing/rotation, merging, and transforms. |
 | `composite/` | WebGL2 hardware-accelerated layer compositor (`GlCompositor`) with dirty-rect texture uploads, Canvas 2D fallback (`CanvasCompositor`), and marching-ants renderer (`ants.ts`). |
 | `ops/` | CPU and GLSL image adjustments/filters, Photoshop layer styles (`effects.ts`), solid/gradient/pattern fills (`fill.ts`), Bezier vector paths (`vector.ts`), text rasterization (`text.ts`), defringe/matting (`matting.ts`), and Euclidean distance transforms (`distance.ts`). |
-| `demo/` | Standalone engine demo harness (`Demo.svelte`, `demo.ts`). |

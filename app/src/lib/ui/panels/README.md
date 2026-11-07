@@ -17,7 +17,7 @@ Svelte 5 components, view models, and runes stores for Pixelforge's 15 dockable 
 | **History** | `HistoryPanel.svelte`, `HistorySnapshotDialog.svelte`, `HistoryOptionsDialog.svelte` | `History.store.svelte.ts`, `History.model.ts`, `History.commands.ts` (undo states, snapshots, History Brush source) |
 | **Brush Settings & Brushes** | `BrushSettingsPanel.svelte`, `BrushesPanel.svelte` | `$lib/tools/brush-store.svelte.ts` (tip shape, spacing, scattering, shape dynamics, presets) |
 | **Character & Paragraph** | `CharacterPanel.svelte`, `ParagraphPanel.svelte` | `$lib/tools/type-session.svelte.ts` (font family, size, leading, tracking, bold/italic, alignment) |
-| **AI & AI History** | `AiPanel.svelte`, `AiHistoryPanel.svelte` | `ai-panel-ui.svelte.ts`, `$lib/ai/*` |
+| **AI & AI History** | `AiPanel.svelte`, `AiHistoryPanel.svelte` | `$lib/ai/ui.svelte.ts`, `$lib/ai/*` |
 
 ## Registration
 

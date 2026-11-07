@@ -77,27 +77,45 @@
     return [((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255];
   }
 
-  // Mount compositor + resize observer once the elements exist. Re-created when the
-  // transparency-grid colors or theme change (compositor colors are fixed at creation).
-  $effect(() => {
-    const el = canvas;
-    const container = host;
+  function makeCompositor(el: HTMLCanvasElement): ICompositor | null {
     const gridColors = settings.value.checkerColors;
-    void settings.value.theme;
-    if (!el || !container) return;
     const [light, dark] = CHECKER_RGB[gridColors] ?? CHECKER_RGB.light;
     try {
       // glow = black: the present shader draws a 1 px `glow` line around the document and
       // a soft halo in the pasteboard — black gives PS's hairline and no halo.
-      compositor = createCompositor(el, { colors: { light, dark, bg: cssRgb("--ps-canvas-bg", [0.157, 0.157, 0.157]), glow: [0, 0, 0] } });
+      return createCompositor(el, { colors: { light, dark, bg: cssRgb("--ps-canvas-bg", [0.157, 0.157, 0.157]), glow: [0, 0, 0] } });
     } catch (e) {
       console.error("[pixelforge] no compositor", e);
-      return;
+      return null;
     }
+  }
+
+  // Mount compositor + resize observer while active once the elements exist. Re-created
+  // when the transparency-grid colors or theme change, or when the tab becomes active
+  // (releasing inactive WebGL2 contexts so >16 open documents never exhaust the browser limit).
+  $effect(() => {
+    const el = canvas;
+    const container = host;
+    const isActive = active;
+    void settings.value.checkerColors;
+    void settings.value.theme;
+    if (!el || !container || !isActive) return;
+    compositor = makeCompositor(el);
+    if (!compositor) return;
     entry.compositor = compositor;
-    if (active) canvasHost.compositorKind = compositor.kind;
+    canvasHost.compositorKind = compositor.kind;
     lastVersion = -1;
     lastVp = null;
+    const onRestored = (): void => {
+      if (!canvas) return;
+      compositor?.dispose();
+      compositor = makeCompositor(canvas);
+      entry.compositor = compositor;
+      if (compositor) canvasHost.compositorKind = compositor.kind;
+      lastVersion = -1;
+      lastVp = null;
+    };
+    el.addEventListener("webglcontextrestored", onRestored);
     const ro = new ResizeObserver(() => {
       cssW = Math.max(1, container.clientWidth);
       cssH = Math.max(1, container.clientHeight);
@@ -108,6 +126,7 @@
     cssW = Math.max(1, container.clientWidth);
     cssH = Math.max(1, container.clientHeight);
     return () => {
+      el.removeEventListener("webglcontextrestored", onRestored);
       ro.disconnect();
       if (entry.compositor === compositor) {
         compositor?.dispose();
@@ -146,9 +165,19 @@
   }
 
   function render(t: number): void {
-    const c = compositor;
+    let c = compositor;
     const ov = overlay;
     if (!c || !ov || cssW < 2 || cssH < 2) return;
+    if (c.isContextLost() && canvas) {
+      c.dispose();
+      c = makeCompositor(canvas);
+      compositor = c;
+      entry.compositor = c;
+      if (!c) return;
+      canvasHost.compositorKind = c.kind;
+      lastVersion = -1;
+      lastVp = null;
+    }
     const doc = entry.doc;
     const vp = entry.viewport;
     const dpr = window.devicePixelRatio || 1;
