@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { Raster, Rect, Selection, TiledRaster } from "../../lib/engine";
+import { expectPixelBytes } from "../pixel-assertions";
 import {
   BrushStroke,
   DEFAULT_BRUSH_SETTINGS,
@@ -262,13 +263,13 @@ describe("tiled brush storage", () => {
       stroke.moveTo({ x: 270, y: 260 });
       stroke.moveTo({ x: 529, y: 269 });
     }
-    expect(tiled.readPixels(tiled.bounds())).toEqual(dense.data);
+    expectPixelBytes(tiled.readPixels(tiled.bounds()), dense.data);
     expect(tiled.storageMode).toBe("tiled");
     expect((strokes[1]!.before as TiledRaster).storageMode).toBe("tiled");
     strokes[1]!.abort();
-    expect(tiled.readPixels(tiled.bounds())).toEqual(original.readPixels(original.bounds()));
+    expectPixelBytes(tiled.readPixels(tiled.bounds()), original.readPixels(original.bounds()));
     expect(tiled.storageMode).toBe("tiled");
-  }, 30_000); // Compare both full canvases without a shared-runner speed assumption.
+  });
 
   it("allocates coverage and snapshot pixels only where a large canvas is painted", () => {
     const raster = new TiledRaster(4000, 3000);
