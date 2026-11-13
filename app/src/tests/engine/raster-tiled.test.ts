@@ -1,6 +1,7 @@
 import { expect, it } from "vitest";
 import { PaintCommand, Raster, Rect, TiledRaster, addLayer, compositeToRaster, createDocument, createRasterLayer, rgba } from "../../lib/engine";
 import { sampleRaster } from "../../lib/ui/panels/thumbnail";
+import { expectPixelBytes } from "../pixel-assertions";
 
 it("allocates only populated tiles, including hidden RGB, and releases cleared tiles", () => {
   const raster = new TiledRaster(4000, 3000);
@@ -48,13 +49,13 @@ it("matches contiguous pixels for clipped fills, edge tiles, crops and alpha bou
   for (const rect of [Rect.make(240, 245, 80, 40), Rect.make(-5, -7, 530, 290)]) {
     const crop = tiled.crop(rect);
     expect(crop.storageMode).toBe("tiled");
-    expect(crop.data).toEqual(dense.crop(rect).data);
+    expectPixelBytes(crop.data, dense.crop(rect).data);
   }
   expect(tiled.storageMode).toBe("tiled");
-  expect(tiled.data).toEqual(dense.data);
+  expectPixelBytes(tiled.data, dense.data);
   expect(tiled.storageMode).toBe("contiguous");
   expect(tiled.allocatedTileCount).toBe(0);
-}, 30_000); // Full-canvas byte comparisons exceed 5s on shared Windows runners.
+});
 
 it("keeps the legacy writable array live without changing older sparse snapshots", () => {
   const raster = new TiledRaster(300, 270);
@@ -106,14 +107,14 @@ it("writes clipped regions without detaching unchanged snapshot tiles", () => {
     tiled.writePixels(rect, bytes);
     dense.writePixels(rect, bytes);
   }
-  expect(tiled.readPixels(tiled.bounds())).toEqual(dense.data);
+  expectPixelBytes(tiled.readPixels(tiled.bounds()), dense.data);
   const snapshot = tiled.clone();
   const bytesBefore = tiled.byteLength();
   tiled.writePixels(tiled.bounds(), tiled.readPixels(tiled.bounds()));
   expect(TiledRaster.retainedPixelBytes([tiled, snapshot])).toBe(bytesBefore);
   tiled.writePixels(tiled.bounds(), new Uint8ClampedArray(530 * 270 * 4));
   expect(tiled.byteLength()).toBe(0);
-  expect(snapshot.readPixels(snapshot.bounds())).toEqual(dense.data);
+  expectPixelBytes(snapshot.readPixels(snapshot.bounds()), dense.data);
   expect(tiled.storageMode).toBe("tiled");
   expect(() => tiled.writePixels(Rect.make(0, 0, 2, 2), new Uint8ClampedArray(3))).toThrow(RangeError);
 });
@@ -145,7 +146,7 @@ it("handles overlapping self-copies, transparent replacement and snapshot isolat
   const expected = Raster.fromBytes(600, 300, sparse.readPixels(sparse.bounds()));
   expected.blit(expected.clone(), 252, 5, Rect.make(250, 0, 15, 280), { mode: "replace" });
   sparse.blit(sparse, 252, 5, Rect.make(250, 0, 15, 280), { mode: "replace" });
-  expect(sparse.readPixels(sparse.bounds())).toEqual(expected.data);
+  expectPixelBytes(sparse.readPixels(sparse.bounds()), expected.data);
   expect(snapshot.getPixel(266, 6).a).toBe(0);
   sparse.blit(new TiledRaster(600, 300), 0, 0, undefined, { mode: "replace" });
   expect(sparse.allocatedTileCount).toBe(0);
