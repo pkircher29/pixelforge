@@ -793,7 +793,7 @@ mod tests {
         assert_eq!(json["id"], "custom:comfy");
         assert_eq!(json["vendor"], "ComfyUI");
         assert_eq!(json["promptAssist"], false);
-        assert_eq!(kind_infos().len(), 6);
+        assert_eq!(kind_infos().len(), 7);
         assert_eq!(
             serde_json::to_value(&kind_infos()[0]).expect("ser")["kind"],
             "openai_compat"
