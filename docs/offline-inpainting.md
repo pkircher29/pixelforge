@@ -14,6 +14,9 @@ For a fresh Windows build, create `target/debug/examples` and `target/debug/deps
 before running Cargo (use the corresponding paths under `CARGO_TARGET_DIR` when
 overridden). ONNX Runtime's pinned build script assumes these DLL destinations
 already exist. CI prepares them explicitly; release builds use `target/release`.
+Rust is pinned to 1.95.0 in the repository and CI: `ort-sys` rc.10 assumes the
+older Cargo artifact layout and fails to stage DLLs with Rust 1.100. Upgrade the
+toolchain together with that dependency after verifying clean Windows builds.
 
 The opt-in real-model test uses a local file and makes no network or paid requests:
 
