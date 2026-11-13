@@ -57,6 +57,12 @@ jobs:
       - name: cargo fmt
         run: cargo fmt --all --check
 
+      # ort-sys rc.10 copies Windows runtime DLLs into these directories but
+      # assumes Cargo has already created examples/, even during Clippy.
+      - name: Prepare ONNX Runtime DLL destinations
+        if: runner.os == 'Windows'
+        run: node -e "for (const p of ['target/debug/examples', 'target/debug/deps']) require('node:fs').mkdirSync(p, {recursive:true})"
+
       - name: cargo clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
 

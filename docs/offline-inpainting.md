@@ -10,6 +10,11 @@ LaMa reconstructs selected content from its surroundings; it does not generate n
 
 ## Verification
 
+For a fresh Windows build, create `target/debug/examples` and `target/debug/deps`
+before running Cargo (use the corresponding paths under `CARGO_TARGET_DIR` when
+overridden). ONNX Runtime's pinned build script assumes these DLL destinations
+already exist. CI prepares them explicitly; release builds use `target/release`.
+
 The opt-in real-model test uses a local file and makes no network or paid requests:
 
 ```sh

@@ -54,6 +54,10 @@ jobs:
       - name: npm ci
         run: npm ci
 
+      - name: Prepare ONNX Runtime DLL destinations
+        if: runner.os == 'Windows'
+        run: node -e "for (const p of ['target/release/examples', 'target/release/deps']) require('node:fs').mkdirSync(p, {recursive:true})"
+
       - name: Build installers and draft the GitHub release
         uses: tauri-apps/tauri-action@v0
         env:
