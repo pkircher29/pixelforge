@@ -373,7 +373,7 @@ fn infer(
         .run_with_options(ort::inputs!["image" => image, "mask" => mask], options)
         .map_err(ort_error)?;
     let (shape, data) = output[0].try_extract_tensor::<f32>().map_err(ort_error)?;
-    if &shape[..] != [1, 3, EDGE as i64, EDGE as i64] {
+    if shape[..] != [1, 3, EDGE as i64, EDGE as i64] {
         return Err(Error::InvalidResponse(
             "LaMa output must be a 512 by 512 RGB image".into(),
         ));
