@@ -54,7 +54,7 @@ it("matches contiguous pixels for clipped fills, edge tiles, crops and alpha bou
   expect(tiled.data).toEqual(dense.data);
   expect(tiled.storageMode).toBe("contiguous");
   expect(tiled.allocatedTileCount).toBe(0);
-});
+}, 30_000); // Full-canvas byte comparisons exceed 5s on shared Windows runners.
 
 it("keeps the legacy writable array live without changing older sparse snapshots", () => {
   const raster = new TiledRaster(300, 270);

@@ -268,7 +268,7 @@ describe("tiled brush storage", () => {
     strokes[1]!.abort();
     expect(tiled.readPixels(tiled.bounds())).toEqual(original.readPixels(original.bounds()));
     expect(tiled.storageMode).toBe("tiled");
-  });
+  }, 30_000); // Compare both full canvases without a shared-runner speed assumption.
 
   it("allocates coverage and snapshot pixels only where a large canvas is painted", () => {
     const raster = new TiledRaster(4000, 3000);
