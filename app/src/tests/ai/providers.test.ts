@@ -54,7 +54,7 @@ describe("providersStore", () => {
     expect(invoke).toHaveBeenCalledWith("ai_custom_kinds");
     expect(invoke).toHaveBeenCalledWith("ai_list_providers");
     expect(providersStore.custom.map((c) => c.id)).toEqual(["comfy", "ollama"]);
-    expect(providersStore.kinds).toHaveLength(7);
+    expect(providersStore.kinds).toHaveLength(8);
     expect(providersStore.loaded).toBe(true);
     expect(aiUi.providers).toHaveLength(4);
   });

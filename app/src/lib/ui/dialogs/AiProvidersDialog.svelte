@@ -7,6 +7,7 @@
    */
   import { onMount } from "svelte";
   import { openUrl } from "@tauri-apps/plugin-opener";
+  import { open as chooseFile } from "@tauri-apps/plugin-dialog";
   import { invoke } from "@tauri-apps/api/core";
   import { writeText } from "@tauri-apps/plugin-clipboard-manager";
   import { deleteKey, getKeyStatus, hasTauri, hubSearch, setKey, testKey } from "$lib/ai/client";
@@ -51,7 +52,7 @@
   // Built-in form
   let keyValue = $state("");
   let showKey = $state(false);
-  let busy = $state<"" | "test" | "save" | "delete" | "probe" | "models" | "search" | "remove">("");
+  let busy = $state<"" | "test" | "save" | "delete" | "probe" | "models" | "search" | "remove" | "download">("");
   let result = $state<{ ok: boolean; text: string } | null>(null);
 
   // Custom form
@@ -74,6 +75,20 @@
   const customs = $derived(providersStore.custom);
   const kindInfo = $derived(draft ? providersStore.kindInfo(draft.kind) : null);
   const isSd = $derived(draft?.kind === "comfy_ui" || draft?.kind === "a1111");
+  async function chooseLama(download: boolean): Promise<void> {
+    const current = draft;
+    if (!current || busy) return;
+    busy = "download";
+    result = null;
+    try {
+      const path = download ? await invoke<string>("ai_lama_install") : await chooseFile({ multiple: false, filters: [{ name: "LaMa ONNX model", extensions: ["onnx"] }] });
+      if (draft === current && typeof path === "string") {
+        draft.model = path;
+        result = { ok: true, text: "Model ready. Test it, then add or save this provider." };
+      }
+    } catch (e) { result = { ok: false, text: toFriendlyError(e).detail }; }
+    finally { busy = ""; }
+  }
   const isLocalKind = $derived(draft ? ["comfy_ui", "a1111", "ollama", "openai_compat"].includes(draft.kind) : false);
 
   function num(key: string): number | "" {
@@ -605,6 +620,14 @@
             <label class="field"><span>Name</span><input type="text" bind:value={draft.name} oninput={onNameInput} /></label>
             <label class="field"><span>Id</span><input type="text" bind:value={draft.id} disabled={!draftIsNew} oninput={() => (idTouched = true)} pattern="[a-z0-9][a-z0-9-]*" /></label>
           </div>
+          {#if draft.kind === "lama"}
+            <p class="hint">Removes selected content using the surrounding image. Runs on your CPU with no account or API key. Download the model once (208 MB); subsequent edits work offline.</p>
+            <label class="field"><span>LaMa model file</span><input type="text" bind:value={draft.model} placeholder="Choose a local .onnx model" spellcheck="false" /></label>
+            <div class="actions">
+              <button type="button" class="btn" disabled={!!busy} onclick={() => void chooseLama(false)}>Browse…</button>
+              <button type="button" class="btn" disabled={!!busy} onclick={() => void chooseLama(true)}>{busy === "download" ? "Preparing model…" : "Download model (208 MB)"}</button>
+            </div>
+          {:else}
           <label class="field"><span>Base URL</span><input type="text" bind:value={draft.baseUrl} placeholder={kindInfo.defaultBaseUrl} spellcheck="false" /></label>
           <label class="field">
             <span>{draft.kind === "comfy_ui" || draft.kind === "a1111" ? "Checkpoint" : draft.kind === "hugging_face" ? "Model (repo id)" : draft.kind === "replicate" ? "Model (owner/name)" : "Model"}</span>
@@ -618,6 +641,7 @@
               {/if}
             </span>
           </label>
+          {/if}
           {#if draft.kind === "fal"}
             <label class="field"><span>Edit endpoint</span><input type="text" value={str("editModel")} onchange={(e) => setExtraStr("editModel", e)} placeholder="fal-ai/flux/dev/image-to-image" spellcheck="false" /></label>
             <p class="hint">Use endpoint IDs from fal.ai. The default FLUX pair supports generation and image-to-image edits; selection edits are emulated. Other models may need different capabilities or extra input fields. API usage is billed by fal.ai. Test reads pricing metadata without generating an image. Cancel requests remote cancellation, but a running model may still finish and incur charges.</p>
@@ -636,6 +660,7 @@
               </ul>
             {/if}
           {/if}
+          {#if draft.kind !== "lama"}
           <label class="field">
             <span>{draft.kind === "a1111" ? "Token or user:pass (optional)" : kindInfo.requiresAuth ? "Token" : "API key (optional)"}</span>
             <span class="inrow">
@@ -644,6 +669,7 @@
               {#if draft.hasAuth}<label class="check"><input type="checkbox" bind:checked={clearAuth} /> clear stored</label>{/if}
             </span>
           </label>
+          {/if}
           {#if isSd || draft.kind === "openai_compat" || draft.kind === "hugging_face" || draft.kind === "replicate" || draft.kind === "fal"}
             <div class="grid4">
               <label class="field"><span>Steps</span><input type="number" min="1" max="150" value={num("steps")} onchange={(e) => setExtraNum("steps", e)} placeholder="20" /></label>
@@ -678,7 +704,7 @@
               <textarea rows="5" bind:value={workflowText} onchange={onWorkflowText} spellcheck="false" placeholder={"Paste a workflow saved with \"Save (API format)\". Placeholders: {{prompt}} {{negative}} {{image}} {{mask}} {{width}} {{height}} {{seed}} {{steps}} {{cfg}} {{checkpoint}} {{denoise}} {{sampler}} {{scheduler}} {{batch}}"}></textarea>
             </div>
           {/if}
-          {#if draft.kind !== "ollama"}
+          {#if draft.kind !== "ollama" && draft.kind !== "lama"}
             <div class="caps">
               <span class="muted">Can:</span>
               <label class="check"><input type="checkbox" checked={draft.capabilities.generate} onchange={(e) => setCap("generate", (e.currentTarget as HTMLInputElement).checked)} /> generate</label>
@@ -695,8 +721,8 @@
           {#if extraError}<p class="result bad">{extraError}</p>{/if}
           <div class="actions">
             <button type="button" class="btn" disabled={busy !== ""} onclick={() => void probeDraft(false)}>{busy === "probe" ? "Testing…" : "Test connection"}</button>
-            <button type="button" class="btn" disabled={busy !== "" || draft.kind === "replicate"} onclick={() => void probeDraft(true)}>{busy === "models" ? "Fetching…" : "Fetch models"}</button>
-            <button type="button" class="btn primary" disabled={busy !== "" || !draft.name.trim() || !draft.id.trim() || !draft.baseUrl.trim()} onclick={() => void saveDraft()}>{busy === "save" ? "Saving…" : draftIsNew ? "Add" : "Save"}</button>
+            {#if draft.kind !== "lama"}<button type="button" class="btn" disabled={busy !== "" || draft.kind === "replicate"} onclick={() => void probeDraft(true)}>{busy === "models" ? "Fetching…" : "Fetch models"}</button>{/if}
+            <button type="button" class="btn primary" disabled={busy !== "" || !draft.name.trim() || !draft.id.trim() || !(draft.kind === "lama" ? draft.model.trim() : draft.baseUrl.trim())} onclick={() => void saveDraft()}>{busy === "save" ? "Saving…" : draftIsNew ? "Add" : "Save"}</button>
             <button type="button" class="btn danger" disabled={busy !== ""} onclick={() => void removeDraft()}>{draftIsNew ? "Cancel" : "Remove"}</button>
           </div>
           {#if probe}

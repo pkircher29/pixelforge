@@ -1,3 +1,4 @@
 [toolchain]
-channel = "stable"
+# ort-sys rc.10 assumes the pre-1.100 Cargo artifact directory layout.
+channel = "1.95.0"
 components = ["rustfmt", "clippy"]

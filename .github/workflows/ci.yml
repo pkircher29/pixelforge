@@ -31,9 +31,10 @@ jobs:
           sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file \
             libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev libfontconfig1-dev libfreetype6-dev
 
-      - name: Install Rust (stable)
+      - name: Install Rust (1.95.0)
         uses: dtolnay/rust-toolchain@stable
         with:
+          toolchain: 1.95.0
           components: rustfmt, clippy
 
       - name: Cache cargo
@@ -56,6 +57,12 @@ jobs:
 
       - name: cargo fmt
         run: cargo fmt --all --check
+
+      # ort-sys rc.10 copies Windows runtime DLLs into these directories but
+      # assumes Cargo has already created examples/, even during Clippy.
+      - name: Prepare ONNX Runtime DLL destinations
+        if: runner.os == 'Windows'
+        run: node -e "for (const p of ['target/debug/examples', 'target/debug/deps']) require('node:fs').mkdirSync(p, {recursive:true})"
 
       - name: cargo clippy
         run: cargo clippy --workspace --all-targets -- -D warnings

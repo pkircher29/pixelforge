@@ -21,6 +21,8 @@ tracing.workspace = true
 uuid.workspace = true
 # PKCE S256 code challenge (RFC 7636). Already in the lockfile via rustls/reqwest.
 sha2 = "0.10"
+# Planned offline LaMa inference; pinned to ONNX Runtime 1.22, Rust 1.81+.
+ort = { version = "=2.0.0-rc.10", default-features = false, features = ["std", "download-binaries", "copy-dylibs"] }
 
 # OS keychain. Windows Credential Manager / macOS Keychain are native; Linux uses the
 # pure-Rust zbus Secret Service client so CI needs no libdbus headers. keyring 3's docs

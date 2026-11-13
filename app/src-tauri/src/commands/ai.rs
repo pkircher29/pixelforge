@@ -622,6 +622,16 @@ pub async fn ai_custom_probe(
     Ok(probe_custom(&provider, secret).await?)
 }
 
+/// User-requested, checksum-verified offline model download (no credentials).
+#[tauri::command]
+pub async fn ai_lama_install(app: AppHandle) -> CommandResult<String> {
+    let directory = super::settings::config_dir(&app)?.join("models");
+    Ok(pf_ai::providers::custom::lama::install_model(directory)
+        .await?
+        .to_string_lossy()
+        .into_owned())
+}
+
 /// Header of the `ai_prompt_assist` frame.
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -783,7 +793,7 @@ mod tests {
         assert_eq!(json["id"], "custom:comfy");
         assert_eq!(json["vendor"], "ComfyUI");
         assert_eq!(json["promptAssist"], false);
-        assert_eq!(kind_infos().len(), 7);
+        assert_eq!(kind_infos().len(), 8);
         assert_eq!(
             serde_json::to_value(&kind_infos()[0]).expect("ser")["kind"],
             "openai_compat"

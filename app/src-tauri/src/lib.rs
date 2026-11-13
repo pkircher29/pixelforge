@@ -48,6 +48,7 @@ pub fn run() {
             commands::ai::ai_custom_update,
             commands::ai::ai_custom_remove,
             commands::ai::ai_custom_probe,
+            commands::ai::ai_lama_install,
             commands::ai::ai_prompt_assist,
             commands::ai::ai_hub_search,
             commands::ai::ai_comfy_templates,

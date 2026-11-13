@@ -35,9 +35,10 @@ jobs:
           sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file \
             libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev libfontconfig1-dev libfreetype6-dev
 
-      - name: Install Rust (stable)
+      - name: Install Rust (1.95.0)
         uses: dtolnay/rust-toolchain@stable
         with:
+          toolchain: 1.95.0
           targets: ${{ runner.os == 'macOS' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
 
       - name: Cache cargo
@@ -53,6 +54,10 @@ jobs:
 
       - name: npm ci
         run: npm ci
+
+      - name: Prepare ONNX Runtime DLL destinations
+        if: runner.os == 'Windows'
+        run: node -e "for (const p of ['target/release/examples', 'target/release/deps']) require('node:fs').mkdirSync(p, {recursive:true})"
 
       - name: Build installers and draft the GitHub release
         uses: tauri-apps/tauri-action@v0

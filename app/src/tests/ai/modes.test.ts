@@ -48,6 +48,10 @@ const ctx = (over: Partial<ModeContext>): ModeContext => ({
 });
 
 describe("resolveMode matrix", () => {
+  it("allows a mask-only offline provider to edit a partial selection", () => {
+    expect(resolveMode(ctx({ caps: caps({ generate: false, instructEdit: false, maskEdit: true }) })))
+      .toMatchObject({ mode: "mask", emulated: false });
+  });
   it("no document -> generate", () => {
     const r = resolveMode(ctx({ hasDoc: false, caps: XAI }));
     expect(r.mode).toBe("generate");
