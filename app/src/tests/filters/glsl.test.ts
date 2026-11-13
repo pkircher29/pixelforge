@@ -1,8 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { ADJUSTMENT_OPS, ALL_OPS, FILTER_OPS, commandIdFor, defaultParams, gaussianPasses, opById } from "../../lib/engine";
 import { buildFragmentSource } from "../../lib/filters/gpu";
-import { ADJUSTMENT_OPS, ALL_OPS, FILTER_OPS, commandIdFor, opById } from "../../lib/filters/ops";
-import { gaussianPasses } from "../../lib/filters/ops/blur";
-import { defaultParams } from "../../lib/filters/types";
 
 function balanced(src: string): boolean {
   let depth = 0;

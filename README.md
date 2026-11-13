@@ -1,14 +1,14 @@
 # Pixelforge
 
-**Open-source, cross-platform raster image editor with first-class, chainable AI.**
+**Open-source, cross-platform raster image editor with multi-provider AI integration.**
 
 Pixelforge is a Photoshop-style editor (masks, adjustment / fill / shape / type layers,
-layer styles, channels, paths, the full Photoshop CC toolbar) built with Tauri 2,
+layer styles, channels, paths, and a 20-slot grouped toolbar) built with Tauri 2,
 Svelte 5 and Rust. Pixels live
 in the webview and are composited with WebGL2; Rust handles codecs, the project format,
 PSD import, AI providers and OS integration.
 
-MIT licensed. Windows, macOS and Linux. Current release: **0.2.0** (see
+MIT licensed. Windows, macOS and Linux. Current release: **0.2.1** (see
 [CHANGELOG.md](CHANGELOG.md)).
 
 **Development continuation:** Google OAuth for the separately billed Gemini API joins
@@ -17,21 +17,21 @@ the existing ChatGPT and client-ID-gated Grok sign-in flows. See
 (Ctrl+K remains an alias), and Last Filter uses Ctrl+Alt+F. Build a release executable
 with `npm run build:release` so frontend assets are built before the native app.
 
-## The pitch: chain three AI providers on one document
+## Multi-provider AI workflow
 
-Most "AI image editors" lock you into one model. Pixelforge treats ChatGPT (OpenAI),
-Grok (xAI) and Gemini (Google) as interchangeable **providers** behind one
-`ImageProvider` trait, and every AI call takes the *current composite* of your document
-as input. That makes chaining natural:
+Pixelforge treats ChatGPT (OpenAI), Grok (xAI), Gemini (Google), and custom/local
+endpoints as interchangeable **providers** behind one `ImageProvider` trait, and every AI
+call takes the *current composite* of your document as input. That lets you chain
+providers on a single canvas:
 
 > Grok generates a base image -> you rough it in with the brush and a selection ->
-> Gemini refines just the selected area -> ChatGPT adds the thing you forgot.
+> Gemini refines just the selected area -> ChatGPT adds an element on top.
 
-Every AI result lands on a **new layer** (never destructive), named after the provider
-and prompt, so you can mask, blend, or throw it away. Providers without a native mask
-endpoint get **mask emulation**: Pixelforge crops the composite to the selection's
+Every AI result lands on a **new layer** (non-destructive), named after the provider
+and prompt, so you can mask, blend, or discard it. Providers without a native mask
+endpoint use **mask emulation**: Pixelforge crops the composite to the selection's
 bounding box, sends it with your instruction, and composites the result back only
-inside the soft (feathered) mask. The workflow is identical no matter which model you pick.
+inside the soft (feathered) mask.
 
 An **AI History** panel records every job (provider, model, mode, prompt, thumbnails,
 cost estimate, duration, status) inside the `.pfproj`, and lets you re-run it with a
@@ -51,42 +51,41 @@ different provider, edit the prompt and re-run, reveal the result layer, or togg
 The AI images above come from the bundled fake provider servers (see Development), not
 from live models: they show the pipeline, not model quality.
 
-## What works in 0.2.0
+## Features in 0.2.1
 
-0.2 is a Photoshop-fidelity overhaul: the UI follows Photoshop CC's dark theme, panel
-layout, menus, tool groups and shortcuts, and the layer system works the way Photoshop's
-does.
+0.2 models its UI conventions, dark theme, panel layout, menus, tool groups, shortcuts,
+and non-destructive layer stack on Photoshop CC.
 
 **Look & shell** — Photoshop CC medium-dark theme (optional light theme), custom
 single-weight icon set, single-column toolbar with 20 grouped slots (right-click or
 long-press for the fly-out; the letter key picks the group's tool, Shift+letter cycles),
-context options bar per tool with presets, tabbed and dockable panel groups with ≡ panel
-menus, collapse-to-icons, Window ▸ Workspace ▸ Reset Essentials, rulers, status bar with
+context options bar per tool with presets, tabbed and dockable panel groups with `≡` panel
+menus, collapse-to-icons, Window > Workspace > Reset Essentials, rulers, status bar with
 document info popover, Preferences (Interface, Transparency & Gamut, Cursors, ...),
 command palette (Ctrl+K) that reaches every menu item, tool and panel command.
 
-**Layers** — pixel, group (pass-through), adjustment (Levels, Hue/Saturation, ... live in
-the Properties panel), fill (solid / gradient / pattern), shape and editable type layers;
-layer masks (Ctrl-click / Shift-click / Alt-click like PS), clipping masks (Ctrl+Alt+G),
-Fill opacity, lock transparent / pixels / position / all, linking, color labels, layer
-styles (Drop Shadow, Inner Shadow, Outer / Inner Glow, Bevel & Emboss, Stroke, Color /
-Gradient Overlay) with a Photoshop-layout Layer Style dialog and style presets, all 16
-blend modes, merge / flatten, arrange, Layers-panel filters and thumbnail options.
-**Channels** (view R/G/B, alpha channels, save / load selection, Ctrl+2..6) and
+**Layers** — pixel, group (pass-through or isolated), adjustment (Levels, Hue/Saturation,
+etc. edited in the Properties panel), fill (solid / gradient / pattern), shape and
+editable type layers; layer masks (Ctrl-click / Shift-click / Alt-click), clipping masks
+(Ctrl+Alt+G), Fill opacity, lock transparent / pixels / position / all, linking, color
+labels, layer styles (Drop Shadow, Inner Shadow, Outer / Inner Glow, Bevel & Emboss,
+Stroke, Color / Gradient Overlay) with a Layer Style dialog and style presets, all 16
+Photoshop 7 blend modes, merge / flatten, arrange, Layers-panel filters and thumbnail
+options. **Channels** (view R/G/B, alpha channels, save / load selection, Ctrl+2..6) and
 **Paths** (work path, make selection, make work path from selection, fill / stroke path).
 
 **Tools** — Move (auto-select, linked layers), Marquees incl. single row / column, Lasso /
 Polygonal / Magnetic Lasso, Quick Selection, Magic Wand, Crop with Straighten,
 Eyedropper / Color Sampler / Ruler, Spot Healing / Healing / Patch / Red Eye, Brush /
-Pencil / Color Replacement with a real brush engine (custom sampled tips, scattering,
-shape dynamics, ~30 presets), Clone / Pattern Stamp, History Brush, Eraser / Background /
+Pencil / Color Replacement with a dab/spacing/scattering/shape-dynamics/sampled-tip brush
+engine (~30 presets), Clone / Pattern Stamp, History Brush, Eraser / Background /
 Magic Eraser, Gradient (5 types, Gradient Editor) / Paint Bucket, Blur / Sharpen /
 Smudge, Dodge / Burn / Sponge, Pen / Freeform / anchor tools, Path / Direct Selection,
 Horizontal / Vertical Type and Type Masks, Rectangle / Rounded / Ellipse / Polygon /
-Line / Custom Shape (shape layers or paths), Hand / Rotate View / Zoom, Quick Mask (Q),
-Free Transform (Ctrl+T) for pixel, shape and type layers.
+Line / Custom Shape (shape layers, paths, or pixels), Hand / Rotate View / Zoom, Quick
+Mask (Q), Free Transform (Ctrl+T) for pixel, shape and type layers.
 
-**Panels** — Color (hue cube) and the PS Color Picker, Swatches, Navigator, Info (with
+**Panels** — Color (hue cube) and Color Picker, Swatches, Navigator, Info (with
 color samplers and ruler), History (snapshots, history-brush source), Properties
 (context-sensitive), Brush Settings, Brushes, Character, Paragraph, AI, AI History.
 
@@ -94,27 +93,29 @@ color samplers and ruler), History (snapshots, history-brush source), Properties
 groups + blend modes), save `.pfproj` (format 2: every layer kind, masks, effects,
 clipping, channels, paths, AI history), export PNG / JPEG / WebP with effects, drag-drop,
 clipboard, Image Size, Canvas Size, Image Rotation (incl. arbitrary), Trim, Fill
-(color / pattern), Stroke, Paste in Place / Paste Into, Transform ▸ Again.
+(color / pattern), Stroke, Paste in Place / Paste Into, Transform > Again.
 
 **AI** — Generate, Mask edit and Instruct edit with **ChatGPT, Grok and Gemini** plus
-any number of **custom and local providers**: OpenAI-compatible servers (LocalAI, vLLM,
-any hosted vendor that mimics OpenAI), Hugging Face (serverless router or a dedicated
-Inference Endpoint), ComfyUI (bundled txt2img / img2img / inpaint workflows or your own),
-Stable Diffusion WebUI / Forge, and Replicate. Edit ▸ AI Providers… tests connections,
-fetches models / checkpoints and detects capabilities; local providers cost nothing.
-**Shootout** (AI ▸ Generate with all models…, Ctrl+Shift+Alt+M or "Run on all models"):
+**custom and local providers**: OpenAI-compatible servers (LocalAI, vLLM, or hosted
+endpoints that follow the OpenAI wire format), Hugging Face (serverless router or a
+dedicated Inference Endpoint), ComfyUI (bundled txt2img / img2img / inpaint workflows or
+custom JSON workflows), Stable Diffusion WebUI / Forge, and Replicate. Edit > AI
+Providers… tests connections, fetches models / checkpoints and detects capabilities;
+local providers have no API fee.
+**Shootout** (AI > Generate with all models…, Ctrl+Shift+Alt+M or "Run on all models"):
 one prompt fans out to every enabled provider, results stream into a gallery next to the
 original; keep any of them as layers or new documents, or keep some and re-roll the rest.
 The AI History records the shootout as one entry.
 
-**About Ollama, honestly:** Ollama's API has no image-generation endpoint (its image
+**Ollama note:** Ollama's HTTP API has no image-generation endpoint (its image
 models are an experimental, macOS-only CLI feature that writes files; see
-`docs/ai-research.md` §4.3). Pixelforge therefore uses Ollama only as a **✨ Improve
-prompt** helper: a local vision model looks at your composite and rewrites the prompt.
+[docs/ai-research.md](docs/ai-research.md) §4.3). Pixelforge therefore uses Ollama only as a **✨ Improve
+prompt** helper: a local vision model inspects your composite and rewrites the prompt.
 It never produces the image itself.
 
 Not in 0.2: smart objects, Curves point editing, Satin / Pattern Overlay effects, warped
-text, PSD export, actions. See [PLAN-v2.md](PLAN-v2.md).
+text, PSD export, actions. See [PLAN-v2.md](PLAN-v2.md) and [PLAN-v3.md](PLAN-v3.md).
+
 ## Bring your own keys (BYOK)
 
 Pixelforge does not proxy AI calls through any server and has no account or
@@ -128,7 +129,7 @@ published rates; Pixelforge shows a cost estimate per job.
 ## Using your ChatGPT subscription
 
 Pixelforge only uses sign-in flows the vendor officially documents for apps like it, and
-never reverse-engineered or borrowed credentials. Sources and dates: `docs/ai-research.md`
+never reverse-engineered or borrowed credentials. Sources and dates: [docs/ai-research.md](docs/ai-research.md)
 section 5.
 
 **ChatGPT (Plus / Pro): sign-in works, images still need an API key.** In **Edit > AI
@@ -138,7 +139,7 @@ OpenAI offers to open-source local apps); after you approve, it redirects to a o
 listener on `127.0.0.1` and Pixelforge stores the tokens in your OS keychain. Then:
 
 - **What works:** ✨ **Improve prompt** runs on your plan (OpenAI allows text Responses on
-  plan tokens). Pixelforge shows your e-mail, refreshes the token by itself, and **Sign out**
+  plan tokens). Pixelforge shows your email, refreshes the token automatically, and **Sign out**
   revokes it. Usage counts against the per-app limit you set at
   [chatgpt.com/settings/usage](https://chatgpt.com/settings/usage).
 - **What doesn't:** image generation and editing. OpenAI's
@@ -151,14 +152,14 @@ listener on `127.0.0.1` and Pixelforge stores the tokens in your OS keychain. Th
 - **Limits:** when the plan's limit is hit you get a clear message (with the reset time if
   OpenAI sends one). Nothing silently switches to your API key; tick **Fall back to API key
   when the plan limit is hit** if you want that.
-- OpenAI doesn't share your plan name with apps, so the dialog shows only your e-mail.
+- OpenAI doesn't share your plan name with apps, so the dialog shows only your email.
 
 **Grok (SuperGrok / X Premium): built, waiting on xAI.** xAI lets a few named open-source
 agents sign in with a subscription, but they all use xAI's own shared client, and xAI has not
 published a way for other apps to register. Pixelforge won't borrow that client, so the Grok
 card shows "Sign in with SuperGrok — awaiting xAI approval for Pixelforge" until xAI issues
 Pixelforge a client ID. The device-code flow is implemented: paste the ID into the Grok card
-(or set `PF_XAI_OAUTH_CLIENT_ID`) and it lights up. Use an xAI API key meanwhile.
+(or set `PF_XAI_OAUTH_CLIENT_ID`) and it activates. Use an xAI API key meanwhile.
 
 **Gemini: Google OAuth or API key.** Configure a Google Desktop app client and Cloud
 project in AI Providers, then sign in with Google. This authorizes separately billed
@@ -172,7 +173,7 @@ Prerequisites on every platform:
 - Rust stable (1.85+; `rustup` recommended - `rust-toolchain.toml` pins stable)
 - Node.js 20+ and npm (this repo uses npm workspaces; **not** pnpm/yarn)
 - Tauri CLI: either `cargo install tauri-cli --version "^2"` (gives `cargo tauri`) or
-  just use the npm-installed `@tauri-apps/cli` via `npm run tauri`
+  use the npm-installed `@tauri-apps/cli` via `npm run tauri`
 
 ### Windows
 
@@ -183,7 +184,8 @@ Prerequisites on every platform:
    picks the GNU toolchain and fails in C dependencies (`ring`). Check with `rustup show`
    and fix with `rustup set default-host x86_64-pc-windows-msvc`, or set
    `RUSTUP_TOOLCHAIN=stable-x86_64-pc-windows-msvc` in your shell
-   (`$env:RUSTUP_TOOLCHAIN='stable-x86_64-pc-windows-msvc'` in PowerShell) before every
+   (`$env:RUSTUP_TOOLCHAIN='stable-x86_64-pc-windows-msvc'` in PowerShell, or
+   `export RUSTUP_TOOLCHAIN=stable-x86_64-pc-windows-msvc` in Git Bash / sh) before every
    `cargo` / `npm run tauri` command.
 3. `npm install`
 4. `npm run tauri dev` (first Rust compile takes a few minutes)
@@ -229,23 +231,35 @@ Installers: `npm run tauri build` -> `target/release/bundle/{deb,rpm,appimage}/`
 | `cargo clippy --workspace --all-targets -- -D warnings` | Lints (CI enforces zero warnings) |
 | `cargo fmt --all --check` | Formatting (CI enforces) |
 
-`tauri::generate_context!()` embeds `app/dist`, so run `npm run build` once before a
-plain `cargo build` / `cargo test` of the workspace. `npm run tauri dev` handles this
-for you.
+`tauri::generate_context!()` embeds `app/dist` at compile time, so run `npm run build`
+once before running `cargo build`, `cargo check`, `cargo clippy`, or `cargo test`
+across the workspace. `npm run tauri dev` and `npm run tauri build` run `npm run build`
+automatically.
 
 ### Exercising the AI pipeline without spending money
 
 `scripts/fake-ai-server.mjs` is a dependency-free Node server that answers the
-generate / edit / key-test endpoints of all three providers with a valid-shape response
-whose image is a coloured box with the prompt drawn in a bitmap font. The `pf-ai`
-providers honour a base-URL override from the environment, so point the app at it:
+generate / edit / key-test endpoints of all three built-in providers with a valid-shape
+response whose image is a colored box with the prompt drawn in a bitmap font. The `pf-ai`
+providers honor a base-URL override from the environment, so point the app at it:
 
+PowerShell:
 ```powershell
 node scripts/fake-ai-server.mjs --port 8787      # in one terminal
 
 $env:PF_AI_BASE_URL_OPENAI = "http://127.0.0.1:8787"
 $env:PF_AI_BASE_URL_XAI    = "http://127.0.0.1:8787"
 $env:PF_AI_BASE_URL_GEMINI = "http://127.0.0.1:8787"
+npm run tauri dev                                 # in another
+```
+
+POSIX (`sh` / `bash` / `zsh`):
+```sh
+node scripts/fake-ai-server.mjs --port 8787      # in one terminal
+
+export PF_AI_BASE_URL_OPENAI="http://127.0.0.1:8787"
+export PF_AI_BASE_URL_XAI="http://127.0.0.1:8787"
+export PF_AI_BASE_URL_GEMINI="http://127.0.0.1:8787"
 npm run tauri dev                                 # in another
 ```
 
@@ -260,16 +274,16 @@ variables unset for real providers.
 `scripts/fake-local-ai.mjs` fakes every **custom / local** provider kind on one port
 (OpenAI-compatible, Hugging Face, Ollama, ComfyUI, Stable Diffusion WebUI / Forge,
 Replicate). Start it and add each kind in **Edit > AI Providers…** with the base URL
-from the table in the script header:
+from the table in [`scripts/README.md`](scripts/README.md):
 
-```powershell
+```sh
 node scripts/fake-local-ai.mjs --port 8790       # all custom kinds, e.g. http://127.0.0.1:8790
 ```
 
-It honours the same `!429` / `!401` / `!500` / `!slow` / `!block` prompt tokens. With
+It honors the same `!429` / `!401` / `!500` / `!slow` / `!block` prompt tokens. With
 both servers running you can exercise the whole AI surface — custom providers, the
 shootout in generate / mask / instruct mode, Improve prompt via the fake Ollama — without
-any account. Help ▸ Open Sample Document gives you a rich layered scene to work on.
+any account. Help > Open Sample Document gives you a layered scene to test on.
 
 ### Exercising subscription sign-in without an account
 
@@ -279,6 +293,7 @@ the plan's `/v1/models` + streaming `/v1/responses`, and xAI's device flow with 
 Imagine. It answers image requests on the ChatGPT plan with OpenAI's documented
 "unsupported capability" error unless `FAKE_SIWC_IMAGES=allow`.
 
+PowerShell:
 ```powershell
 node scripts/fake-openai-auth.mjs --port 8791 --auto 2500   # one terminal
 
@@ -290,6 +305,18 @@ $env:PF_KEYSTORE = "file"                                        # keep dev toke
 npm run tauri dev                                                # another terminal
 ```
 
+POSIX (`sh` / `bash` / `zsh`):
+```sh
+node scripts/fake-openai-auth.mjs --port 8791 --auto 2500   # one terminal
+
+b="http://127.0.0.1:8791"
+export PF_OPENAI_AUTH_BASE="$b" PF_AI_BASE_URL_OPENAI="$b"
+export PF_XAI_AUTH_BASE="$b"    PF_AI_BASE_URL_XAI="$b"
+export PF_XAI_OAUTH_CLIENT_ID="pixelforge-dev-fake"
+export PF_KEYSTORE="file"
+npm run tauri dev                                           # another terminal
+```
+
 A prompt containing `!limit` returns the plan usage-limit error; `FAKE_SIWC_DENY=1` makes
 the consent page decline; `FAKE_EXPIRES_IN=30` issues 30-second tokens to exercise refresh;
 `FAKE_XAI_IMAGES=deny` makes Grok Imagine reject the subscription token.
@@ -297,16 +324,19 @@ the consent page decline; `FAKE_EXPIRES_IN=30` issues 30-second tokens to exerci
 ### Layout
 
 See [docs/architecture.md](docs/architecture.md), [docs/ipc.md](docs/ipc.md),
-[docs/pfproj-format.md](docs/pfproj-format.md), [docs/ai-history.md](docs/ai-history.md)
-and [PLAN.md](PLAN.md).
+[docs/pfproj-format.md](docs/pfproj-format.md), [docs/ai-history.md](docs/ai-history.md),
+[docs/ai-research.md](docs/ai-research.md), [PLAN.md](PLAN.md), [PLAN-v2.md](PLAN-v2.md),
+and [PLAN-v3.md](PLAN-v3.md).
 
-```
-crates/pf-ai    AI provider trait + OpenAI / xAI / Gemini + custom kinds, job queue, key store (Rust)
-crates/pf-io    codecs, PSD import, .pfproj project format, thumbnails (Rust)
+```text
+crates/pf-ai    AI provider trait + OpenAI / xAI / Gemini + custom kinds, OAuth, job queue, key store (Rust)
+crates/pf-io    codecs, PSD import, .pfproj project format, thumbnails, binary IPC framing (Rust)
 app/src-tauri   Tauri shell: commands, state, plugins (Rust)
 app/src/lib     engine (document, raster, selection, history, WebGL2 compositor),
                 tools, filters, ai, io, stores, ui (Svelte 5)
-scripts/        fake-ai-server.mjs (built-in providers), fake-local-ai.mjs (custom / local kinds)
+docs/           architecture, IPC, .pfproj v2 format, AI history, and provider research docs
+scripts/        fake-ai-server.mjs (built-in providers), fake-local-ai.mjs (custom / local kinds),
+                fake-openai-auth.mjs (subscription sign-in), fake-ai-draw.mjs (shared PNG renderer)
 ```
 
 ## Window chrome

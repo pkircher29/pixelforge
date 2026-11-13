@@ -7,9 +7,8 @@
  * `{ mode: "replace" }` or hand it to `ReplaceLayerPixelsCommand`.
  */
 
-import { Raster, Rect, type Point, type Selection } from "$lib/engine";
+import { Raster, Rect, type OpDef, type ParamValues, type Point, type Selection } from "$lib/engine";
 import { GpuOp, GpuOpError } from "./gpu";
-import type { OpDef, ParamValues } from "./types";
 
 export interface ApplyOptions {
   /** Doc-space position of the raster's origin (layer offset) so the selection lines up. Default 0,0. */

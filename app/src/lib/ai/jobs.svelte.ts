@@ -51,6 +51,9 @@ export interface AiJob extends AiJobDesc {
 
 export const TERMINAL: ReadonlySet<AiJobState> = new Set(["completed", "failed", "cancelled"]);
 
+const MAX_ORPHAN_JOBS = 64;
+const MAX_FINISHED_JOBS = 50;
+
 let localCounter = 0;
 
 class JobStore {
@@ -63,7 +66,18 @@ class JobStore {
   /** Events for Rust job ids we have not matched to a local job yet. */
   private orphanEvents = new Map<JobId, JobEvent[]>();
   private waiters = new Map<string, { resolve: (job: AiJob) => void }>();
+  private pruneListeners = new Set<(id: string) => void>();
   private ticker: ReturnType<typeof setInterval> | null = null;
+
+  /** Register a callback invoked whenever a job is removed/cleared from the store. */
+  onPrune(fn: (id: string) => void): () => void {
+    this.pruneListeners.add(fn);
+    return () => this.pruneListeners.delete(fn);
+  }
+
+  private notifyPruned(id: string): void {
+    for (const fn of this.pruneListeners) fn(id);
+  }
 
   get active(): AiJob[] {
     return this.jobs.filter((j) => !TERMINAL.has(j.state));
@@ -165,11 +179,16 @@ class JobStore {
 
   remove(id: string): void {
     const i = this.jobs.findIndex((j) => j.id === id);
-    if (i >= 0 && TERMINAL.has(this.jobs[i]!.state)) this.jobs.splice(i, 1);
+    if (i >= 0 && TERMINAL.has(this.jobs[i]!.state)) {
+      this.jobs.splice(i, 1);
+      this.notifyPruned(id);
+    }
   }
 
   clearFinished(): void {
+    const removed = this.jobs.filter((j) => TERMINAL.has(j.state)).map((j) => j.id);
     this.jobs = this.jobs.filter((j) => !TERMINAL.has(j.state));
+    for (const id of removed) this.notifyPruned(id);
   }
 
   /** Elapsed ms for the UI (provider time when finished, wall time while running). */
@@ -183,6 +202,10 @@ class JobStore {
   onEvent(ev: JobEvent): void {
     const job = this.jobs.find((j) => j.jobId === ev.job);
     if (!job) {
+      if (!this.orphanEvents.has(ev.job) && this.orphanEvents.size >= MAX_ORPHAN_JOBS) {
+        const oldest = this.orphanEvents.keys().next().value;
+        if (oldest !== undefined) this.orphanEvents.delete(oldest);
+      }
       const list = this.orphanEvents.get(ev.job) ?? [];
       list.push(ev);
       this.orphanEvents.set(ev.job, list);
@@ -244,6 +267,13 @@ class JobStore {
       this.waiters.delete(job.id);
       w.resolve(job);
     }
+    // Cap retained finished jobs so decoded PNG results do not grow unboundedly.
+    const finished = this.jobs.filter((j) => TERMINAL.has(j.state));
+    if (finished.length > MAX_FINISHED_JOBS) {
+      const toDrop = new Set(finished.slice(MAX_FINISHED_JOBS).map((j) => j.id));
+      this.jobs = this.jobs.filter((j) => !toDrop.has(j.id));
+      for (const id of toDrop) this.notifyPruned(id);
+    }
     if (this.active.length === 0) this.stopTicker();
   }
 
@@ -268,7 +298,9 @@ class JobStore {
     this.listening = null;
     this.orphanEvents.clear();
     this.waiters.clear();
+    const ids = this.jobs.map((j) => j.id);
     this.jobs = [];
+    for (const id of ids) this.notifyPruned(id);
   }
 }
 

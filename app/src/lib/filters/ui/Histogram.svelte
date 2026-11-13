@@ -3,8 +3,7 @@
    * 256-bin histogram: red/green/blue as translucent additive fills, luma as a cyan line.
    * Pass `overlay` to draw a second (preview) luma curve dashed on top.
    */
-  import { histogramPeak } from "../histogram";
-  import type { Histogram } from "../types";
+  import { histogramPeak, type Histogram } from "$lib/engine";
 
   interface Props {
     hist: Histogram | null;

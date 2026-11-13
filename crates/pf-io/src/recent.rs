@@ -26,7 +26,11 @@ pub fn load(path: &Path) -> Vec<String> {
         .unwrap_or_default()
 }
 
-/// Persist the list (creating parent directories).
+use std::sync::atomic::{AtomicU64, Ordering};
+
+static TMP_SEQ: AtomicU64 = AtomicU64::new(0);
+
+/// Persist the list (creating parent directories, atomic via temp file + rename).
 pub fn save(path: &Path, list: &[String]) -> Result<()> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)?;
@@ -34,7 +38,10 @@ pub fn save(path: &Path, list: &[String]) -> Result<()> {
     let file = RecentFile {
         recent: list.iter().take(MAX_RECENT).cloned().collect(),
     };
-    std::fs::write(path, serde_json::to_vec_pretty(&file)?)?;
+    let seq = TMP_SEQ.fetch_add(1, Ordering::Relaxed);
+    let tmp = path.with_extension(format!("json.{}.{seq}.tmp", std::process::id()));
+    std::fs::write(&tmp, serde_json::to_vec_pretty(&file)?)?;
+    std::fs::rename(&tmp, path)?;
     Ok(())
 }
 

@@ -27,7 +27,7 @@ type AiHistoryEntry = {
   model: string;              // e.g. "gemini-3.1-flash-image"; "" for a shootout
   mode: "generate" | "mask" | "instruct" | "shootout";
   emulated: boolean;          // mask mode on a provider without a native pixel mask
-  prompt: string;             // what the user typed (the region hint is not stored)
+  prompt: string;             // what the user typed (the regionHint() location prefix from lib/ai/modes.ts prepended during emulated mask edits is not stored)
   negativePrompt?: string;
   size?: { width: number; height: number };
   n: number;                  // variants requested
@@ -36,7 +36,7 @@ type AiHistoryEntry = {
   steps?: number;             // explicit per-job sampling-step override
   transparent?: boolean;      // OpenAI transparent background
   refs?: number;              // reference images sent (count only)
-  maskRect?: { x; y; w; h };  // selection bbox (native mask) or the crop sent (emulated), doc space
+  maskRect?: { x: number; y: number; w: number; h: number };  // selection bbox (native mask) or the crop sent (emulated), doc space
   maskThumb?: string;         // data URL, white = editable
   inputThumb?: string;        // data URL of the composite / crop / first reference sent
   resultThumbs: string[];     // data URLs, one per result (sparse until a variant is added)

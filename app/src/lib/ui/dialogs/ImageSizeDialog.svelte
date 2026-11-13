@@ -2,12 +2,13 @@
   /** Image > Image Size: resample the whole document. */
   import { MAX_CANVAS_SIZE, ResizeImageCommand, type ResampleMethod } from "$lib/engine";
   import { docStore } from "$lib/stores/doc.svelte";
-  import Modal from "$lib/filters/ui/Modal.svelte";
+  import Dialog from "./Dialog.svelte";
 
   interface Props {
-    onclose: () => void;
+    resolve: (r: null) => void;
   }
-  let { onclose }: Props = $props();
+  let { resolve }: Props = $props();
+  const onclose = (): void => resolve(null);
 
   const doc = docStore.doc;
   const w0 = doc?.width ?? 1;
@@ -60,24 +61,12 @@
     onclose();
   }
 
-  function onKey(e: KeyboardEvent): void {
-    if (e.key === "Escape") {
-      e.stopPropagation();
-      onclose();
-    } else if (e.key === "Enter") {
-      e.stopPropagation();
-      ok();
-    }
-  }
-
   function fmtBytes(n: number): string {
     return n >= 1 << 20 ? `${(n / (1 << 20)).toFixed(1)} MB` : `${(n / 1024).toFixed(0)} KB`;
   }
 </script>
 
-<svelte:window onkeydown={onKey} />
-
-<Modal title="Image Size" {onclose} width={340}>
+<Dialog title="Image Size" oncancel={onclose} onsubmit={ok} dim={false} width={340}>
   <div class="grid">
     <span class="name">Width</span>
     <input class="field" type="number" min="1" step={unit === "%" ? 0.01 : 1} value={width} oninput={onWidth} />
@@ -113,7 +102,7 @@
     <button class="btn" type="button" onclick={onclose}>Cancel</button>
     <button class="btn primary" type="button" onclick={ok} disabled={!valid}>OK</button>
   {/snippet}
-</Modal>
+</Dialog>
 
 <style>
   .grid {

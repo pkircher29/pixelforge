@@ -1,8 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { Raster, Rect, Selection, rgba } from "../../lib/engine";
+import { Raster, Rect, Selection, gaussianBlur, invert, rgba } from "../../lib/engine";
 import { affectedRect, applyOp } from "../../lib/filters/apply";
 import { GpuOp } from "../../lib/filters/gpu";
-import { gaussianBlur, invert } from "../../lib/filters/ops";
 
 function gradient(w: number, h: number): Raster {
   const r = new Raster(w, h);

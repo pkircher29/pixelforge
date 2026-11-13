@@ -7,12 +7,14 @@
    */
   import { onMount } from "svelte";
   import { createCompositor, Rect, Selection, type ICompositor } from "$lib/engine";
-  import { buildDemoDocument } from "$lib/engine/demo/demo";
-  import { docStore } from "$lib/stores/doc.svelte";
+  import { buildSampleDocument as buildDemoDocument } from "$lib/ui/commands/sample";
+  import { docStore, type OpenDoc } from "$lib/stores/doc.svelte";
   import { getCommands, runCommand } from "$lib/ui/registry.svelte";
   import { transformSession } from "$lib/filters/transform/session.svelte";
-  import { rawDoc } from "$lib/filters/raw";
+  import DialogHost from "$lib/ui/dialogs/DialogHost.svelte";
   import "$lib/filters/register";
+
+  const rawDoc = (e: OpenDoc) => e.doc;
 
   // Debug handle for scripted verification (CDP): `window.__pf`.
   (window as unknown as { __pf: unknown }).__pf = { docStore, transformSession, runCommand, rawDoc };
@@ -119,6 +121,7 @@
     <canvas bind:this={canvas} aria-label="Document canvas"></canvas>
   </main>
 </div>
+<DialogHost />
 
 <style>
   .pg {

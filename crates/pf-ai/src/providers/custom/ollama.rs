@@ -58,13 +58,8 @@ impl OllamaAssist {
             let l = n.to_ascii_lowercase();
             !VISION_HINTS.iter().any(|h| l.contains(h))
         });
-        let version = match self
-            .ctx
-            .client()
-            .get(self.ctx.url("/api/version"))
-            .send()
-            .await
-        {
+        let req = self.ctx.client().get(self.ctx.url("/api/version"));
+        let version = match self.ctx.bearer(req).send().await {
             Ok(r) => r
                 .json::<serde_json::Value>()
                 .await

@@ -125,7 +125,10 @@ impl CustomKind {
 
     /// Whether a secret is mandatory (`true`), optional (`false`).
     pub fn requires_auth(self) -> bool {
-        matches!(self, CustomKind::HuggingFace | CustomKind::Replicate | CustomKind::Fal)
+        matches!(
+            self,
+            CustomKind::HuggingFace | CustomKind::Replicate | CustomKind::Fal
+        )
     }
 
     /// Kinds that normally run on the user's own machine.
@@ -174,7 +177,10 @@ impl CustomKind {
             },
             CustomKind::Ollama => Capabilities::default(),
             CustomKind::ComfyUi | CustomKind::A1111 => sd,
-            CustomKind::Fal => Capabilities { mask_edit: false, ..sd },
+            CustomKind::Fal => Capabilities {
+                mask_edit: false,
+                ..sd
+            },
             CustomKind::Replicate => Capabilities {
                 mask_edit: false,
                 instruct_edit: false,
@@ -241,18 +247,30 @@ impl CustomProvider {
     /// Build a job-local configuration without changing the provider registry.
     pub fn with_sampling(&self, sampling: SamplingOptions) -> Result<Self, Error> {
         if !sampling.is_empty() && self.kind == CustomKind::Ollama {
-            return Err(Error::InvalidRequest("This provider does not support image sampling controls".into()));
+            return Err(Error::InvalidRequest(
+                "This provider does not support image sampling controls".into(),
+            ));
         }
         if sampling.seed.is_some_and(|v| v > 2_147_483_647)
             || sampling.steps.is_some_and(|v| !(1..=150).contains(&v))
         {
-            return Err(Error::InvalidRequest("Seed must be 0–2147483647 and steps must be 1–150".into()));
+            return Err(Error::InvalidRequest(
+                "Seed must be 0–2147483647 and steps must be 1–150".into(),
+            ));
         }
         let mut cfg = self.clone();
-        if sampling.is_empty() { return Ok(cfg); }
-        if !cfg.extra.is_object() { cfg.extra = empty_object(); }
-        if let Some(seed) = sampling.seed { cfg.extra["seed"] = Value::from(seed); }
-        if let Some(steps) = sampling.steps { cfg.extra["steps"] = Value::from(steps); }
+        if sampling.is_empty() {
+            return Ok(cfg);
+        }
+        if !cfg.extra.is_object() {
+            cfg.extra = empty_object();
+        }
+        if let Some(seed) = sampling.seed {
+            cfg.extra["seed"] = Value::from(seed);
+        }
+        if let Some(steps) = sampling.steps {
+            cfg.extra["steps"] = Value::from(steps);
+        }
         Ok(cfg)
     }
 
@@ -263,9 +281,17 @@ impl CustomProvider {
             name: name.into(),
             kind,
             base_url: kind.default_base_url().to_owned(),
-            model: if kind == CustomKind::Fal { "fal-ai/flux/dev".into() } else { String::new() },
+            model: if kind == CustomKind::Fal {
+                "fal-ai/flux/dev".into()
+            } else {
+                String::new()
+            },
             capabilities: kind.default_capabilities(),
-            extra: if kind == CustomKind::Fal { serde_json::json!({ "editModel": "fal-ai/flux/dev/image-to-image" }) } else { empty_object() },
+            extra: if kind == CustomKind::Fal {
+                serde_json::json!({ "editModel": "fal-ai/flux/dev/image-to-image" })
+            } else {
+                empty_object()
+            },
             has_auth: false,
         }
     }
@@ -467,6 +493,7 @@ impl RegistryFile {
 #[derive(Debug, Clone)]
 pub struct CustomRegistry {
     path: PathBuf,
+    lock: std::sync::Arc<std::sync::Mutex<()>>,
 }
 
 impl CustomRegistry {
@@ -474,6 +501,7 @@ impl CustomRegistry {
     pub fn new(dir: &Path) -> Self {
         Self {
             path: dir.join(REGISTRY_FILE),
+            lock: std::sync::Arc::new(std::sync::Mutex::new(())),
         }
     }
 
@@ -485,6 +513,11 @@ impl CustomRegistry {
     /// All entries (empty when the file does not exist). Malformed entries fail the load
     /// loudly rather than silently dropping a provider.
     pub fn load(&self) -> Result<Vec<CustomProvider>, Error> {
+        let _guard = self.lock.lock().unwrap_or_else(|p| p.into_inner());
+        self.load_unlocked()
+    }
+
+    fn load_unlocked(&self) -> Result<Vec<CustomProvider>, Error> {
         match fs::read(&self.path) {
             Ok(bytes) => {
                 let file: RegistryFile = serde_json::from_slice(&bytes)?;
@@ -497,6 +530,11 @@ impl CustomRegistry {
 
     /// Replace the whole list (atomic write).
     pub fn save(&self, providers: &[CustomProvider]) -> Result<(), Error> {
+        let _guard = self.lock.lock().unwrap_or_else(|p| p.into_inner());
+        self.save_unlocked(providers)
+    }
+
+    fn save_unlocked(&self, providers: &[CustomProvider]) -> Result<(), Error> {
         for p in providers {
             p.validate()?;
         }
@@ -516,7 +554,9 @@ impl CustomRegistry {
             version: RegistryFile::version(),
             providers: providers.to_vec(),
         };
-        let tmp = self.path.with_extension("json.tmp");
+        let tmp = self
+            .path
+            .with_extension(format!("json.{}.tmp", uuid::Uuid::new_v4().simple()));
         fs::write(&tmp, serde_json::to_vec_pretty(&file)?)?;
         fs::rename(&tmp, &self.path)?;
         Ok(())
@@ -529,7 +569,8 @@ impl CustomRegistry {
 
     /// Insert a new entry; fails when the id exists.
     pub fn add(&self, provider: CustomProvider) -> Result<Vec<CustomProvider>, Error> {
-        let mut list = self.load()?;
+        let _guard = self.lock.lock().unwrap_or_else(|p| p.into_inner());
+        let mut list = self.load_unlocked()?;
         if list.iter().any(|p| p.id == provider.id) {
             return Err(Error::InvalidRequest(format!(
                 "a custom provider with id {:?} already exists",
@@ -537,13 +578,14 @@ impl CustomRegistry {
             )));
         }
         list.push(provider);
-        self.save(&list)?;
+        self.save_unlocked(&list)?;
         Ok(list)
     }
 
     /// Replace an existing entry (matched by id).
     pub fn update(&self, provider: CustomProvider) -> Result<Vec<CustomProvider>, Error> {
-        let mut list = self.load()?;
+        let _guard = self.lock.lock().unwrap_or_else(|p| p.into_inner());
+        let mut list = self.load_unlocked()?;
         let Some(slot) = list.iter_mut().find(|p| p.id == provider.id) else {
             return Err(Error::InvalidRequest(format!(
                 "no custom provider with id {:?}",
@@ -551,15 +593,16 @@ impl CustomRegistry {
             )));
         };
         *slot = provider;
-        self.save(&list)?;
+        self.save_unlocked(&list)?;
         Ok(list)
     }
 
     /// Remove an entry (no error when absent).
     pub fn remove(&self, id: &str) -> Result<Vec<CustomProvider>, Error> {
-        let mut list = self.load()?;
+        let _guard = self.lock.lock().unwrap_or_else(|p| p.into_inner());
+        let mut list = self.load_unlocked()?;
         list.retain(|p| p.id != id);
-        self.save(&list)?;
+        self.save_unlocked(&list)?;
         Ok(list)
     }
 }

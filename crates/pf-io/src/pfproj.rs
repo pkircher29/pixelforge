@@ -605,6 +605,10 @@ pub fn read_pfproj_bytes(bytes: &[u8]) -> Result<ProjectDoc> {
     read_pfproj(std::io::Cursor::new(bytes))
 }
 
+const MAX_MANIFEST_BYTES: u64 = 16 * 1024 * 1024;
+const MAX_ENTRY_BYTES: u64 = 256 * 1024 * 1024;
+const MAX_THUMB_BYTES: u64 = 8 * 1024 * 1024;
+
 /// Read a `.pfproj`. Layer PNGs are decoded straight out of the archive; the result
 /// holds only `Image::Raw` payloads except `thumbnail`, which stays `Image::Png`.
 pub fn read_pfproj<R: Read + Seek>(reader: R) -> Result<ProjectDoc> {
@@ -617,7 +621,12 @@ pub fn read_pfproj<R: Read + Seek>(reader: R) -> Result<ProjectDoc> {
         let entry = zip
             .by_name(MANIFEST_NAME)
             .map_err(|_| Error::Project(format!("{MANIFEST_NAME} missing")))?;
-        serde_json::from_reader(BufReader::new(entry))
+        if entry.size() > MAX_MANIFEST_BYTES {
+            return Err(Error::Project(format!(
+                "{MANIFEST_NAME} exceeds {MAX_MANIFEST_BYTES} bytes"
+            )));
+        }
+        serde_json::from_reader(BufReader::new(entry.take(MAX_MANIFEST_BYTES)))
             .map_err(|e| Error::Project(format!("{MANIFEST_NAME}: {e}")))?
     };
     if manifest.format > FORMAT_VERSION {
@@ -684,11 +693,17 @@ pub fn read_pfproj<R: Read + Seek>(reader: R) -> Result<ProjectDoc> {
         .thumbnail
         .clone()
         .unwrap_or_else(|| THUMB_NAME.to_owned());
-    if let Ok(mut entry) = zip.by_name(&thumb_name) {
-        let mut bytes = Vec::new();
-        entry.read_to_end(&mut bytes)?;
-        if png_dimensions(&bytes).is_some() {
-            doc.thumbnail = Some(Image::Png(bytes));
+    if let Ok(entry) = zip.by_name(&thumb_name) {
+        if entry.size() <= MAX_THUMB_BYTES {
+            let mut bytes = Vec::new();
+            entry.take(MAX_THUMB_BYTES + 1).read_to_end(&mut bytes)?;
+            if bytes.len() as u64 <= MAX_THUMB_BYTES {
+                if let Some((tw, th)) = png_dimensions(&bytes) {
+                    if tw > 0 && th > 0 && tw <= MAX_EDGE_PX && th <= MAX_EDGE_PX {
+                        doc.thumbnail = Some(Image::Png(bytes));
+                    }
+                }
+            }
         }
     }
     Ok(doc)
@@ -701,10 +716,21 @@ fn read_png_entry<R: Read + Seek>(
 ) -> Result<Pixels> {
     // The png decoder needs `Seek`, which a zip entry stream cannot offer, so the
     // (compressed) PNG bytes are pulled into one buffer first; pixels are decoded from it.
+    let entry = zip
+        .by_name(name)
+        .map_err(|_| Error::Project(format!("{name} missing from archive")))?;
+    if entry.size() > MAX_ENTRY_BYTES {
+        return Err(Error::Project(format!(
+            "{name} exceeds maximum entry size ({MAX_ENTRY_BYTES} bytes)"
+        )));
+    }
     let mut png = Vec::new();
-    zip.by_name(name)
-        .map_err(|_| Error::Project(format!("{name} missing from archive")))?
-        .read_to_end(&mut png)?;
+    entry.take(MAX_ENTRY_BYTES + 1).read_to_end(&mut png)?;
+    if png.len() as u64 > MAX_ENTRY_BYTES {
+        return Err(Error::Project(format!(
+            "{name} exceeds maximum entry size ({MAX_ENTRY_BYTES} bytes)"
+        )));
+    }
     let mut limits = Limits::no_limits();
     limits.max_image_width = Some(MAX_EDGE_PX);
     limits.max_image_height = Some(MAX_EDGE_PX);

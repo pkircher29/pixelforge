@@ -169,6 +169,10 @@ export function hubSearch(query: string, pipelineTag = "text-to-image", limit = 
   return invoke<HubModel[]>("ai_hub_search", { query, pipelineTag, limit });
 }
 
+export function comfyTemplates(): Promise<Array<[string, string]>> {
+  return invoke<Array<[string, string]>>("ai_comfy_templates");
+}
+
 // ---------------------------------------------------------------------------
 // Subscription sign-in (docs/ipc.md "Subscription sign-in")
 // ---------------------------------------------------------------------------

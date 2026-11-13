@@ -18,9 +18,8 @@
  * - `vec4 pf_sample(vec2 uv)`  bilinear sample of `u_image` at 0..1 uv
  */
 
-import { Raster } from "$lib/engine";
+import { Raster, type GlslPass, type UniformValue } from "$lib/engine";
 import { OP_VERT as VERT, buildOpFragmentSource } from "$lib/engine/ops/glsl";
-import type { GlslPass, UniformValue } from "./types";
 
 /** Full fragment source for a pass (exported for tests / the demo). Preamble lives in `$lib/engine/ops/glsl`. */
 export function buildFragmentSource(passSource: string): string {
