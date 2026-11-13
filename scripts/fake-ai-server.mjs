@@ -26,6 +26,7 @@
  *
  * Error simulation: include one of these tokens in the prompt:
  *   `!429`   -> 429 with Retry-After: 7            (ai_rate_limited)
+ *   `!quota` -> explicit project spend limit      (ai_quota; no automatic retry)
  *   `!401`   -> 401                                 (ai_auth)
  *   `!500`   -> 500                                 (ai_http)
  *   `!slow`  -> waits 20 s before answering (test cancel / timeouts)
@@ -52,6 +53,10 @@ const DELAY = Number(argOf("--delay", "1200"));
 
 /** Simulated failures keyed off tokens in the prompt. Returns true when it answered. */
 async function simulate(prompt, provider, res) {
+  if (/!quota/.test(prompt)) {
+    json(res, 429, { error: { message: "Project spend limit reached (fake). Review API project limits.", type: "insufficient_quota", code: "project_spend_limit_exceeded" } });
+    return true;
+  }
   if (/!slow/.test(prompt)) await sleep(20_000);
   if (/!429/.test(prompt)) {
     json(res, 429, { error: { message: "Rate limit reached for images (fake). Try again in 7 seconds.", type: "rate_limit_error", code: "rate_limit_exceeded" } }, { "retry-after": "7" });
@@ -89,12 +94,19 @@ const server = http.createServer(async (req, res) => {
     if (path === "/healthz") return json(res, 200, { ok: true, served });
 
     // ---- key tests
-    if (req.method === "GET" && (path === "/v1/models" || path === "/v1beta/models")) {
+    const modelMatch = /^\/(v1|v1beta)\/models\/([^/]+)$/.exec(path);
+    if (req.method === "GET" && (path === "/v1/models" || path === "/v1beta/models" || modelMatch)) {
       if (badKey(req)) {
         console.log(`${ts} ${path} -> 401 (bad key)`);
         return json(res, 401, path.startsWith("/v1beta") ? { error: { code: 401, message: "API key not valid. Please pass a valid API key. (fake)", status: "UNAUTHENTICATED" } } : { error: { message: "Incorrect API key provided: bad (fake).", type: "invalid_request_error", code: "invalid_api_key" } });
       }
       console.log(`${ts} ${path} -> 200`);
+      if (modelMatch) {
+        const id = modelMatch[2];
+        const known = ["gpt-image-2.5-flare", "gpt-image-2.5-sunburst", "grok-imagine-image-2.0", "gemini-3.1-flash-image"];
+        if (!known.includes(id)) return json(res, 404, { error: { message: "Model not found (fake)" } });
+        return json(res, 200, modelMatch[1] === "v1beta" ? { name: `models/${id}` } : { id, object: "model" });
+      }
       return json(res, 200, path.startsWith("/v1beta") ? { models: [{ name: "models/gemini-3.1-flash-image" }] } : { object: "list", data: [{ id: "gpt-image-2.5-flare" }, { id: "grok-imagine-image-2.0" }] });
     }
 
@@ -167,6 +179,7 @@ const server = http.createServer(async (req, res) => {
 });
 
 server.listen(PORT, "127.0.0.1", () => {
-  console.log(`fake-ai-server listening on http://127.0.0.1:${PORT} (image ${SIZE}px, delay ${DELAY} ms)`);
-  console.log(`set PF_AI_BASE_URL_OPENAI / PF_AI_BASE_URL_XAI / PF_AI_BASE_URL_GEMINI to http://127.0.0.1:${PORT}`);
+  const port = server.address().port;
+  console.log(`fake-ai-server listening on http://127.0.0.1:${port} (image ${SIZE}px, delay ${DELAY} ms)`);
+  console.log(`set PF_AI_BASE_URL_OPENAI / PF_AI_BASE_URL_XAI / PF_AI_BASE_URL_GEMINI to http://127.0.0.1:${port}`);
 });

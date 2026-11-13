@@ -2,6 +2,7 @@
 /target/
 **/target/
 Cargo.lock.bak
+/live-results/
 
 # Node
 node_modules/

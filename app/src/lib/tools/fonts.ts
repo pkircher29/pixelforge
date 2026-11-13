@@ -1,4 +1,5 @@
-/** Font family enumeration: `window.queryLocalFonts` when available, else a curated list. */
+/** Font discovery: browser permission, native system enumeration, then a fallback. */
+import { invoke, isTauri } from "@tauri-apps/api/core";
 
 export const FALLBACK_FONTS: readonly string[] = [
   "Arial",
@@ -49,25 +50,33 @@ interface LocalFontData {
 let cached: string[] | null = null;
 let pending: Promise<string[]> | null = null;
 
-/** Family names, sorted; local fonts merged in when the API grants access. */
-export function listFonts(): Promise<string[]> {
+/** Call directly from a user gesture so queryLocalFonts can request permission. */
+export function listFonts(refresh = false): Promise<string[]> {
+  if (refresh) cached = null;
   if (cached) return Promise.resolve(cached);
   if (pending) return pending;
   const q = (globalThis as { queryLocalFonts?: () => Promise<LocalFontData[]> }).queryLocalFonts;
   pending = (async () => {
-    const set = new Set<string>(FALLBACK_FONTS);
+    const set = new Set<string>();
     if (typeof q === "function") {
       try {
         const fonts = await q.call(globalThis);
         for (const f of fonts) if (f.family) set.add(f.family);
       } catch {
-        /* permission denied / unsupported: keep the curated list */
+        /* WebView unsupported or denied: try native system enumeration. */
       }
     }
-    cached = [...set].sort((a, b) => a.localeCompare(b));
-    return cached;
+    if (isTauri()) {
+      try {
+        for (const family of await invoke<string[]>("fonts_list")) if (family.trim()) set.add(family);
+      } catch { /* Keep browser results; transient native failures can be retried. */ }
+    }
+    if (set.size) cached = [...set].sort((a, b) => a.localeCompare(b));
+    return cached ?? [...FALLBACK_FONTS];
   })();
-  return pending;
+  const request = pending;
+  void request.finally(() => { pending = null; });
+  return request;
 }
 
 /** Synchronous best-effort list (curated until `listFonts` resolved once). */

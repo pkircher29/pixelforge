@@ -66,7 +66,10 @@ class OpenDocEntry implements OpenDoc {
     this.history = new History(doc, {
       onApply: (cmd) => {
         const c = this.compositor;
-        if (c) cmd.affected?.().forEach((d) => c.markDirty(d.layerId, d.rect));
+        if (c) {
+          if (cmd.affected) cmd.affected().forEach((d) => c.markDirty(d.layerId, d.rect));
+          else c.invalidateAll();
+        }
         this.dirty = true;
         this.version++;
         this.pixelVersion++;

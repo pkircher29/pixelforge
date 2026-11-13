@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Swatch from "$lib/ui/controls/Swatch.svelte";
   /** Edit ▸ Stroke…: Stroke (width, color), Location (inside/center/outside), Blending. */
   import { BLEND_MODES_MENU, BLEND_MODE_LABEL, type BlendMode } from "$lib/engine";
   import Dialog from "./Dialog.svelte";
@@ -6,7 +7,6 @@
   import PsSelect from "../controls/PsSelect.svelte";
   import { openColorPicker } from "./color-picker";
   import { normalizeStroke, type StrokeLocation, type StrokeOptions } from "../commands/fill-stroke";
-  import { rgbToHex } from "../panels/color-model";
 
   interface Props {
     initial: StrokeOptions;
@@ -41,7 +41,7 @@
     </div>
     <div class="row">
       <span class="lbl">Color:</span>
-      <button type="button" class="well" style:background={rgbToHex(o.color)} aria-label="Stroke color" onclick={() => void pickColor()}></button>
+      <button type="button" class="well" aria-label="Stroke color" onclick={() => void pickColor()}><Swatch color={o.color} /></button>
     </div>
   </fieldset>
   <fieldset class="ps-group">

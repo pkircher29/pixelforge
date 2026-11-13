@@ -147,6 +147,8 @@ uniform bool u_showGrid;
 uniform bool u_showAnts;
 uniform float u_antsPhase;
 uniform int u_viewMode;
+uniform sampler2D u_alphaOverlay;
+uniform bool u_hasAlphaOverlay;
 uniform bool u_qmActive;
 uniform vec3 u_qmColor;
 uniform float u_qmOpacity;
@@ -174,11 +176,19 @@ void main() {
     vec4 comp = texture(u_composite, d / u_docSize);
     if (u_viewMode == 0) {
       color = comp.rgb + checker * (1.0 - comp.a);
+    } else if (u_viewMode >= 5) {
+      color = comp.rgb * vec3(u_viewMode == 5 || u_viewMode == 6 ? 1.0 : 0.0,
+                             u_viewMode == 5 || u_viewMode == 7 ? 1.0 : 0.0,
+                             u_viewMode == 6 || u_viewMode == 7 ? 1.0 : 0.0);
     } else if (u_viewMode == 4) {
       color = vec3(texture(u_channel, d / u_docSize).r);
     } else {
       float v = u_viewMode == 1 ? comp.r : (u_viewMode == 2 ? comp.g : comp.b);
       color = vec3(v);
+    }
+    if (u_hasAlphaOverlay) {
+      vec4 overlay = texture(u_alphaOverlay, d / u_docSize);
+      color = mix(color, overlay.rgb, overlay.a);
     }
     if (u_qmActive) {
       float v = texture(u_qm, d / u_docSize).r;
@@ -235,6 +245,8 @@ export const BLEND_UNIFORMS = [
 ] as const;
 
 export const PRESENT_UNIFORMS = [
+  "u_alphaOverlay",
+  "u_hasAlphaOverlay",
   "u_composite",
   "u_selection",
   "u_channel",

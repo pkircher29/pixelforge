@@ -5,7 +5,7 @@ import type { Tool, ToolContext, ToolEvent, ToolOption } from "./types";
 import { BrushStroke, type StrokeBlend } from "./brush-engine";
 import { BRUSH_PICKER_OPTION, BrushBasedTool, SAMPLE_OPTION } from "./brush-base";
 import { resolvePaintTarget, type PaintTarget } from "./paint-target";
-import { findHealSource, healRegion, maskBounds, maskFromBytes, ringMask } from "./heal";
+import { coveredBounds, findCoveredHealSource, healCoveredRegion, healRegion, maskBounds, maskFromBytes } from "./heal";
 import { fixRedEye, isRedEyePixel } from "./retouch-math";
 import { strokeOutline } from "./util";
 import { combineSelection, modeFromModifiers } from "./selection-mod";
@@ -62,22 +62,19 @@ export class SpotHealingTool extends BrushBasedTool {
     return 1;
   }
 
-  protected override beforeFinish(ctx: ToolContext, stroke: BrushStroke, target: PaintTarget): void {
+  protected override beforeFinish(ctx: ToolContext, stroke: BrushStroke, target: PaintTarget): Rect | void {
     const dirty = stroke.dirtyRect;
     if (!dirty) return;
     // Undo the preview tint, then heal from the snapshot.
     target.raster.blit(stroke.before, dirty.x, dirty.y, dirty, { mode: "replace" });
-    const mask = stroke.coverage;
-    const w = target.raster.width;
-    const h = target.raster.height;
-    const bounds = maskBounds(mask, w, h);
+    const coverage = (x: number, y: number) => stroke.coverageAt(x, y);
+    const bounds = coveredBounds(dirty, coverage);
     if (!bounds) return;
     const sampleAll = ctx.opt<boolean>("sampleAll");
     const src = sampleAll ? compositeInLayerSpace(ctx, target) : stroke.before;
-    const ring = ringMask(mask, w, h, bounds, Math.max(3, Math.round(Math.max(bounds.w, bounds.h) * 0.15)));
     const type = ctx.opt<string>("type");
-    const off = findHealSource(src, mask, bounds, ring, type === "proximity" ? { radii: [Math.max(bounds.w, bounds.h) * 1.1] } : {});
-    healRegion(target.raster, src, mask, off, { mode: type === "texture" ? "replace" : "normal" });
+    const off = findCoveredHealSource(src, bounds, coverage, type === "proximity" ? { radii: [Math.max(bounds.w, bounds.h) * 1.1] } : {});
+    return healCoveredRegion(target.raster, src, bounds, coverage, off, { mode: type === "texture" ? "replace" : "normal" }) ?? undefined;
   }
 }
 
@@ -145,13 +142,13 @@ export class HealingBrushTool extends BrushBasedTool {
     return 1;
   }
 
-  protected override beforeFinish(ctx: ToolContext, stroke: BrushStroke, target: PaintTarget): void {
+  protected override beforeFinish(ctx: ToolContext, stroke: BrushStroke, target: PaintTarget): Rect | void {
     const dirty = stroke.dirtyRect;
     const delta = this.delta;
     if (!dirty || !delta) return;
     target.raster.blit(stroke.before, dirty.x, dirty.y, dirty, { mode: "replace" });
     const src = ctx.opt<string>("sample") === "all" ? compositeInLayerSpace(ctx, target) : stroke.before;
-    healRegion(target.raster, src, stroke.coverage, { x: Math.round(delta.x), y: Math.round(delta.y) });
+    return healCoveredRegion(target.raster, src, dirty, (x, y) => stroke.coverageAt(x, y), { x: Math.round(delta.x), y: Math.round(delta.y) }) ?? undefined;
   }
 
   protected override drawExtraOverlay(g: CanvasRenderingContext2D, ctx: ToolContext): void {

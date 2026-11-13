@@ -1,4 +1,7 @@
 <script lang="ts">
+  import Swatch from "$lib/ui/controls/Swatch.svelte";
+  import { swatchCss } from "$lib/ui/controls/swatch";
+  import ColorSwatchInput from "$lib/ui/controls/ColorSwatchInput.svelte";
   /**
    * Fill-layer content dialogs: "Color Picker (Solid Color)", "Gradient Fill" and
    * "Pattern Fill" — the PS dialogs that follow New Fill Layer ▸ … and double-clicking
@@ -97,7 +100,7 @@
 
 <Dialog {title} width={380} oncancel={cancel} onsubmit={ok} dim={false}>
   {#if fill.type === "solid"}
-    <div class="row"><span>Color:</span><span class="inline"><input type="color" class="swatch big" value={rgbaToHex(fill.color)} oninput={(e) => { const c = hexToRgba(e.currentTarget.value); if (c) setSolid(c); }} aria-label="Color" data-autofocus /><input class="input hex" type="text" value={rgbaToHex(fill.color).slice(1)} onchange={(e) => { const c = hexToRgba(`#${e.currentTarget.value}`); if (c) setSolid(c); }} aria-label="Hex" /></span></div>
+    <div class="row"><span>Color:</span><span class="inline"><ColorSwatchInput color={fill.color} value={rgbaToHex(fill.color)} oninput={(e) => { const c = hexToRgba(e.currentTarget.value); if (c) setSolid(c); }} label="Color" autofocus width={60} height={26} /><input class="input hex" type="text" value={rgbaToHex(fill.color).slice(1)} onchange={(e) => { const c = hexToRgba(`#${e.currentTarget.value}`); if (c) setSolid(c); }} aria-label="Hex" /></span></div>
   {:else if fill.type === "gradient"}
     {@const first = fill.gradient.stops[0]?.color ?? { r: 0, g: 0, b: 0, a: 255 }}
     {@const last = fill.gradient.stops[fill.gradient.stops.length - 1]?.color ?? { r: 255, g: 255, b: 255, a: 255 }}
@@ -105,9 +108,9 @@
       <div class="row">
         <span>Gradient:</span>
         <span class="inline">
-          <input type="color" class="swatch" value={rgbaToHex(first)} oninput={(e) => { const c = hexToRgba(e.currentTarget.value); if (c) setStops(c, last); }} aria-label="Start color" />
-          <span class="gbar" style:background="linear-gradient(90deg, {rgbaToHex(first)}, {rgbaToHex(last)})"></span>
-          <input type="color" class="swatch" value={rgbaToHex(last)} oninput={(e) => { const c = hexToRgba(e.currentTarget.value); if (c) setStops(first, c); }} aria-label="End color" />
+          <ColorSwatchInput color={first} value={rgbaToHex(first)} oninput={(e) => { const c = hexToRgba(e.currentTarget.value); if (c) setStops(c, last); }} label="Start color" />
+          <span class="gbar"><Swatch background={`linear-gradient(90deg,${swatchCss(first)},${swatchCss(last)})`} /></span>
+          <ColorSwatchInput color={last} value={rgbaToHex(last)} oninput={(e) => { const c = hexToRgba(e.currentTarget.value); if (c) setStops(first, c); }} label="End color" />
         </span>
       </div>
       <div class="row"><span>Style:</span><PsSelect value={fill.style} choices={STYLES} width={110} onchange={(v) => { g().style = v as GradientStyle; live(); }} /></div>
@@ -146,17 +149,6 @@
     display: inline-flex;
     align-items: center;
     gap: 8px;
-  }
-  .swatch {
-    width: 40px;
-    height: 18px;
-    padding: 0;
-    border: 1px solid var(--ps-border-dark);
-    background: none;
-  }
-  .swatch.big {
-    width: 64px;
-    height: 40px;
   }
   .hex {
     width: 70px;

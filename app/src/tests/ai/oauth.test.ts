@@ -149,7 +149,7 @@ describe("dialog / picker logic", () => {
   it("authItems: ChatGPT and Grok offer both, Gemini none", () => {
     expect(authItems("open_ai").map((i) => i.label)).toEqual(["API key", "ChatGPT subscription"]);
     expect(authItems("x_ai")[1]?.label).toBe("SuperGrok subscription");
-    expect(authItems("gemini")).toEqual([]);
+    expect(authItems("gemini").map((i) => i.value)).toEqual(["api_key", "oauth"]);
   });
 
   it("subscriptionView picks the right panel", () => {
@@ -176,6 +176,10 @@ describe("dialog / picker logic", () => {
     expect(isReady(signed)).toBe(true);
     expect(chipTitle(signed)).toContain("me@x.y");
     expect(authLabel(mkProvider("gemini", { name: "Gemini" }))).toBe("Gemini");
+    const google = mkProvider("gemini", { name: "Gemini", authModes: ["api_key", "oauth"], authActive: "oauth", hasKey: true });
+    expect(isReady(google)).toBe(false); // A saved key does not silently override OAuth.
+    expect(isReady({ ...google, account: {} })).toBe(true);
+    expect(authLabel(google)).toBe("Gemini (Google OAuth)");
   });
 
   it("friendly errors for the plan codes", () => {

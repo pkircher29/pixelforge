@@ -3,7 +3,7 @@
  * stamps, Healing, Color Replacement, Background Eraser, Blur / Sharpen / Smudge and
  * Dodge / Burn / Sponge.
  *
- * Model: a stroke owns a float coverage buffer the size of the target raster. Dabs add
+ * Model: a stroke owns sparse tiles of float coverage. Dabs add
  * `flow`-weighted coverage (capped at 1); pixels are always recomputed from the
  * *pre-stroke snapshot* so overlapping dabs never exceed the stroke `opacity` (Photoshop
  * semantics). What a covered pixel becomes is decided by the stroke's `blend`:
@@ -17,7 +17,7 @@
  *
  * Pure parts (dab placement, smoothing, dab masks) are exported for tests.
  */
-import { Rect, type Point, type Raster, type RGBA, type Selection } from "$lib/engine";
+import { RASTER_TILE_SIZE, Rect, type Point, type Raster, type RGBA, type Selection } from "$lib/engine";
 import { Rng, randomSeed } from "./rng";
 import { ROUND_TIP, sampleTip, tipById, TIP_SIZE, type BrushTip } from "./brush-tips";
 
@@ -377,11 +377,43 @@ export interface StrokeOptions {
   hardness?: number;
 }
 
+class StrokeCoverage {
+  private readonly tiles = new Map<number, { width: number; values: Float32Array }>();
+  private readonly columns: number;
+  constructor(private readonly width: number, private readonly height: number) { this.columns = Math.ceil(width / RASTER_TILE_SIZE); }
+  get(index: number): number {
+    const x = index % this.width, y = Math.floor(index / this.width);
+    const tile = this.tiles.get(Math.floor(y / RASTER_TILE_SIZE) * this.columns + Math.floor(x / RASTER_TILE_SIZE));
+    return tile?.values[(y % RASTER_TILE_SIZE) * tile.width + x % RASTER_TILE_SIZE] ?? 0;
+  }
+  set(index: number, value: number): void {
+    const x = index % this.width, y = Math.floor(index / this.width);
+    const tx = Math.floor(x / RASTER_TILE_SIZE), ty = Math.floor(y / RASTER_TILE_SIZE), key = ty * this.columns + tx;
+    let tile = this.tiles.get(key);
+    if (!tile) {
+      if (value === 0) return;
+      const width = Math.min(RASTER_TILE_SIZE, this.width - tx * RASTER_TILE_SIZE);
+      tile = { width, values: new Float32Array(width * Math.min(RASTER_TILE_SIZE, this.height - ty * RASTER_TILE_SIZE)) };
+      this.tiles.set(key, tile);
+    }
+    tile.values[(y % RASTER_TILE_SIZE) * tile.width + x % RASTER_TILE_SIZE] = value;
+  }
+  byteLength(): number { let bytes = 0; for (const t of this.tiles.values()) bytes += t.values.byteLength; return bytes; }
+  readAll(): Float32Array {
+    const result = new Float32Array(this.width * this.height);
+    for (const [key, tile] of this.tiles) {
+      const x = (key % this.columns) * RASTER_TILE_SIZE, y = Math.floor(key / this.columns) * RASTER_TILE_SIZE;
+      for (let row = 0; row < tile.values.length / tile.width; row++) result.set(tile.values.subarray(row * tile.width, (row + 1) * tile.width), (y + row) * this.width + x);
+    }
+    return result;
+  }
+}
+
 /** A stroke in progress on a raster. */
 export class BrushStroke {
   readonly raster: Raster;
   readonly before: Raster;
-  private readonly cov: Float32Array;
+  private readonly cov: StrokeCoverage;
   private readonly w: number;
   private readonly h: number;
   private dirty: Rect | null = null;
@@ -401,7 +433,7 @@ export class BrushStroke {
     this.before = raster.clone();
     this.w = raster.width;
     this.h = raster.height;
-    this.cov = new Float32Array(this.w * this.h);
+    this.cov = new StrokeCoverage(this.w, this.h);
     this.opts = opts;
     this.rng = new Rng(opts.seed ?? randomSeed());
     this.tip = tipById(opts.settings.tip) ?? ROUND_TIP;
@@ -491,8 +523,8 @@ export class BrushStroke {
           if (a <= 0) continue;
         }
         const i = y * w + x;
-        const c = cov[i]!;
-        cov[i] = buildUp ? Math.min(1, c + a) : c + a * (1 - c);
+        const c = cov.get(i);
+        cov.set(i, buildUp ? Math.min(1, c + a) : c + a * (1 - c));
       }
     }
     this.composite(rect);
@@ -503,8 +535,8 @@ export class BrushStroke {
   private composite(rect: Rect): void {
     const blend = this.opts.blend;
     const opacity = this.opts.opacity;
-    const dst = this.raster.data;
-    const src = this.before.data;
+    const src = this.before.readPixels(rect);
+    const dst = src; // Detached region; each pixel is read before that pixel is replaced.
     const cov = this.cov;
     const w = this.w;
     const px = { r: 0, g: 0, b: 0, a: 0 };
@@ -515,11 +547,14 @@ export class BrushStroke {
       target = t.raster;
       tRect = t.rect;
     }
+    const td = target && tRect
+      ? target.readPixels(Rect.make(rect.x - tRect.x, rect.y - tRect.y, rect.w, rect.h))
+      : null;
     for (let y = rect.y; y < rect.y + rect.h; y++) {
       for (let x = rect.x; x < rect.x + rect.w; x++) {
         const i = y * w + x;
-        const a = Math.min(1, cov[i]!) * opacity;
-        const p = i * 4;
+        const a = Math.min(1, cov.get(i)) * opacity;
+        const p = ((y - rect.y) * rect.w + x - rect.x) * 4;
         const br = src[p]!;
         const bg = src[p + 1]!;
         const bb = src[p + 2]!;
@@ -538,9 +573,8 @@ export class BrushStroke {
           dst[p + 3] = ba * (1 - a) * 255;
           continue;
         }
-        if (blend.mode === "target" && target && tRect) {
-          const q = ((y - tRect.y) * tRect.w + (x - tRect.x)) * 4;
-          const td = target.data;
+        if (blend.mode === "target" && target && tRect && td) {
+          const q = p;
           // Straight lerp between snapshot and target (target may change alpha: background eraser).
           const ta = td[q + 3]! / 255;
           const oa = ba + (ta - ba) * a;
@@ -595,6 +629,7 @@ export class BrushStroke {
         dst[p + 3] = ao * 255;
       }
     }
+    this.raster.writePixels(rect, dst);
   }
 
   /** Target raster covering `rect` (+ margin), computed from the snapshot and cached per stroke region. */
@@ -613,7 +648,7 @@ export class BrushStroke {
   private smudge(d: Dab, m: DabMask, x0: number, y0: number, rect: Rect): void {
     const blend = this.opts.blend as Extract<StrokeBlend, { mode: "smudge" }>;
     const n = m.n;
-    const dst = this.raster.data;
+    const dst = this.raster.readPixels(rect);
     const w = this.w;
     const sel = this.opts.selection && !this.opts.selection.isEmpty ? this.opts.selection : null;
     const off = this.opts.offset;
@@ -633,7 +668,7 @@ export class BrushStroke {
             f[q + 2] = blend.fingerColor.b;
             f[q + 3] = 255;
           } else if (sx >= 0 && sy >= 0 && sx < w && sy < this.h) {
-            const p = (sy * w + sx) * 4;
+            const p = ((sy - rect.y) * rect.w + sx - rect.x) * 4;
             f[q] = dst[p]!;
             f[q + 1] = dst[p + 1]!;
             f[q + 2] = dst[p + 2]!;
@@ -650,7 +685,7 @@ export class BrushStroke {
         const mi = (y - y0) * n + (x - x0);
         let a = m.cov[mi]! * k * d.opacity;
         if (sel) a *= sel.get(x + off.x, y + off.y) / 255;
-        const p = (y * w + x) * 4;
+        const p = ((y - rect.y) * rect.w + x - rect.x) * 4;
         const q = mi * 4;
         if (a > 0) {
           // Deposit: dst ← lerp(dst, finger, a) in premultiplied-ish space.
@@ -674,6 +709,7 @@ export class BrushStroke {
         f[q + 3] = f[q + 3]! + (dst[p + 3]! - f[q + 3]!) * pick;
       }
     }
+    this.raster.writePixels(rect, dst);
   }
 
   /** Drop the cached target region (continuous sampling changed the op's parameters). */
@@ -684,13 +720,15 @@ export class BrushStroke {
   /** Coverage 0..1 at a raster pixel (tests / healing post-process). */
   coverageAt(x: number, y: number): number {
     if (x < 0 || y < 0 || x >= this.w || y >= this.h) return 0;
-    return Math.min(1, this.cov[y * this.w + x]!);
+    return Math.min(1, this.cov.get(y * this.w + x));
   }
 
-  /** The coverage buffer (raster-sized floats). */
+  /** Detached compatibility readback for post-processors that need raster-sized floats. */
   get coverage(): Float32Array {
-    return this.cov;
+    return this.cov.readAll();
   }
+
+  get coverageBytes(): number { return this.cov.byteLength(); }
 
   /** Restore the snapshot inside the dirty rect (Esc). Returns the rect to mark dirty. */
   abort(): Rect | null {

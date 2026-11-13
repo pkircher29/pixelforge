@@ -62,9 +62,12 @@ pub struct GenerateParams {
     /// Transparent background (OpenAI only).
     #[serde(default)]
     pub transparent: bool,
-    /// Seed (currently ignored by all three providers).
+    /// Per-job seed override for supported custom image providers.
     #[serde(default)]
     pub seed: Option<u64>,
+    /// Per-job sampling steps for supported custom image providers.
+    #[serde(default)]
+    pub steps: Option<u32>,
     /// Per-job timeout override in seconds.
     #[serde(default)]
     pub timeout_secs: Option<u64>,
@@ -99,9 +102,12 @@ pub struct EditParams {
     /// Transparent background (OpenAI only).
     #[serde(default)]
     pub transparent: bool,
-    /// Seed (ignored).
+    /// Per-job seed override for supported custom image providers.
     #[serde(default)]
     pub seed: Option<u64>,
+    /// Per-job sampling steps for supported custom image providers.
+    #[serde(default)]
+    pub steps: Option<u32>,
     /// Whether a mask blob follows the image blob.
     #[serde(default)]
     pub mask: bool,
@@ -309,6 +315,7 @@ mod tests {
             quality: Some("high".into()),
             transparent: false,
             seed: None,
+            steps: None,
             mask,
             refs,
             timeout_secs: None,

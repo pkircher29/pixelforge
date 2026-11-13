@@ -22,6 +22,7 @@
 
 import { Rect, type Point } from "./rect";
 import { Raster } from "./raster";
+import { TiledRaster } from "./raster-tiled";
 import { Selection } from "./selection";
 import { blendRgb, compositeStraight } from "./blend";
 import {
@@ -59,7 +60,7 @@ import { cloneEffects } from "./ops/effects";
 import { cloneFill } from "./ops/fill";
 import { clonePath, pathCoverage, strokePathCoverage, coverageToRaster } from "./ops/vector";
 import { rasterizeText } from "./ops/text";
-import { StyleCache, docStyleCache, fillLayerRaster, layerSource, maskActive } from "./layer-source";
+import { StyleCache, docStyleCache, fillLayerRaster, layerSource } from "./layer-source";
 
 let idCounter = 0;
 
@@ -136,6 +137,7 @@ export function createDocument(opts: CreateDocumentOptions): Document {
 }
 
 export interface CreateLayerOptions {
+  renderSize?: { width: number; height: number } | undefined;
   name?: string;
   /** Defaults to a transparent raster the size of the document. */
   raster?: Raster;
@@ -148,6 +150,8 @@ export interface CreateLayerOptions {
   id?: LayerId;
   mask?: Raster | null;
   maskEnabled?: boolean;
+  maskDensity?: number;
+  maskFeather?: number;
   maskLinked?: boolean;
   clipToBelow?: boolean;
   fillOpacity?: number;
@@ -164,6 +168,7 @@ function baseFields(id: LayerId, kind: Layer["kind"], name: string, opts: Create
     kind,
     name,
     offset: opts.offset ? { x: opts.offset.x, y: opts.offset.y } : { x: 0, y: 0 },
+    renderSize: opts.renderSize ? { ...opts.renderSize } : undefined,
     opacity: opts.opacity ?? 1,
     blendMode: opts.blendMode ?? BlendMode.Normal,
     visible: opts.visible ?? true,
@@ -171,6 +176,8 @@ function baseFields(id: LayerId, kind: Layer["kind"], name: string, opts: Create
     parentId: opts.parentId ?? null,
     mask: opts.mask ?? null,
     maskEnabled: opts.maskEnabled ?? true,
+    maskDensity: Number.isFinite(opts.maskDensity) ? Math.max(0, Math.min(1, opts.maskDensity!)) : 1,
+    maskFeather: Number.isFinite(opts.maskFeather) ? Math.max(0, Math.min(250, opts.maskFeather!)) : 0,
     maskLinked: opts.maskLinked ?? true,
     clipToBelow: opts.clipToBelow ?? false,
     fillOpacity: opts.fillOpacity ?? 1,
@@ -186,7 +193,7 @@ export function createRasterLayer(doc: Document, opts: CreateLayerOptions = {}):
   return {
     ...baseFields(opts.id ?? newId("layer"), "raster", opts.name ?? nextLayerName(doc), opts),
     kind: "raster",
-    raster: opts.raster ?? new Raster(doc.width, doc.height),
+    raster: opts.raster ?? new TiledRaster(doc.width, doc.height),
   };
 }
 
@@ -199,7 +206,7 @@ export interface CreateGroupOptions extends Omit<CreateLayerOptions, "raster"> {
 /** Build a group layer object (not yet inserted). */
 export function createGroupLayer(doc: Document, opts: CreateGroupOptions = {}): GroupLayer {
   return {
-    ...baseFields(opts.id ?? newId("group"), "group", opts.name ?? `Group ${doc.layers.filter((l) => l.kind === "group").length + 1}`, { ...opts, offset: { x: 0, y: 0 } }),
+    ...baseFields(opts.id ?? newId("group"), "group", opts.name ?? `Group ${doc.layers.filter((l) => l.kind === "group").length + 1}`, opts),
     kind: "group",
     raster: null,
     collapsed: opts.collapsed ?? false,
@@ -222,7 +229,7 @@ export function createAdjustmentLayer(doc: Document, opts: CreateAdjustmentOptio
   if (def?.groupSelector) params[def.groupSelector.id] = def.groupSelector.default;
   Object.assign(params, opts.params ?? {});
   return {
-    ...baseFields(opts.id ?? newId("adj"), "adjustment", opts.name ?? (def?.label ?? opts.op), { ...opts, offset: { x: 0, y: 0 } }),
+    ...baseFields(opts.id ?? newId("adj"), "adjustment", opts.name ?? (def?.label ?? opts.op), opts),
     kind: "adjustment",
     raster: null,
     op: opts.op,
@@ -290,8 +297,8 @@ export function createTextLayer(doc: Document, opts: CreateTextOptions): TextLay
  * `path`, `fill` or `stroke`.
  */
 export function rerasterizeShape(doc: Document, layer: ShapeLayer): Raster {
-  const w = doc.width;
-  const h = doc.height;
+  const w = layer.renderSize?.width ?? doc.width;
+  const h = layer.renderSize?.height ?? doc.height;
   const fillCov = pathCoverage(layer.path, w, h, { rule: layer.fillRule, aa: true });
   let out = layer.fill ? coverageToRaster(fillCov, w, h, layer.fill) : new Raster(w, h);
   const st = layer.stroke;
@@ -310,7 +317,7 @@ export function rerasterizeShape(doc: Document, layer: ShapeLayer): Raster {
 
 /** Re-render a text layer's `TextSpec` into a new document-sized raster (assigned to `layer.raster`). */
 export function rerasterizeText(doc: Document, layer: TextLayer): Raster {
-  layer.raster = rasterizeText(layer.text, doc.width, doc.height);
+  layer.raster = rasterizeText(layer.text, layer.renderSize?.width ?? doc.width, layer.renderSize?.height ?? doc.height);
   return layer.raster;
 }
 
@@ -409,7 +416,7 @@ export function clipBaseOf(doc: Document, id: LayerId): Layer | null {
   let i = sibs.findIndex((l) => l.id === id) - 1;
   while (i >= 0) {
     const l = sibs[i]!;
-    if (!l.clipToBelow || l.kind === "group") return l.kind === "group" ? null : l;
+    if (!l.clipToBelow || l.kind === "group") return l;
     i--;
   }
   return null;
@@ -486,6 +493,7 @@ export function layerBaseOf(layer: Layer, over: { id?: LayerId; name?: string } 
     kind: layer.kind,
     name: over.name ?? layer.name,
     offset: { x: layer.offset.x, y: layer.offset.y },
+    renderSize: layer.renderSize ? { ...layer.renderSize } : undefined,
     opacity: layer.opacity,
     blendMode: layer.blendMode,
     visible: layer.visible,
@@ -493,6 +501,8 @@ export function layerBaseOf(layer: Layer, over: { id?: LayerId; name?: string } 
     parentId: layer.parentId,
     mask: layer.mask ? layer.mask.clone() : null,
     maskEnabled: layer.maskEnabled,
+    maskDensity: layer.maskDensity,
+    maskFeather: layer.maskFeather,
     maskLinked: layer.maskLinked,
     clipToBelow: layer.clipToBelow,
     fillOpacity: layer.fillOpacity,
@@ -508,7 +518,8 @@ export function cloneLayer(layer: Layer, newLayerId?: LayerId, name?: string): L
   const base = { ...layerBaseOf(layer, { id: newLayerId ?? newId(layer.kind === "group" ? "group" : "layer"), name: name ?? layer.name }), linkedTo: [] as LayerId[] };
   switch (layer.kind) {
     case "group":
-      return { ...base, kind: "group", raster: null, collapsed: layer.collapsed, passThrough: layer.passThrough };
+      return { ...base, kind: "group", raster: null, collapsed: layer.collapsed, passThrough: layer.passThrough,
+        ...(layer.generative ? { generative: { ...layer.generative, variantIds: layer.generative.variantIds.slice() } } : {}) };
     case "raster":
       return { ...base, kind: "raster", raster: layer.raster.clone() };
     case "adjustment":
@@ -541,6 +552,9 @@ export function duplicateLayer(doc: Document, id: LayerId): Layer[] {
     return cloneLayer(l, nid, l.id === id ? `${l.name} copy` : l.name);
   });
   for (const c of copies) if (c.parentId && idMap.has(c.parentId)) c.parentId = idMap.get(c.parentId)!;
+  for (const c of copies) if (c.kind === "group" && c.generative) {
+    c.generative.variantIds = c.generative.variantIds.map((id) => idMap.get(id) ?? id);
+  }
   doc.layers.splice(end, 0, ...copies);
   doc.activeLayerId = copies[0]!.id;
   touch(doc);
@@ -609,6 +623,14 @@ export function setLayerProps(doc: Document, id: LayerId, props: Partial<LayerPr
   if (props.maskEnabled !== undefined && props.maskEnabled !== layer.maskEnabled) {
     prev.maskEnabled = layer.maskEnabled;
     layer.maskEnabled = props.maskEnabled;
+  }
+  if (props.maskDensity !== undefined && Number.isFinite(props.maskDensity)) {
+    prev.maskDensity = layer.maskDensity;
+    layer.maskDensity = Math.max(0, Math.min(1, props.maskDensity));
+  }
+  if (props.maskFeather !== undefined && Number.isFinite(props.maskFeather)) {
+    prev.maskFeather = layer.maskFeather;
+    layer.maskFeather = Math.max(0, Math.min(250, props.maskFeather));
   }
   if (props.maskLinked !== undefined && props.maskLinked !== layer.maskLinked) {
     prev.maskLinked = layer.maskLinked;
@@ -832,18 +854,23 @@ export function blendRasterInto(
   const area = Rect.intersect(rect, Rect.make(offset.x, offset.y, src.width, src.height));
   if (Rect.isEmpty(area) || opacity <= 0) return;
   const d = dst.data;
-  const s = src.data;
-  const m = mask ? mask.data : null;
+  const s = src instanceof TiledRaster && src.storageMode === "tiled" ? null : src.data;
+  const m = mask && !(mask instanceof TiledRaster && mask.storageMode === "tiled") ? mask.data : null;
   const dw = dst.width;
   const sw = src.width;
   const inv = 1 / 255;
   for (let y = area.y; y < area.y + area.h; y++) {
+    const rowRect = Rect.make(area.x - offset.x, y - offset.y, area.w, 1);
+    const source = s ?? src.readPixels(rowRect);
+    const maskRow = mask && !m ? mask.readPixels(rowRect) : null;
     let di = (y * dw + area.x) * 4;
     let si = ((y - offset.y) * sw + (area.x - offset.x)) * 4;
     let ci = y * dw + area.x;
     for (let x = 0; x < area.w; x++, di += 4, si += 4, ci++) {
-      let as = s[si + 3]! * inv * opacity;
+      const ri = s ? si : x * 4;
+      let as = source[ri + 3]! * inv * opacity;
       if (m) as *= m[si]! * inv;
+      else if (maskRow) as *= maskRow[x * 4]! * inv;
       if (clip) as *= clip[ci]! * inv;
       if (as <= 0) continue;
       const ab = d[di + 3]! * inv;
@@ -852,13 +879,13 @@ export function blendRasterInto(
         const ao = as + ab * (1 - as);
         const wd = (ab * (1 - as)) / ao;
         const ws = as / ao;
-        d[di] = s[si]! * ws + d[di]! * wd;
-        d[di + 1] = s[si + 1]! * ws + d[di + 1]! * wd;
-        d[di + 2] = s[si + 2]! * ws + d[di + 2]! * wd;
+        d[di] = source[ri]! * ws + d[di]! * wd;
+        d[di + 1] = source[ri + 1]! * ws + d[di + 1]! * wd;
+        d[di + 2] = source[ri + 2]! * ws + d[di + 2]! * wd;
         d[di + 3] = ao * 255;
         continue;
       }
-      compositeStraight(mode, d[di]! * inv, d[di + 1]! * inv, d[di + 2]! * inv, ab, s[si]! * inv, s[si + 1]! * inv, s[si + 2]! * inv, as, px);
+      compositeStraight(mode, d[di]! * inv, d[di + 1]! * inv, d[di + 2]! * inv, ab, source[ri]! * inv, source[ri + 1]! * inv, source[ri + 2]! * inv, as, px);
       d[di] = px[0]! * 255;
       d[di + 1] = px[1]! * 255;
       d[di + 2] = px[2]! * 255;
@@ -880,7 +907,7 @@ function docMaskAt(mask: Raster, offset: Point, x: number, y: number): number {
  * (with the op's margin), then lerp the color towards the result by `opacity × mask ×
  * clip` with the layer's blend mode. Alpha is never changed.
  */
-export function applyAdjustmentInto(doc: Document, out: Raster, layer: AdjustmentLayer, rect: Rect, clip: Uint8Array | null): void {
+export function applyAdjustmentInto(doc: Document, out: Raster, layer: AdjustmentLayer, rect: Rect, clip: Uint8Array | null, cache = docStyleCache(doc) ?? new StyleCache()): void {
   const op = opById(layer.op);
   if (!op || layer.opacity <= 0) return;
   const area = Rect.intersect(rect, Rect.ofSize(doc.width, doc.height));
@@ -891,7 +918,7 @@ export function applyAdjustmentInto(doc: Document, out: Raster, layer: Adjustmen
   const res = op.cpu(src, layer.params);
   const d = out.data;
   const r = res.data;
-  const mask = maskActive(layer) ? layer.mask : null;
+  const mask = cache.mask(layer);
   const inv = 1 / 255;
   for (let y = area.y; y < area.y + area.h; y++) {
     for (let x = area.x; x < area.x + area.w; x++) {
@@ -924,7 +951,7 @@ function blendLayer(doc: Document, out: Raster, layer: Layer, rect: Rect, clip: 
   const opacity = opacityOverride ?? layer.opacity;
   const mode = modeOverride ?? layer.blendMode;
   if (layer.kind === "adjustment") {
-    applyAdjustmentInto(doc, out, { ...layer, opacity, blendMode: mode }, rect, clip);
+    applyAdjustmentInto(doc, out, { ...layer, opacity, blendMode: mode }, rect, clip, ctx.cache);
     return;
   }
   const src = ctx.cache.styledSource(doc, layer);
@@ -934,7 +961,7 @@ function blendLayer(doc: Document, out: Raster, layer: Layer, rect: Rect, clip: 
     return;
   }
   let raster = src.raster;
-  let mask = maskActive(layer) ? layer.mask : null;
+  let mask = ctx.cache.mask(layer);
   if (mask && (mask.width !== raster.width || mask.height !== raster.height)) {
     // Masks are normally layer-sized; tolerate a mismatch by resampling nothing and
     // treating the mask as anchored at the layer origin (outside = reveal).
@@ -985,7 +1012,8 @@ function lerpInto(out: Raster, src: Raster, rect: Rect, t: number, mask: Raster 
 function compositeGroup(doc: Document, out: Raster, group: GroupLayer, rect: Rect, ctx: Ctx): void {
   const children = childrenOf(doc, group.id);
   if (children.length === 0) return;
-  const hasMask = maskActive(group);
+  const mask = ctx.cache.mask(group);
+  const hasMask = !!mask;
   if (group.passThrough) {
     if (group.opacity >= 1 && !hasMask) {
       compositeSiblings(doc, children, out, rect, ctx);
@@ -993,12 +1021,18 @@ function compositeGroup(doc: Document, out: Raster, group: GroupLayer, rect: Rec
     }
     const tmp = out.clone();
     compositeSiblings(doc, children, tmp, rect, ctx);
-    lerpInto(out, tmp, rect, group.opacity, hasMask ? group.mask : null, group.offset);
+    lerpInto(out, tmp, rect, group.opacity, mask, group.offset);
     return;
   }
   const tmp = new Raster(doc.width, doc.height);
   compositeSiblings(doc, children, tmp, rect, ctx);
-  blendRasterInto(out, tmp, { x: 0, y: 0 }, group.opacity, group.blendMode, hasMask && group.mask!.width === doc.width && group.mask!.height === doc.height ? group.mask : null, rect, null);
+  if (mask) {
+    for (let y = rect.y; y < rect.y + rect.h; y++) for (let x = rect.x; x < rect.x + rect.w; x++) {
+      const i = (y * doc.width + x) * 4 + 3;
+      tmp.data[i] = tmp.data[i]! * docMaskAt(mask, group.offset, x, y) / 255;
+    }
+  }
+  blendRasterInto(out, tmp, { x: 0, y: 0 }, group.opacity, group.blendMode, null, rect, null);
 }
 
 /** Composite a clipping unit: the base plus its clipped layers, then blend as one. */
@@ -1010,8 +1044,17 @@ function compositeClipUnit(doc: Document, out: Raster, base: Layer, chain: reado
     return;
   }
   const unit = new Raster(doc.width, doc.height);
-  blendLayer(doc, unit, base, rect, null, ctx, 1, BlendMode.Normal);
-  const clip = ctx.cache.clipAlpha(doc, base);
+  let clip: Uint8Array;
+  if (base.kind === "group") {
+    // A group clipping base is isolated from the backdrop. Its mask participates in
+    // the combined silhouette; opacity and blend mode apply once to the whole unit.
+    compositeGroup(doc, unit, { ...base, opacity: 1, blendMode: BlendMode.Normal, passThrough: false }, rect, ctx);
+    clip = new Uint8Array(doc.width * doc.height);
+    for (let i = 0; i < clip.length; i++) clip[i] = unit.data[i * 4 + 3]!;
+  } else {
+    blendLayer(doc, unit, base, rect, null, ctx, 1, BlendMode.Normal);
+    clip = ctx.cache.clipAlpha(doc, base);
+  }
   for (const c of chain) {
     if (!ctx.ignoreVisibility && !c.visible) continue;
     blendLayer(doc, unit, c, rect, clip, ctx);
@@ -1028,16 +1071,14 @@ function compositeSiblings(doc: Document, layers: readonly Layer[], out: Raster,
     const layer = layers[i]!;
     let j = i + 1;
     const chain: Layer[] = [];
-    if (layer.kind !== "group") {
-      while (j < layers.length && layers[j]!.clipToBelow && layers[j]!.kind !== "group") {
-        chain.push(layers[j]!);
-        j++;
-      }
+    while (j < layers.length && layers[j]!.clipToBelow && layers[j]!.kind !== "group") {
+      chain.push(layers[j]!);
+      j++;
     }
     const visible = ctx.ignoreVisibility || layer.visible;
     if (visible) {
-      if (layer.kind === "group") compositeGroup(doc, out, layer, area, ctx);
-      else if (chain.some((c) => ctx.ignoreVisibility || c.visible)) compositeClipUnit(doc, out, layer, chain, area, ctx);
+      if (chain.some((c) => ctx.ignoreVisibility || c.visible)) compositeClipUnit(doc, out, layer, chain, area, ctx);
+      else if (layer.kind === "group") compositeGroup(doc, out, layer, area, ctx);
       else blendLayer(doc, out, layer, area, null, ctx);
     }
     i = j;

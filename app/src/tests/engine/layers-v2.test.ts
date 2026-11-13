@@ -164,6 +164,29 @@ describe("layer masks", () => {
 // ---------------------------------------------------------------------------
 
 describe("clipping masks", () => {
+  it("clips above a group to its children, applying group mask and opacity once", () => {
+    const doc = whiteDoc();
+    const child = createRasterLayer(doc, { name: "child" });
+    child.raster.fill(rgba(0, 0, 255), Rect.make(0, 0, 4, H));
+    addLayer(doc, child);
+    const group = groupLayers(doc, [child.id]);
+    const clipped = createRasterLayer(doc, { raster: Raster.filled(W, H, rgba(0, 255, 0)), clipToBelow: true });
+    addLayer(doc, clipped);
+    expect(clipBaseOf(doc, clipped.id)?.id).toBe(group.id);
+    expect(isEffectivelyVisible(doc, clipped)).toBe(true);
+    expect(px(compositeToRaster(doc), 1, 1)).toEqual([0, 255, 0, 255]);
+    expect(px(compositeToRaster(doc), 6, 1)).toEqual([255, 255, 255, 255]);
+    group.opacity = 0.5;
+    const half = px(compositeToRaster(doc), 1, 1);
+    expect(half[0]).toBeCloseTo(128, 0); expect(half[1]).toBe(255);
+    group.opacity = 1;
+    group.mask = halfMask(W, H, 2);
+    expect(px(compositeToRaster(doc), 3, 1)).toEqual([255, 255, 255, 255]);
+    group.visible = false;
+    expect(isEffectivelyVisible(doc, clipped)).toBe(false);
+    expect(px(compositeToRaster(doc), 1, 1)).toEqual([255, 255, 255, 255]);
+  });
+
   function clipDoc(): { doc: Document; base: RasterLayer; clipped: RasterLayer } {
     const doc = whiteDoc();
     // Base: opaque blue only in the left half.

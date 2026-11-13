@@ -34,10 +34,7 @@ export function deleteSelected(entry: OpenDoc): void {
   if (!sel) return;
   if (sel.kind === "snapshot") historyUi.deleteSnapshot(entry, sel.id);
   else if (sel.index > 0) {
-    // The engine has no "truncate" — deleting a state steps back to the one before it;
-    // the deleted states stay reachable with Step Forward until the next edit.
-    historyUi.jumpTo(entry, sel.index - 1);
-    historyUi.selected = null;
+    historyUi.deleteState(entry, sel.index);
   }
 }
 

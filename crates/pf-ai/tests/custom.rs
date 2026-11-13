@@ -5,7 +5,7 @@ mod common;
 use std::time::Duration;
 
 use common::*;
-use pf_ai::custom::{CustomKind, CustomProvider};
+use pf_ai::custom::{CustomKind, CustomProvider, SamplingOptions};
 use pf_ai::providers::custom::comfy::ComfyProvider;
 use pf_ai::providers::custom::replicate::ReplicateProvider;
 use pf_ai::providers::custom::Ctx;
@@ -28,6 +28,75 @@ fn tiny_png_bytes() -> Vec<u8> {
     base64::engine::general_purpose::STANDARD
         .decode(TINY_PNG_B64)
         .expect("fixture")
+}
+
+#[tokio::test]
+async fn sampling_overrides_are_job_local_for_generate_and_edit() {
+    let server = MockServer::start().await;
+    for route in ["/sdapi/v1/txt2img", "/sdapi/v1/img2img"] {
+        Mock::given(method("POST"))
+            .and(path(route))
+            .and(body_partial_json(
+                json!({ "seed": 0, "steps": 27, "cfg_scale": 6.0 }),
+            ))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json(json!({ "images": [TINY_PNG_B64] })),
+            )
+            .expect(1)
+            .mount(&server)
+            .await;
+    }
+    let mut original = cfg(CustomKind::A1111, &server);
+    original.extra = json!({ "seed": 99, "steps": 10, "cfg": 6.0 });
+    let override_cfg = original
+        .with_sampling(SamplingOptions {
+            seed: Some(0),
+            steps: Some(27),
+        })
+        .unwrap();
+    let provider = build_custom_provider(&override_cfg, None).unwrap();
+    provider
+        .generate(GenerateRequest {
+            prompt: "fox".into(),
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+    provider
+        .edit(EditRequest::instruct(
+            "night",
+            ImageBytes::png(tiny_png_bytes()),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(
+        original.extra,
+        json!({ "seed": 99, "steps": 10, "cfg": 6.0 })
+    );
+    assert_eq!(
+        original.with_sampling(SamplingOptions::default()).unwrap(),
+        original
+    );
+    assert!(original
+        .with_sampling(SamplingOptions {
+            seed: Some(2147483648),
+            steps: None
+        })
+        .is_err());
+    for steps in [0, 151] {
+        assert!(original
+            .with_sampling(SamplingOptions {
+                seed: None,
+                steps: Some(steps)
+            })
+            .is_err());
+    }
+    assert!(cfg(CustomKind::Ollama, &server)
+        .with_sampling(SamplingOptions {
+            seed: Some(0),
+            steps: None
+        })
+        .is_err());
 }
 
 // ---------------------------------------------------------------- OpenAI-compatible

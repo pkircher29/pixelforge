@@ -54,8 +54,12 @@ export type ResampleMethod = "nearest" | "bilinear" | "bicubic";
 export interface IRaster {
   readonly width: number;
   readonly height: number;
-  /** RGBA8, straight alpha, row-major, `width * height * 4` bytes. */
+  /** Legacy writable RGBA8 array. May materialize sparse storage; prefer readPixels for bounded reads. */
   readonly data: Uint8ClampedArray<ArrayBuffer>;
+  /** Detached RGBA bytes for a region; out-of-bounds pixels are transparent black. */
+  readPixels(rect: Rect): Uint8ClampedArray<ArrayBuffer>;
+  /** Replace a region from tightly packed RGBA bytes; clip writes to bounds. */
+  writePixels(rect: Rect, data: Uint8ClampedArray<ArrayBuffer>): void;
   /** `{ 0, 0, width, height }`. */
   bounds(): Rect;
   /** Deep copy. */
@@ -150,6 +154,8 @@ export interface LayerBase {
   readonly kind: LayerKind;
   /** Position of the layer's raster origin in document space. */
   offset: Point;
+  /** Retained local rendering bounds after a non-destructive crop. */
+  renderSize?: { width: number; height: number } | undefined;
   /** 0..1 — master opacity: affects pixels *and* effects. */
   opacity: number;
   blendMode: BlendMode;
@@ -169,6 +175,10 @@ export interface LayerBase {
   mask: Raster | null;
   /** False = mask temporarily disabled (Shift-click, red X). The mask is kept. */
   maskEnabled: boolean;
+  /** Render-only mask strength, 0 = reveal all, 1 = painted mask. */
+  maskDensity: number;
+  /** Render-only Gaussian feather radius in document pixels (0..250). */
+  maskFeather: number;
   /** Chain icon: the Move tool moves layer and mask together. */
   maskLinked: boolean;
   /** Clipping mask: this layer is clipped by the base below it (Alt-click between rows). */
@@ -201,6 +211,15 @@ export interface GroupLayer extends LayerBase {
   raster: null;
   collapsed: boolean;
   passThrough: boolean;
+  /** Generative results are editable child rasters; only one variant is shown. */
+  generative?: GenerativeVariants;
+}
+
+export interface GenerativeVariants {
+  prompt: string;
+  provider: string;
+  model: string;
+  variantIds: LayerId[];
 }
 
 /**
@@ -341,6 +360,20 @@ export interface TextSpec {
   tracking: number;
   bold: boolean;
   italic: boolean;
+  /** Character styles preserve the original editable text. Missing fields mean false. */
+  allCaps?: boolean;
+  smallCaps?: boolean;
+  underline?: boolean;
+  strikethrough?: boolean;
+  /** Positive paragraph width enables wrapping; null/absent keeps point type. */
+  paragraphWidth?: number | null;
+  indentLeft?: number;
+  indentRight?: number;
+  firstLineIndent?: number;
+  spaceBefore?: number;
+  spaceAfter?: number;
+  /** Alignment of the last line when justifying; `all` stretches every line. */
+  justification?: "none" | "left" | "center" | "right" | "all";
   /** Vertical type: one glyph per line, stacked downwards from `x, y`. */
   vertical: boolean;
   antialias: boolean;
@@ -490,6 +523,8 @@ export interface LayerProps {
   passThrough: boolean;
   fillOpacity: number;
   maskEnabled: boolean;
+  maskDensity: number;
+  maskFeather: number;
   maskLinked: boolean;
   clipToBelow: boolean;
   color: LayerColor | null;
@@ -607,7 +642,7 @@ export interface HistoryEntry {
 export interface HistorySnapshot {
   readonly id: string;
   name: string;
-  /** `History.index` when the snapshot was taken (adjusted on eviction). */
+  /** Source `History.index`, adjusted on eviction/deletion; -1 if that state is gone. */
   historyIndex: number;
   /** Bytes held by the snapshot's rasters. */
   readonly bytes: number;
@@ -635,7 +670,7 @@ export type CompositorKind = "webgl2" | "canvas2d";
  * Channel view mode: `"rgb"` the composite; `"r"`/`"g"`/`"b"` one channel as grayscale;
  * `"alpha:<channelId>"` an alpha channel; `"mask"` the active layer's mask.
  */
-export type ViewChannel = "rgb" | "r" | "g" | "b" | `alpha:${string}` | "mask";
+export type ViewChannel = "rgb" | "r" | "g" | "b" | "rg" | "rb" | "gb" | "none" | `alpha:${string}` | "mask";
 
 /** Per-frame options for {@link ICompositor.render}. */
 export interface RenderOptions {
@@ -663,6 +698,8 @@ export interface RenderOptions {
   forceFull?: boolean;
   /** Channel view (Channels panel). Default `"rgb"`. */
   viewChannel?: ViewChannel;
+  /** Saved alpha channels shown as colored overlays over the channel view. */
+  alphaOverlayIds?: readonly string[];
   /** Overlay the document's quick mask when active. Default true. */
   showQuickMask?: boolean;
 }

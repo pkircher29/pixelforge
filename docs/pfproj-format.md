@@ -14,7 +14,7 @@ A `.pfproj` is a plain ZIP archive. Any zip tool can open it.
 |---|---|---|
 | `manifest.json` | yes | UTF-8 JSON, schema below. Deflate-compressed. |
 | `layers/<layerId>.png` | one per `raster`, `shape` and `text` layer | RGBA8 PNG, **straight (non-premultiplied) alpha**, sized to the layer's own rectangle (`width` x `height` in the manifest), positioned on the canvas by `x`/`y`. For shape / text layers this is the **cached rasterization** of the spec (document-sized) so older viewers still see pixels; Pixelforge re-rasterizes from the spec on load. Stored uncompressed in the zip (PNG is already deflated). |
-| `masks/<layerId>.png` | optional, any layer kind | 8-bit grayscale PNG. For raster / shape / text layers the same size as the layer PNG; for group / adjustment / fill layers canvas-sized. 255 = fully revealed. |
+| `masks/<layerId>.png` | optional, any layer kind | 8-bit grayscale PNG. For raster / shape / text layers the same size as the layer PNG; for group / adjustment / fill layers `mask_size` when present, otherwise canvas-sized. 255 = fully revealed. |
 | `channels/<channelId>.png` | optional, one per alpha channel (format 2) | 8-bit grayscale PNG, canvas-sized. 255 = selected. |
 | `selection.png` | optional | 8-bit grayscale PNG, canvas-sized. 255 = selected. Absent = no selection. |
 | `thumb.png` | optional (always written by Pixelforge) | RGBA8 PNG composite preview, longest edge <= 256 px. |
@@ -61,6 +61,8 @@ manifest's `file` / `mask` / `channels[].file` / `selection.file` / `thumbnail` 
       // ---- format 2 (all optional; defaults in parentheses)
       "fill_opacity": 1.0,             // PS "Fill": pixels only, not effects (1.0)
       "mask_enabled": true,            // false = mask kept but disabled (true)
+      "mask_density": 1.0,             // non-destructive mask strength, 0..1 (1)
+      "mask_feather": 0.0,             // non-destructive Gaussian radius, 0..250 px (0)
       "mask_linked": true,             // move tool moves layer and mask together (true)
       "clip_to_below": false,          // clipping mask (false)
       "lock": { "transparent": false, "pixels": false, "position": false, "all": false },
@@ -151,11 +153,22 @@ light, hard mix, ...) become `normal`, and `darker color` / `lighter color` beco
 `normal`, `visible` → true, `locked` → false, `layers` → `[]`, `ai_history` → `[]`,
 `app_version` / `created` / `modified` → `""`.
 
-Format-2 fields: `fill_opacity` → 1, `mask_enabled` / `mask_linked` → true,
+Format-2 fields: `fill_opacity` / `mask_density` → 1, `mask_feather` → 0,
+`mask_enabled` / `mask_linked` → true,
 `clip_to_below` → false, `lock` → all false (`locked: true` sets `lock.all`), `linked_to`
 → `[]`, `color` / `effects` → null, `pass_through` → true, `channels` / `paths` → `[]`,
 `work_path` → null. A `shape` / `text` / `fill` / `adjustment` entry whose spec is
 missing or invalid loads as a plain raster layer from its cached PNG (or empty).
+
+### Retained crop bounds
+
+Non-destructive cropping keeps layer pixel and mask buffers and shifts each layer's
+`x` / `y` origin. Group origins locate their masks; children retain independent origins.
+Optional `render_size: { width, height }` preserves shape, text and procedural fill
+rendering dimensions across edits and reopening. Without it, rendering uses canvas
+dimensions. Optional `mask_size: { width, height }` records retained group, adjustment
+and fill mask dimensions; without it their masks are canvas-sized. Dimensions must be
+positive integers within the reader's image limits. These additive fields use format 2.
 
 ### Forward compatibility
 

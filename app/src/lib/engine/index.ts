@@ -19,9 +19,11 @@
  */
 
 export * from "./types";
+export { AddGenerativeLayerCommand, SelectGenerativeVariantCommand, generativeVariants, generativeFromFile } from "./generative";
 export { Rect } from "./rect";
 export type { Point } from "./rect";
 export { Raster, rgba } from "./raster";
+export { TiledRaster, RASTER_TILE_SIZE } from "./raster-tiled";
 export { Selection } from "./selection";
 export {
   BLEND_MODES,

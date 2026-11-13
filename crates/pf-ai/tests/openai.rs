@@ -1,5 +1,57 @@
 mod common;
 
+#[tokio::test]
+async fn model_check_is_read_only_and_preserves_missing_model_error() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/v1/models/gpt-image-2.5-flare"))
+        .and(header(
+            "authorization",
+            format!("Bearer {TEST_KEY}").as_str(),
+        ))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_json(serde_json::json!({"id": "gpt-image-2.5-flare"})),
+        )
+        .expect(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/v1/models/missing-model"))
+        .respond_with(
+            ResponseTemplate::new(404)
+                .set_body_json(serde_json::json!({"error": {"message": "Model not available"}})),
+        )
+        .expect(1)
+        .mount(&server)
+        .await;
+    let p = provider(&server).await;
+    p.test_model("gpt-image-2.5-flare").await.expect("metadata");
+    assert!(p
+        .test_model("missing-model")
+        .await
+        .expect_err("missing")
+        .to_string()
+        .contains("Model not available"));
+    for invalid in [
+        "",
+        "..",
+        "../images/generations",
+        "model?x=1",
+        "https://example.com",
+    ] {
+        assert_eq!(
+            p.test_model(invalid).await.expect_err("invalid").code(),
+            "ai_invalid_request"
+        );
+    }
+    let requests = server.received_requests().await.expect("requests");
+    assert_eq!(requests.len(), 2);
+    assert!(requests
+        .iter()
+        .all(|r| r.method.as_str() == "GET" && r.body.is_empty()));
+}
+
 use common::*;
 use pf_ai::providers::openai::OpenAiProvider;
 use pf_ai::{

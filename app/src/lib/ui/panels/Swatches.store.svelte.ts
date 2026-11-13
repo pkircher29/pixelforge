@@ -11,7 +11,7 @@ import { defaultGroups, defaultSwatches } from "./swatch-defaults";
 export interface Swatch {
   id: string;
   name: string;
-  color: RGB;
+  color: RGB & { a?: number };
 }
 
 export interface SwatchGroup {
@@ -31,8 +31,8 @@ export interface SwatchSet {
 /** Persisted / exported shape (`c` is `#rrggbb`). */
 export interface SwatchSetJson {
   "pixelforge-swatches": 1;
-  items: { n: string; c: string }[];
-  groups: { n: string; collapsed?: boolean; items: { n: string; c: string }[] }[];
+  items: { n: string; c: string; a?: number }[];
+  groups: { n: string; collapsed?: boolean; items: { n: string; c: string; a?: number }[] }[];
 }
 
 export const SWATCHES_SETTINGS_KEY = "swatches";
@@ -43,7 +43,7 @@ export function swatchId(): string {
 }
 
 export function serializeSwatches(set: SwatchSet): SwatchSetJson {
-  const item = (s: Swatch): { n: string; c: string } => ({ n: s.name, c: rgbToHex(s.color) });
+  const item = (s: Swatch): SwatchSetJson["items"][number] => ({ n: s.name, c: rgbToHex(s.color), ...(s.color.a === undefined || s.color.a === 255 ? {} : { a: s.color.a }) });
   return {
     "pixelforge-swatches": 1,
     items: set.items.map(item),
@@ -58,9 +58,10 @@ export function parseSwatches(raw: unknown): SwatchSet | null {
   if (!Array.isArray(o.items) && !Array.isArray(o.groups)) return null;
   const item = (x: unknown): Swatch | null => {
     if (!x || typeof x !== "object") return null;
-    const e = x as { n?: unknown; c?: unknown };
-    const color = typeof e.c === "string" ? hexToRgb(e.c) : null;
+    const e = x as { n?: unknown; c?: unknown; a?: unknown };
+    const color: Swatch["color"] | null = typeof e.c === "string" ? hexToRgb(e.c) : null;
     if (!color) return null;
+    if (typeof e.a === "number" && Number.isFinite(e.a)) color.a = Math.round(Math.max(0, Math.min(255, e.a)));
     return { id: swatchId(), name: typeof e.n === "string" ? e.n : rgbToHex(color), color };
   };
   const items = (Array.isArray(o.items) ? o.items : []).map(item).filter((s): s is Swatch => s !== null);
@@ -133,7 +134,7 @@ class SwatchStore {
     return [...this.items, ...this.groups.flatMap((g) => g.swatches)];
   }
 
-  add(color: RGB, name?: string, groupId?: string | null): Swatch {
+  add(color: Swatch["color"], name?: string, groupId?: string | null): Swatch {
     const s: Swatch = { id: swatchId(), name: name ?? rgbToHex(color).toUpperCase().replace("#", "Swatch "), color: { ...color } };
     const g = groupId ? this.groups.find((x) => x.id === groupId) : null;
     if (g) g.swatches.push(s);

@@ -17,6 +17,7 @@
   import { typeSession } from "$lib/tools/type-session.svelte";
   import { canvasHost, type CanvasImpl } from "./canvas/host.svelte";
   import { paintRuler } from "./rulers";
+  import GenerativeFillBar from "./GenerativeFillBar.svelte";
 
   interface Props {
     entry: OpenDoc;
@@ -208,6 +209,7 @@
         checkerSize: checker,
         activeLayerId: doc.activeLayerId,
         viewChannel,
+        alphaOverlayIds: ui.alphaOverlays,
       });
       if (sizeChanged || vpChanged || entry.version !== lastVersion) ui.lastRenderMs = performance.now() - t0;
       lastVersion = entry.version;
@@ -372,6 +374,10 @@
 
   function onPointerLeave(): void {
     ui.cursorDoc = null;
+    if (!active) return;
+    const tool = canvasHost.activeTool;
+    const ctx = canvasHost.context(tool);
+    if (ctx) tool.onPointerLeave?.(ctx);
   }
 
   function onWheel(e: WheelEvent): void {
@@ -433,6 +439,9 @@
       <div class="frame" aria-hidden="true" style:left="{frame.x}px" style:top="{frame.y}px" style:width="{frame.w}px" style:height="{frame.h}px"></div>
     {/if}
     <canvas class="overlay" bind:this={overlay} aria-hidden="true"></canvas>
+    {#if active && !typing}
+      <GenerativeFillBar {entry} width={cssW} height={cssH} />
+    {/if}
     {#if typing}
       <TypeEditor {entry} />
     {/if}

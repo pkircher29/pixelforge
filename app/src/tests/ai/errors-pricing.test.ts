@@ -3,6 +3,12 @@ import { describeAiError, parseCategories, parseRetryAfter, toFriendlyError } fr
 import { estimateCost, formatUsd, geminiTier } from "../../lib/ai/pricing";
 
 describe("describeAiError", () => {
+  it("billing quota failures preserve the explanation and do not suggest retrying", () => {
+    const e = describeAiError("ai_quota", "Project spend limit reached");
+    expect(e.retryable).toBe(false);
+    expect(e.detail).toBe("Project spend limit reached");
+    expect(e.hint).toContain("credits, billing and usage limits");
+  });
   it("ai_auth points at Settings", () => {
     const e = describeAiError("ai_auth", "401 Unauthorized");
     expect(e.hint).toMatch(/Settings/);

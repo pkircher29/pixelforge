@@ -118,9 +118,9 @@ export function quickMaskTarget(doc: Document): Raster | null {
 }
 
 /** Parse a `ViewChannel` string. */
-export function parseViewChannel(v: ViewChannel): { kind: "rgb" | "r" | "g" | "b" | "mask" } | { kind: "alpha"; id: string } {
+export function parseViewChannel(v: ViewChannel): { kind: Exclude<ViewChannel, `alpha:${string}`> } | { kind: "alpha"; id: string } {
   if (v.startsWith("alpha:")) return { kind: "alpha", id: v.slice(6) };
-  return { kind: v as "rgb" | "r" | "g" | "b" | "mask" };
+  return { kind: v as Exclude<ViewChannel, `alpha:${string}`> };
 }
 
 /**
@@ -136,6 +136,17 @@ export function channelViewRaster(doc: Document, composite: Raster, view: ViewCh
   const h = doc.height;
   const out = new Raster(w, h);
   const d = out.data;
+  if (v.kind === "rg" || v.kind === "rb" || v.kind === "gb" || v.kind === "none") {
+    const c = composite.data;
+    for (let i = 0; i < d.length; i += 4) {
+      const alpha = c[i + 3]! / 255;
+      d[i] = v.kind.includes("r") ? c[i]! * alpha : 0;
+      d[i + 1] = v.kind.includes("g") ? c[i + 1]! * alpha : 0;
+      d[i + 2] = v.kind.includes("b") ? c[i + 2]! * alpha : 0;
+      d[i + 3] = 255;
+    }
+    return out;
+  }
   if (v.kind === "r" || v.kind === "g" || v.kind === "b") {
     const ch = v.kind === "r" ? 0 : v.kind === "g" ? 1 : 2;
     const c = composite.data;
@@ -201,5 +212,25 @@ export function overlayChannel(display: Raster, channel: Raster, color: RGBA, op
     d[i + 1] = color.g * ws + d[i + 1]! * wd;
     d[i + 2] = color.b * ws + d[i + 2]! * wd;
     d[i + 3] = ao * 255;
+  }
+}
+
+/** Cached combined tint, separate from image pixels and project export. */
+export class AlphaOverlayCache {
+  private key = "";
+  private sources: Raster[] = [];
+  private raster: Raster | null = null;
+  invalidate(): void { this.key = ""; }
+  get(doc: Document, ids: readonly string[] = []): Raster | null {
+    const visible = doc.alphaChannels.filter(c => ids.includes(c.id));
+    if (!visible.length) { this.raster = null; this.sources = []; this.key = ""; return null; }
+    const key = JSON.stringify([doc.id, doc.width, doc.height, visible.map(c => [c.id, c.color, c.opacity])]);
+    if (key !== this.key || visible.some((c, i) => c.mask !== this.sources[i])) {
+      this.raster = new Raster(doc.width, doc.height);
+      for (const c of visible) overlayChannel(this.raster, c.mask, c.color, c.opacity, true);
+      this.sources = visible.map(c => c.mask);
+      this.key = key;
+    }
+    return this.raster;
   }
 }

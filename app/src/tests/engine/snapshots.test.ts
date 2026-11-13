@@ -113,7 +113,7 @@ describe("History.rasterAt (History Brush source)", () => {
     expect(h.rasterAt(0, "missing")).toBeNull();
   });
 
-  it("uses a snapshot taken at that index directly and resolves HistorySource", () => {
+  it("resolves snapshot and state HistorySources independently", () => {
     const doc = createDocument({ width: 4, height: 4, background: "white" });
     const l = doc.layers[0] as RasterLayer;
     const h = new History(doc);
@@ -138,7 +138,9 @@ describe("History.rasterAt (History Brush source)", () => {
     h.push(fillCmd(l, rgba(2, 2, 2)));
     h.push(fillCmd(l, rgba(3, 3, 3))); // evicts the first entry
     expect(h.evictedCount).toBeGreaterThan(0);
-    expect(h.snapshots[0]!.historyIndex).toBe(0);
+    expect(h.snapshots[0]!.historyIndex).toBe(-1); // its source is older than the retained base
+    expect(h.snapshotRaster(snap.id, l.id)!.getPixel(0, 0)).toEqual(rgba(1, 1, 1));
+    expect(h.rasterAt(0, l.id)!.getPixel(0, 0)).toEqual(rgba(2, 2, 2));
     h.undo();
     h.undo();
     const snap2 = h.takeSnapshot();

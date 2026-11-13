@@ -1,7 +1,6 @@
 /**
  * Pure helpers behind the Properties panel: adjustment-layer parameter binding,
- * mask Density / Feather (applied destructively with Apply — the engine has no mask
- * render params), and the per-kind header / context detection.
+ * mask processing helpers, and the per-kind header / context detection.
  */
 import { Raster, opById, type AdjustmentLayer, type Document, type Layer, type ParamDef, type ParamValues } from "$lib/engine";
 import { defaultParams, type ParamValue } from "$lib/engine/ops/types";

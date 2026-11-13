@@ -11,6 +11,12 @@ PSD import, AI providers and OS integration.
 MIT licensed. Windows, macOS and Linux. Current release: **0.2.1** (see
 [CHANGELOG.md](CHANGELOG.md)).
 
+**Development continuation:** Google OAuth for the separately billed Gemini API joins
+the existing ChatGPT and client-ID-gated Grok sign-in flows. See
+[provider setup and verification limits](docs/oauth-setup.md). Search uses Ctrl+F
+(Ctrl+K remains an alias), and Last Filter uses Ctrl+Alt+F. Build a release executable
+with `npm run build:release` so frontend assets are built before the native app.
+
 ## Multi-provider AI workflow
 
 Pixelforge treats ChatGPT (OpenAI), Grok (xAI), Gemini (Google), and custom/local
@@ -155,9 +161,10 @@ card shows "Sign in with SuperGrok — awaiting xAI approval for Pixelforge" unt
 Pixelforge a client ID. The device-code flow is implemented: paste the ID into the Grok card
 (or set `PF_XAI_OAUTH_CLIENT_ID`) and it activates. Use an xAI API key meanwhile.
 
-**Gemini (Google AI Pro / Ultra): not possible.** Google says AI plan benefits apply only
-inside Google AI Studio and the Gemini API is billed separately
-([source](https://ai.google.dev/gemini-api/docs/google-ai-plans)). Use an API key.
+**Gemini: Google OAuth or API key.** Configure a Google Desktop app client and Cloud
+project in AI Providers, then sign in with Google. This authorizes separately billed
+Gemini API usage; Google AI Pro / Ultra benefits do not cover external API requests.
+See [setup instructions](docs/oauth-setup.md) and [Google's OAuth guide](https://ai.google.dev/gemini-api/docs/oauth).
 
 ## Building from source
 

@@ -10,12 +10,14 @@
   import { canvasHost } from "$lib/ui/canvas/host.svelte";
   import { typeSession } from "../type-session.svelte";
   import { selectionRange } from "../text-session";
+  import { moveLayoutCaret } from "$lib/engine/ops/text";
 
   interface Props {
     entry: OpenDoc;
   }
   let { entry }: Props = $props();
   let ta = $state<HTMLTextAreaElement | null>(null);
+  let measureContext: CanvasRenderingContext2D | null = null;
 
   const pos = $derived.by(() => {
     void entry.version;
@@ -95,6 +97,17 @@
       return;
     }
     if (e.key === "Tab") e.preventDefault();
+    if (!e.ctrlKey && !e.metaKey && !e.altKey && !typeSession.spec.vertical && typeSession.spec.paragraphWidth &&
+      (e.key === "ArrowUp" || e.key === "ArrowDown" || e.key === "Home" || e.key === "End")) {
+      e.preventDefault();
+      measureContext ??= document.createElement("canvas").getContext("2d");
+      const model = typeSession.model;
+      const caret = moveLayoutCaret(typeSession.spec, model.caret, e.key, measureContext);
+      const anchor = e.shiftKey ? model.anchor : caret;
+      ta?.setSelectionRange(Math.min(anchor, caret), Math.max(anchor, caret), caret < anchor ? "backward" : "forward");
+      typeSession.setModel({ ...model, caret, anchor });
+      return;
+    }
     queueMicrotask(sync);
   }
 </script>

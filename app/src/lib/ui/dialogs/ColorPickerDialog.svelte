@@ -6,6 +6,7 @@
    * `openColorPicker()` (`color-picker.ts`) by every swatch control.
    */
   import type { RGBA } from "$lib/engine";
+  import Swatch from "$lib/ui/controls/Swatch.svelte";
   import Dialog from "./Dialog.svelte";
   import type { Resolver } from "./dialogs.svelte";
   import ColorCube from "../panels/ColorCube.svelte";
@@ -20,7 +21,8 @@
   let { initial, title = "Color Picker", resolve }: Props = $props();
 
   // svelte-ignore state_referenced_locally
-  const current: RGB = { r: initial.r, g: initial.g, b: initial.b };
+  const current: RGBA = { ...initial };
+  let alpha = $state(current.a);
   let color = $state<RGB>({ ...current });
   let hsb = $state<HSB>(rgbToHsb(current));
   let mode = $state<CubeMode>("H");
@@ -73,11 +75,11 @@
     return Math.max(min, Math.min(max, v));
   }
   function addToSwatches(): void {
-    swatchStore.add(color);
+    swatchStore.add({ ...color, a: alpha });
     added = true;
   }
   function ok(): void {
-    resolve({ r: color.r, g: color.g, b: color.b, a: 255 });
+    resolve({ ...color, a: alpha });
   }
 </script>
 
@@ -94,8 +96,8 @@
     <div class="right">
       <div class="preview-row">
         <div class="preview">
-          <div class="swatch new" style:background={hex}></div>
-          <div class="swatch cur" style:background={rgbToHex(current)}></div>
+          <div class="swatch new"><Swatch color={{ ...color, a: alpha }} /></div>
+          <div class="swatch cur"><Swatch color={current} /></div>
           <span class="cap new-cap">new</span>
           <span class="cap cur-cap">current</span>
           {#if !isWebSafe(color)}
@@ -131,6 +133,7 @@
           <label class="f"><span class="radio-ph"></span><span class="l">Y:</span><input class="input" type="number" min="0" max="100" value={cmyk.y} onchange={(e) => { const v = num(e, 0, 100); if (v !== null) setCmyk({ y: v }); }} /><span class="u">%</span></label>
           <label class="f"><span class="radio-ph"></span><span class="l">K:</span><input class="input" type="number" min="0" max="100" value={cmyk.k} onchange={(e) => { const v = num(e, 0, 100); if (v !== null) setCmyk({ k: v }); }} /><span class="u">%</span></label>
           <div class="note">CMYK is an unmanaged approximation.</div>
+          <label class="f">Opacity <input class="input" aria-label="Opacity" type="number" min="0" max="100" value={Math.round(alpha / 255 * 100)} onchange={(e) => { const v = num(e, 0, 100); if (v !== null) { alpha = Math.round(v / 100 * 255); added = false; } }} />%</label>
         </div>
       </div>
     </div>

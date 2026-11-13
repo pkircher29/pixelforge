@@ -24,13 +24,14 @@
     untrack(() => {
       layersUi.bind(id);
       ui.viewChannel = "rgb";
+      ui.alphaOverlays = [];
     });
   });
 
   const rows = $derived.by((): ChannelRow[] => {
     if (!entry || !doc) return [];
     void entry.version;
-    return buildChannelRows(doc, docStore.activeLayer, ui.viewChannel, layersUi.hiddenChannels);
+    return buildChannelRows(doc, docStore.activeLayer, ui.viewChannel, layersUi.hiddenChannels, ui.alphaOverlays);
   });
   const dims = $derived(thumbDims("medium", doc?.width ?? 1, doc?.height ?? 1));
   const selectedAlpha = $derived.by(() => {

@@ -1,7 +1,8 @@
 /**
- * Undo/redo history: a linear list of executed commands with a cursor, capped by a
+ * Undo/redo history: an ordered list of retained states with a cursor, capped by a
  * memory budget. Oldest *applied* entries are evicted first (they become permanent);
- * if still over budget, the farthest redo entries are dropped.
+ * if still over budget, the farthest redo entries are dropped. Optional non-linear
+ * history connects branches with reversible command paths instead of discarding futures.
  *
  * v2 adds **snapshots** (History panel camera button): full, independent copies of the
  * document that can be restored as an undoable step, and the History Brush source
@@ -14,6 +15,8 @@ import { captureDocState, restoreDocState, stateLayerRaster, type DocState } fro
 import type { Command, Document, HistoryEntry, HistorySnapshot, HistorySource, LayerId } from "./types";
 
 export interface HistoryOptions {
+  /** Retain later states when editing an earlier state. */
+  nonLinear?: boolean;
   /** Max bytes of command snapshots kept. Default 1 GiB (PLAN.md). */
   budgetBytes?: number;
   /** Called after any change (push/undo/redo/jump/eviction/clear/snapshots). */
@@ -69,8 +72,28 @@ export class SnapshotCommand implements Command {
 
 let snapCounter = 0;
 
+/** A reversible path between two retained states. Commands keep their original
+ * before/after data; a branch never replays an edit against the wrong parent. */
+class HistoryPathCommand implements Command {
+  constructor(readonly label: string, private readonly steps: { command: Command; forward: boolean }[]) {}
+  do(doc: Document): void {
+    for (const s of this.steps) s.forward ? s.command.do(doc) : s.command.undo(doc);
+  }
+  undo(doc: Document): void {
+    for (let i = this.steps.length - 1; i >= 0; i--) {
+      const s = this.steps[i]!;
+      s.forward ? s.command.undo(doc) : s.command.do(doc);
+    }
+  }
+  byteSize(): number {
+    // Conservative: shared command data may also belong to an earlier row.
+    return this.steps.reduce((n, s) => n + sizeOf(s.command), 0);
+  }
+}
+
 export class History {
   readonly doc: Document;
+  nonLinear: boolean;
   private list: HistoryEntry[] = [];
   /** Number of applied entries; `list[index-1]` is the most recent applied one. */
   private cursor = 0;
@@ -86,6 +109,7 @@ export class History {
 
   constructor(doc: Document, opts: HistoryOptions = {}) {
     this.doc = doc;
+    this.nonLinear = opts.nonLinear ?? false;
     this._budget = opts.budgetBytes ?? DEFAULT_HISTORY_BUDGET;
     this.onChange = opts.onChange;
     this.onApply = opts.onApply;
@@ -139,19 +163,31 @@ export class History {
   }
 
   /**
-   * Execute (unless `alreadyApplied`) and record a command. Any redo entries are
-   * discarded. If the previous entry's `mergeWith` accepts the new command, the two are
+   * Execute (unless `alreadyApplied`) and record a command. Redo entries are discarded
+   * in linear mode; non-linear mode appends a reversible path from the retained tail.
+   * If the previous entry's `mergeWith` accepts the new command, the two are
    * coalesced into one entry.
    */
   push(command: Command, opts: PushOptions = {}): void {
     if (!opts.alreadyApplied) command.do(this.doc);
     this.onApply?.(command, "do");
     this.doc.dirty = true;
+    if (this.nonLinear && this.cursor < this.list.length) {
+      const tail = this.list.slice(this.cursor).reverse().map((e) => ({ command: e.command, forward: false }));
+      command = new HistoryPathCommand(command.label, [...tail, { command, forward: true }]);
+      const bytes = sizeOf(command);
+      this.list.push({ label: command.label, command, bytes, seq: this.seq++ });
+      this.cursor = this.list.length;
+      this.totalBytes += bytes;
+      this.evict();
+      this.emit();
+      return;
+    }
     // Drop redo tail.
     if (this.cursor < this.list.length) {
       for (let i = this.cursor; i < this.list.length; i++) this.totalBytes -= this.list[i]!.bytes;
       this.list.length = this.cursor;
-      for (const s of this.snaps) if (s.historyIndex > this.cursor) s.historyIndex = this.cursor;
+      for (const s of this.snaps) if (s.historyIndex > this.cursor) s.historyIndex = -1;
     }
     const prev = this.list[this.cursor - 1];
     if (!opts.noMerge && prev && prev.command.mergeWith && prev.command.mergeWith(command)) {
@@ -220,6 +256,49 @@ export class History {
     this.emit();
   }
 
+  /** Permanently remove every state after `index`, restoring that state if needed.
+   * Unlike undo, removed entries cannot be reached by redo. Snapshots remain independent. */
+  dropAfter(index: number): void {
+    if (!Number.isFinite(index)) return;
+    const target = Math.max(0, Math.min(this.list.length, Math.trunc(index)));
+    if (this.cursor > target) this.jumpTo(target);
+    for (const e of this.list.splice(target)) this.totalBytes -= e.bytes;
+    for (const s of this.snaps) if (s.historyIndex > target) s.historyIndex = -1;
+    this.emit();
+  }
+
+  /** Delete one state in non-linear mode without changing any later state's result.
+   * The next transition absorbs the removed transition so its original result survives. */
+  deleteState(index: number): boolean {
+    if (!Number.isInteger(index) || index < 1 || index > this.list.length) return false;
+    if (!this.nonLinear) {
+      this.dropAfter(index - 1);
+      return true;
+    }
+    if (this.cursor === index) this.jumpTo(index - 1);
+    const removed = this.list[index - 1]!;
+    const next = this.list[index];
+    if (next) {
+      const command = new HistoryPathCommand(next.label, [
+        { command: removed.command, forward: true },
+        { command: next.command, forward: true },
+      ]);
+      const bytes = sizeOf(command);
+      this.totalBytes += bytes - next.bytes;
+      this.list[index] = { ...next, command, bytes };
+    }
+    this.list.splice(index - 1, 1);
+    this.totalBytes -= removed.bytes;
+    if (this.cursor > index) this.cursor--;
+    for (const s of this.snaps) {
+      if (s.historyIndex === index) s.historyIndex = -1;
+      else if (s.historyIndex > index) s.historyIndex--;
+    }
+    this.evict();
+    this.emit();
+    return true;
+  }
+
   // ------------------------------------------------------------------ snapshots
 
   /** Snapshots in creation order. */
@@ -284,8 +363,7 @@ export class History {
    * entries were applied (`History.index` semantics; today's state for `index ===
    * this.index`).
    *
-   * Complexity: O(1) when a snapshot was taken at that index (its copy is returned);
-   * otherwise the live history is silently jumped to `index` (replaying the real
+   * The live history is silently jumped to `index` (replaying the real
    * commands — O(|index − cursor|) command applications, each undoing / redoing its own
    * dirty rects), the raster is cloned and the history is jumped back. Observers
    * (`onChange` / `onApply`) are not notified during the excursion, and the document
@@ -294,8 +372,8 @@ export class History {
    */
   rasterAt(index: number, layerId: LayerId): Raster | null {
     const target = Math.max(0, Math.min(this.list.length, index));
-    const snap = this.snaps.find((s) => s.historyIndex === target);
-    if (snap) return stateLayerRaster(snap.state, layerId);
+    // Snapshot indices are provenance, not identity: their source row can be
+    // deleted or replaced by a new edit. Always resolve a state through its commands.
     if (target === this.cursor) return cloneLayerRaster(this.doc, layerId);
     const back = this.cursor;
     const wasDirty = this.doc.dirty;
@@ -329,13 +407,14 @@ export class History {
       this.totalBytes -= e.bytes;
       this.cursor--;
       this._evicted++;
-      for (const s of this.snaps) s.historyIndex = Math.max(0, s.historyIndex - 1);
+      for (const s of this.snaps) s.historyIndex = Math.max(-1, s.historyIndex - 1);
     }
     // Then the farthest redo entries.
     while (this.totalBytes > this._budget && this.list.length > this.cursor) {
       const e = this.list.pop()!;
       this.totalBytes -= e.bytes;
     }
+    for (const s of this.snaps) if (s.historyIndex > this.list.length) s.historyIndex = -1;
   }
 
   private emit(): void {

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import ColorSwatchInput from "$lib/ui/controls/ColorSwatchInput.svelte";
   import Dialog from "./Dialog.svelte";
   import type { Resolver } from "./dialogs.svelte";
   import type { ExportFormat, ExportOptions } from "$lib/io/files";
@@ -60,7 +61,7 @@
       <label class="row">
         <span>Matte</span>
         <span class="slider">
-          <input type="color" class="swatch" bind:value={jpegBg} />
+          <ColorSwatchInput value={jpegBg} oninput={(e) => (jpegBg = e.currentTarget.value)} label="Background color" />
           <span class="hint">transparent pixels are flattened onto this color</span>
         </span>
       </label>
@@ -141,14 +142,6 @@
   .hint {
     color: var(--fg-2);
     font-size: var(--fs-xs);
-  }
-  .swatch {
-    width: 22px;
-    height: 22px;
-    padding: 0;
-    border: 1px solid var(--border-strong);
-    border-radius: 4px;
-    background: none;
   }
   .meta {
     margin: 12px 0 0;

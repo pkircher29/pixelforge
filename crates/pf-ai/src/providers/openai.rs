@@ -301,6 +301,17 @@ impl ImageProvider for OpenAiProvider {
             .await?;
         http::ensure_success(&self.id(), resp).await.map(|_| ())
     }
+
+    async fn test_model(&self, model: &str) -> Result<(), Error> {
+        crate::provider::validate_model_id(model)?;
+        let resp = self
+            .client
+            .get(self.url(&format!("{MODELS_PATH}/{model}")))
+            .header(reqwest::header::AUTHORIZATION, http::bearer(&self.auth))
+            .send()
+            .await?;
+        http::ensure_success(&self.id(), resp).await.map(|_| ())
+    }
 }
 
 /// Verbatim response shape (docs/ai-research.md section 1).

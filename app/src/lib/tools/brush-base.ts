@@ -10,6 +10,8 @@ import { brushStore } from "./brush-store.svelte";
 import { resolvePaintTarget, type PaintTarget } from "./paint-target";
 import { CompositeSampler } from "./util";
 import { sampleColor } from "./eyedropper";
+import { tipById } from "./brush-tips";
+import { brushOutline } from "./brush-outline";
 
 export const BRUSH_PICKER_OPTION: ToolOption = { kind: "custom", key: "brush", renderer: "brush-picker", label: "Brush" };
 export const OPACITY_OPTION: ToolOption = { kind: "number", key: "opacity", label: "Opacity", min: 1, max: 100, step: 1, default: 100, unit: "%" };
@@ -162,6 +164,11 @@ export abstract class BrushBasedTool implements Tool {
     if (rect) ctx.touch({ layerId: t.dirtyId, rect });
   }
 
+  onPointerLeave(ctx: ToolContext): void {
+    this.hover = null;
+    ctx.invalidateOverlay();
+  }
+
   onPointerUp(e: ToolEvent, ctx: ToolContext): void {
     const s = this.stroke;
     const t = this.target;
@@ -173,15 +180,16 @@ export abstract class BrushBasedTool implements Tool {
     const tail = s.catchUp({ x: e.x - t.offset.x, y: e.y - t.offset.y }, { pressure: e.pressure, pointerType: e.pointerType });
     if (tail) ctx.touch({ layerId: t.dirtyId, rect: tail });
     this.lastEnd = { x: e.x, y: e.y };
-    this.beforeFinish(ctx, s, t);
-    const cmd = t.finish(captured, this.spec.label, s.dirtyRect);
+    const processed = this.beforeFinish(ctx, s, t);
+    const dirty = processed && s.dirtyRect ? Rect.union(processed, s.dirtyRect) : processed || s.dirtyRect;
+    const cmd = t.finish(captured, this.spec.label, dirty);
     if (cmd) ctx.exec(cmd, { alreadyApplied: true, noMerge: true });
-    if (s.dirtyRect) ctx.touch({ layerId: t.dirtyId, rect: s.dirtyRect });
+    if (dirty) ctx.touch({ layerId: t.dirtyId, rect: dirty });
     this.onStrokeEnd(ctx, s, t);
   }
 
   /** Hook before the undo command snapshots the result (healing post-processes here). */
-  protected beforeFinish(_ctx: ToolContext, _stroke: BrushStroke, _target: PaintTarget): void {}
+  protected beforeFinish(_ctx: ToolContext, _stroke: BrushStroke, _target: PaintTarget): Rect | void {}
 
   onKey(e: KeyboardEvent, ctx: ToolContext, phase: "down" | "up"): boolean {
     if (phase !== "down" || e.ctrlKey || e.metaKey || e.altKey) return false;
@@ -257,16 +265,26 @@ export abstract class BrushBasedTool implements Tool {
       g.stroke();
     }
     g.translate(center.x, center.y);
-    g.rotate((-s.angle * Math.PI) / 180 + ctx.viewport.rotation);
+    const tip = tipById(s.tip);
+    const custom = tip.kind === "custom";
+    g.rotate(custom ? ctx.viewport.rotation : (-s.angle * Math.PI) / 180 + ctx.viewport.rotation);
     const rr = Math.max(1.5, r);
     const ry = Math.max(1, rr * (s.roundness / 100));
     g.lineWidth = 1;
     g.beginPath();
-    g.ellipse(0, 0, rr, ry, 0, 0, Math.PI * 2);
+    if (custom) {
+      for (const [x, y, x2, y2] of brushOutline(tip, s.size * zoom, s.angle, s.roundness / 100, s.flipX, s.flipY)) {
+        g.moveTo(x, y); g.lineTo(x2, y2);
+      }
+      g.lineWidth = 3;
+    } else g.ellipse(0, 0, rr, ry, 0, 0, Math.PI * 2);
     g.strokeStyle = "rgba(0,0,0,0.65)";
     g.stroke();
-    g.beginPath();
-    g.ellipse(0, 0, Math.max(1, rr - 1), Math.max(0.5, ry - 1), 0, 0, Math.PI * 2);
+    if (!custom) {
+      g.beginPath();
+      g.ellipse(0, 0, Math.max(1, rr - 1), Math.max(0.5, ry - 1), 0, 0, Math.PI * 2);
+    }
+    g.lineWidth = 1;
     g.strokeStyle = "rgba(255,255,255,0.9)";
     g.stroke();
     if (r < 4) {

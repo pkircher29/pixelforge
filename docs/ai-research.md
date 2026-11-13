@@ -380,9 +380,15 @@ that work with OAuth" was not fetched (Reddit blocks the fetcher); nothing below
   that `/v1/images/generations` and `/v1/images/edits` accept the token. Once issued, paste it into
   AI Providers > Grok > "xAI OAuth client ID" (or set `PF_XAI_OAUTH_CLIENT_ID`); no code change needed.
 
-### 5.3 Google Gemini: not implemented (re-confirmed)
+### 5.3 Google Gemini: API OAuth implemented; subscription usage remains unsupported
 
 https://ai.google.dev/gemini-api/docs/google-ai-plans (fetched 2026-10-06): "Google AI plan benefits for
 developer usage apply only within the Google AI Studio web interface. Direct use of the Gemini API (such as
-using API keys or external applications) is billed and managed separately." No subscription sign-in; the
-Gemini card says so and links the page. (Section 3 has the Code Assist deprecation and ToS history.)
+using API keys or external applications) is billed and managed separately." This does **not** mean
+API keys are the only authentication method: the official
+[Gemini OAuth guide](https://ai.google.dev/gemini-api/docs/oauth) documents Google desktop OAuth.
+The new implementation uses a registered desktop client, S256 PKCE, a loopback callback,
+refresh/revocation and `x-goog-user-project`. Secrets stay in the credential store.
+Earlier statements above that API keys were the only option refer to the original implementation
+and are corrected by this section. OAuth authorizes separately billed API access; it does not
+reuse consumer CLI credentials or grant subscription image credits. See [setup](oauth-setup.md).

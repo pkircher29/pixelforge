@@ -29,6 +29,15 @@ pub enum Error {
     #[error("authentication failed: {0}")]
     Auth(String),
 
+    /// API credits, billing or a configured spending/usage limit need attention.
+    #[error("{provider} API billing or quota limit: {message}")]
+    Quota {
+        /// Provider that refused the request.
+        provider: ProviderId,
+        /// Provider explanation with secrets removed.
+        message: String,
+    },
+
     /// The provider asked us to slow down (HTTP 429).
     #[error("rate limited by provider")]
     RateLimited {
@@ -161,6 +170,7 @@ impl Error {
             Error::Unsupported { .. } => "ai_unsupported",
             Error::InvalidRequest(_) => "ai_invalid_request",
             Error::Auth(_) => "ai_auth",
+            Error::Quota { .. } => "ai_quota",
             Error::RateLimited { .. } => "ai_rate_limited",
             Error::Rejected(_) => "ai_rejected",
             Error::Moderation { .. } => "ai_moderation_blocked",

@@ -4,10 +4,12 @@
  * "Edit prompt & re-run" refills the form).
  */
 
-import type { Raster } from "$lib/engine";
+import type { Raster, Selection } from "$lib/engine";
+import { ui } from "$lib/stores/ui.svelte";
 import { listProviders, hasTauri } from "./client";
 import { toFriendlyError } from "./errors";
 import type { AiRunRequest } from "./run";
+import { supportsSampling, type SamplingOptions } from "./sampling";
 import { canGenerate, isReady, type AiMode, type ImageSize, type ProviderId, type ProviderInfo } from "./types";
 
 export interface RefImage {
@@ -49,7 +51,19 @@ class AiUiState {
   feather = $state(2);
   newDocument = $state(false);
   forcedMode = $state<AiMode | undefined>(undefined);
+  generativeFill = $state(false);
+  expansion = $state.raw<{ docId: string; selection: Selection } | null>(null);
+  removal = $state.raw<{ docId: string; selection: Selection } | null>(null);
   showAdvanced = $state(false);
+  samplingByProvider = $state<Partial<Record<ProviderId, SamplingOptions>>>({});
+
+  get sampling(): SamplingOptions {
+    return supportsSampling(this.provider) ? this.samplingByProvider[this.providerId] ?? {} : {};
+  }
+
+  setSampling(field: "seed" | "steps", value: number | undefined): void {
+    this.samplingByProvider[this.providerId] = { ...this.sampling, [field]: value };
+  }
 
   /** Bumped by commands that want the prompt focused. */
   focusRequest = $state(0);
@@ -106,8 +120,31 @@ class AiUiState {
   }
 
   focusPrompt(forced?: AiMode): void {
+    this.generativeFill = false;
+    ui.placePanel("ai", "history");
+    ui.activateTab("ai");
+    if (ui.workspace.iconized) ui.setIconized(false);
     this.forcedMode = forced;
     this.focusRequest++;
+  }
+
+  focusGenerativeFill(): void {
+    this.focusPrompt("mask");
+    this.generativeFill = true;
+    this.n = 3;
+  }
+
+  focusGenerativeExpand(docId: string, selection: Selection): void {
+    this.expansion = { docId, selection };
+    this.prompt = "Extend the image naturally into the empty area, matching its lighting, perspective and style.";
+    this.feather = 0;
+    this.focusGenerativeFill();
+  }
+
+  prepareRemoval(docId: string, selection: Selection, resetPrompt: boolean): void {
+    this.removal = { docId, selection };
+    if (resetPrompt) this.prompt = "Remove the object inside the marked area. Reconstruct the background naturally, matching the surrounding image, lighting and texture.";
+    this.feather = 2;
   }
 }
 

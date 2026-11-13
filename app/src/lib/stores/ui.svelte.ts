@@ -118,6 +118,7 @@ class UiStore {
    * `"rgb"` when the document changes. Owned by `layers-v2`, read by CanvasView.
    */
   viewChannel = $state<ViewChannel>("rgb");
+  alphaOverlays = $state<string[]>([]);
 
   constructor() {
     const p = load();

@@ -16,8 +16,8 @@ export interface HistoryOptions {
   autoFirstSnapshot: boolean;
   /** PS "Show New Snapshot Dialog by Default" (default off). */
   showSnapshotDialog: boolean;
-  /** PS "Allow Non-Linear History" — not supported (always off). */
-  nonLinear: false;
+  /** Keep later states when editing or deleting an earlier state. */
+  nonLinear: boolean;
 }
 
 export const DEFAULT_HISTORY_OPTIONS: HistoryOptions = { autoFirstSnapshot: true, showSnapshotDialog: false, nonLinear: false };
@@ -42,12 +42,14 @@ class HistoryUi {
     if (raw && typeof raw === "object") {
       if (typeof raw.autoFirstSnapshot === "boolean") this.options.autoFirstSnapshot = raw.autoFirstSnapshot;
       if (typeof raw.showSnapshotDialog === "boolean") this.options.showSnapshotDialog = raw.showSnapshotDialog;
+      if (typeof raw.nonLinear === "boolean") this.options.nonLinear = raw.nonLinear;
     }
   }
 
-  setOptions(patch: Partial<Omit<HistoryOptions, "nonLinear">>): void {
-    this.options = { ...this.options, ...patch, nonLinear: false };
-    void settings.set({ [HISTORY_OPTIONS_KEY]: { autoFirstSnapshot: this.options.autoFirstSnapshot, showSnapshotDialog: this.options.showSnapshotDialog } });
+  setOptions(patch: Partial<HistoryOptions>): void {
+    this.options = { ...this.options, ...patch };
+    for (const entry of docStore.docs) entry.history.nonLinear = this.options.nonLinear;
+    void settings.set({ [HISTORY_OPTIONS_KEY]: { ...this.options } });
   }
 
   /** Take the automatic first snapshot once per document (named after the document). */
@@ -128,6 +130,21 @@ class HistoryUi {
     if (index === entry.history.index) return;
     entry.history.jumpTo(index);
     entry.dirty = true;
+    entry.version++;
+    entry.pixelVersion++;
+    entry.compositor?.invalidateAll();
+  }
+
+  deleteState(entry: OpenDoc, index: number): void {
+    const h = entry.history;
+    if (!h.deleteState(index)) return;
+    const source = toolStore.historySource;
+    if (source?.kind === "state") {
+      if ((!h.nonLinear && source.index >= index) || source.index === index) toolStore.historySource = null;
+      else if (h.nonLinear && source.index > index) toolStore.historySource = { kind: "state", index: source.index - 1 };
+    }
+    this.selected = null;
+    entry.dirty = entry.doc.dirty;
     entry.version++;
     entry.pixelVersion++;
     entry.compositor?.invalidateAll();

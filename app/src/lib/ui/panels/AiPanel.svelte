@@ -8,20 +8,23 @@
    * a Run split button ("Run on all" in the caret half), compact job rows with a thin
    * progress bar. Behaviour is unchanged from Wave 3/5.
    */
-  import { onMount } from "svelte";
+  import { onMount, tick } from "svelte";
   import { listen } from "@tauri-apps/api/event";
   import { invoke } from "@tauri-apps/api/core";
   import { Raster } from "$lib/engine";
   import { decodeFrame } from "$lib/io/frame";
   import { docStore } from "$lib/stores/doc.svelte";
   import { assistProviders, improvePrompt } from "$lib/ai/assist";
-  import { hasTauri } from "$lib/ai/client";
+  import { hasTauri, testKey } from "$lib/ai/client";
+  import { toFriendlyError } from "$lib/ai/errors";
   import { openApiKeysDialog, openShootoutDialog } from "$lib/ai/dialogs";
   import { jobStore, TERMINAL, type AiJob } from "$lib/ai/jobs.svelte";
   import { toggleDiffOverlay } from "$lib/ai/overlay";
   import { decodeImage, thumbnailDataUrl } from "$lib/ai/png";
   import { estimateCost, formatUsd } from "$lib/ai/pricing";
   import ProviderPicker from "$lib/ai/ProviderPicker.svelte";
+  import PromptLibrary from "$lib/ai/PromptLibrary.svelte";
+  import { supportsSampling } from "$lib/ai/sampling";
   import { applyAll, applyOne, resolveForDoc, resultPreviews, runAi, runFor, type AiRunRequest } from "$lib/ai/run";
   import { runOnAll, shootoutProviders } from "$lib/ai/shootout";
   import Icon from "$lib/ui/icons/Icon.svelte";
@@ -30,7 +33,7 @@
   import ScrubbyNumber from "$lib/ui/controls/ScrubbyNumber.svelte";
   import { aiSections, modeTooltip, progressFraction } from "./ai-panel-ui.svelte";
   import { aiUi, type SizeOption } from "$lib/ai/ui.svelte";
-  import { isReady, notReadyNote, onSubscription, type AiMode, type ImageSize, type ProviderId } from "$lib/ai/types";
+  import { isReady, notReadyNote, onOAuth, onSubscription, type AiMode, type ImageSize, type ProviderId } from "$lib/ai/types";
 
   let promptEl = $state<HTMLTextAreaElement | null>(null);
   let dropEl = $state<HTMLDivElement | null>(null);
@@ -39,6 +42,23 @@
   let notice = $state<{ kind: "info" | "error"; text: string } | null>(null);
   let previews = $state<Record<string, string[]>>({});
   let busy = $state(false);
+  let checkingModel = $state(false);
+
+  async function checkModel(): Promise<void> {
+    if (!provider || checkingModel) return;
+    const selected = provider;
+    const model = effectiveModel;
+    checkingModel = true;
+    notice = null;
+    try {
+      await testKey(selected.id, model);
+      notice = { kind: "info", text: `${selected.name} returned metadata for ${model}. Image generation, billing and quota have not been tested.` };
+    } catch (e) {
+      notice = { kind: "error", text: `${selected.name} model ${model}: ${toFriendlyError(e).detail}` };
+    } finally {
+      checkingModel = false;
+    }
+  }
 
   const version = $derived(docStore.active?.version ?? -1);
   const doc = $derived.by(() => {
@@ -56,6 +76,7 @@
   const effectiveModel = $derived(aiUi.model || (isEdit ? (provider?.editModel ?? "") : (provider?.defaultModel ?? "")));
   const maxRefs = $derived(Math.max(0, (caps?.maxRefs ?? 1) - 1));
   const maxN = $derived(Math.min(4, caps?.maxVariants ?? 1));
+  const variantCount = $derived(aiUi.generativeFill ? 3 : aiUi.n);
 
   const qualityOptions = $derived.by((): string[] => {
     if (!provider) return [];
@@ -106,11 +127,11 @@
     provider && onSubscription(provider)
       ? { usd: 0, perImage: 0, approx: false, note: "Uses your subscription plan: no per-request API charge (counts toward the plan's limits)." }
       : provider
-      ? estimateCost({ provider: provider.id, model: effectiveModel, mode, size: chosenSize, quality: aiUi.quality || undefined, n: aiUi.n, local: provider.local })
+      ? estimateCost({ provider: provider.id, model: effectiveModel, mode, size: chosenSize, quality: aiUi.quality || undefined, n: variantCount, local: provider.local })
       : null,
   );
 
-  const canRun = $derived(Boolean(provider && aiUi.prompt.trim().length > 0 && !busy && ((provider ? isReady(provider) : false) || !hasTauri())));
+  const canRun = $derived(Boolean(provider && aiUi.prompt.trim().length > 0 && !busy && (!aiUi.generativeFill || (mode === "mask" && maxN >= 3)) && ((provider ? isReady(provider) : false) || !hasTauri())));
   const assistants = $derived(assistProviders(aiUi.providers));
   let improving = $state(false);
 
@@ -165,7 +186,10 @@
 
   $effect(() => {
     void aiUi.focusRequest;
-    if (aiUi.focusRequest > 0) promptEl?.focus();
+    if (aiUi.focusRequest > 0) {
+      aiSections.prompt = true;
+      void tick().then(() => promptEl?.focus());
+    }
   });
 
   $effect(() => {
@@ -257,8 +281,10 @@
       prompt: aiUi.prompt,
       negativePrompt: aiUi.negativePrompt.trim() || undefined,
       size: chosenSize,
-      n: aiUi.n,
+      n: variantCount,
+      generativeFill: aiUi.generativeFill,
       quality: aiUi.quality || undefined,
+      ...aiUi.sampling,
       transparent: aiUi.transparent && provider.capabilities.transparentBg,
       refs: aiUi.refs.map((r) => r.raster),
       timeoutSecs: aiUi.timeoutSecs !== 180 ? aiUi.timeoutSecs : undefined,
@@ -267,11 +293,12 @@
       feather: aiUi.feather,
     };
     aiUi.lastRun = req;
-    aiUi.forcedMode = undefined;
     busy = true;
     try {
       const r = await runAi(req);
-      if (r.job.state === "completed" && r.job.results && r.job.results.length > 1) {
+      if (r.job.state === "completed" && req.generativeFill) {
+        notice = { kind: "info", text: "Generative Fill added three editable variants. Select the group and choose a variant in Properties." };
+      } else if (r.job.state === "completed" && r.job.results && r.job.results.length > 1) {
         previews[r.job.id] = await resultPreviews(r.job);
         notice = { kind: "info", text: `${r.job.results.length} variants ready. Click one to add it as a layer.` };
       } else if (r.job.state === "completed") {
@@ -343,14 +370,25 @@
       <span class="flbl">Model:</span>
       <span class="grow-field"><PsSelect value={aiUi.model} choices={modelChoices} onchange={(v) => (aiUi.model = v)} /></span>
     </div>
+    {#if provider && ["open_ai", "gemini", "x_ai"].includes(provider.id) && !onSubscription(provider)}
+      <button type="button" class="textbtn" disabled={checkingModel || !hasTauri() || !isReady(provider)} title="Read model metadata without generating an image" onclick={() => void checkModel()}>{checkingModel ? "Checking model…" : "Check model"}</button>
+    {/if}
     <div class="frow">
       <span class="flbl">Mode:</span>
+      <select class="input" aria-label="AI mode" value={aiUi.forcedMode ?? "auto"} onchange={(e) => { aiUi.forcedMode = e.currentTarget.value === "auto" ? undefined : e.currentTarget.value as AiMode; aiUi.model = ""; aiUi.generativeFill = false; }}>
+        <option value="auto">Auto</option>
+        <option value="generate">Generate new image</option>
+        <option value="instruct">Edit whole image</option>
+        <option value="mask">Edit selection</option>
+      </select>
+    </div>
+    <div class="frow">
       <span class="mode" title={modeTooltip(resolution.reason, resolution.emulated)}>{modeLabel}{resolution.emulated ? " (emulated)" : ""}</span>
-      {#if aiUi.forcedMode}
-        <button type="button" class="textbtn" title="Pick the mode from the selection again" onclick={() => (aiUi.forcedMode = undefined)}>Auto</button>
-      {/if}
     </div>
     <div class="flow" title="Every result lands on a new layer, so providers can be chained.">{flow}</div>
+    {#if aiUi.generativeFill}
+      <p class="hint">Generative Fill · three editable variants. {mode !== "mask" ? "Make a partial selection to continue." : maxN < 3 ? "Choose a provider that supports three variants." : "Switch variants in Properties after generation."}</p>
+    {/if}
   </div>
 
   {#if aiUi.providersError}
@@ -379,6 +417,7 @@
         {#if aiUi.showNegative}
           <textarea bind:value={aiUi.negativePrompt} class="input prompt small" rows="2" placeholder="Things to leave out (folded into the prompt)" aria-label="Negative prompt"></textarea>
         {/if}
+        <PromptLibrary />
       </div>
     {/if}
   </section>
@@ -432,7 +471,7 @@
           <span class="grow-field"><PsSelect value={aiUi.sizeKey} choices={sizeChoices} onchange={(v) => (aiUi.sizeKey = v)} /></span>
         </div>
         <div class="frow">
-          <ScrubbyNumber label="Variants" value={aiUi.n} min={1} max={Math.max(1, maxN)} disabled={maxN <= 1} width={32} onchange={(v) => (aiUi.n = Math.round(v))} />
+          <ScrubbyNumber label="Variants" value={variantCount} min={1} max={Math.max(1, maxN)} disabled={maxN <= 1 || aiUi.generativeFill} width={32} onchange={(v) => (aiUi.n = Math.round(v))} />
           {#if qualityOptions.length}
             <span class="flbl q">Quality:</span>
             <PsSelect value={aiUi.quality} choices={qualityChoices} width={80} onchange={(v) => (aiUi.quality = v)} />
@@ -454,6 +493,15 @@
     </button>
     {#if aiUi.showAdvanced}
       <div class="secbody">
+        {#if supportsSampling(provider)}
+          <label class="frow">Seed:
+            <input class="input" type="number" aria-label="Seed" min="0" max="2147483647" step="1" placeholder="Provider default" value={aiUi.sampling.seed ?? ""} oninput={(e) => aiUi.setSampling("seed", e.currentTarget.value === "" ? undefined : e.currentTarget.valueAsNumber)} />
+          </label>
+          <label class="frow">Steps:
+            <input class="input" type="number" aria-label="Sampling steps" min="1" max="150" step="1" placeholder="Provider default" value={aiUi.sampling.steps ?? ""} oninput={(e) => aiUi.setSampling("steps", e.currentTarget.value === "" ? undefined : e.currentTarget.valueAsNumber)} />
+          </label>
+          <p class="hint">Blank uses this provider's saved defaults. Model support varies; a fixed seed does not guarantee identical images.</p>
+        {/if}
         <div class="frow">
           <ScrubbyNumber label="Timeout" value={aiUi.timeoutSecs} min={10} max={3600} step={10} unit="s" width={40} onchange={(v) => (aiUi.timeoutSecs = Math.round(v))} />
           <ScrubbyNumber label="Edge feather" value={aiUi.feather} min={0} max={64} unit="px" width={32} onchange={(v) => (aiUi.feather = Math.round(v))} />
@@ -486,7 +534,7 @@
     {/if}
   </div>
   {#if provider && !isReady(provider) && hasTauri()}
-    <button type="button" class="textbtn keylink" onclick={() => openApiKeysDialog({ select: provider.id })}>{onSubscription(provider) ? `Sign in to ${provider.name} (${notReadyNote(provider)})…` : `Add a ${provider.name} key…`}</button>
+    <button type="button" class="textbtn keylink" onclick={() => openApiKeysDialog({ select: provider.id })}>{onOAuth(provider) ? `Sign in to ${provider.name} (${notReadyNote(provider)})…` : `Add a ${provider.name} key…`}</button>
   {/if}
 
   {#if notice}
@@ -520,8 +568,14 @@
           </div>
           {#if job.error}
             <div class="jerr">{job.error.title}{#if job.error.hint}{" "}<span class="dim">{job.error.hint}</span>{/if}</div>
+            {#if job.error.detail}
+              <details class="error-details">
+                <summary>Provider details</summary>
+                <pre>{job.error.detail}</pre>
+              </details>
+            {/if}
           {/if}
-          {#if job.state === "completed" && job.results && job.results.length > 1}
+          {#if job.state === "completed" && job.results && job.results.length > 1 && !runFor(job.id)?.req.generativeFill}
             <div class="variants">
               {#each previews[job.id] ?? [] as url, i (i)}
                 <button type="button" class="variant" class:added={job.applied.includes(i)} title="Add variant {i + 1} as a layer" onclick={() => void addVariant(job, i)}>
@@ -832,6 +886,19 @@
   .jerr {
     padding-top: 2px;
     color: #ff9a9a;
+  }
+  .error-details {
+    margin-top: 4px;
+    user-select: text;
+  }
+  .error-details summary {
+    cursor: pointer;
+  }
+  .error-details pre {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    font: inherit;
+    margin: 4px 0;
   }
   .variants {
     display: flex;

@@ -32,6 +32,8 @@ type AiHistoryEntry = {
   size?: { width: number; height: number };
   n: number;                  // variants requested
   quality?: string;           // provider-specific tier, verbatim
+  seed?: number;              // explicit per-job override, 0 is a valid seed
+  steps?: number;             // explicit per-job sampling-step override
   transparent?: boolean;      // OpenAI transparent background
   refs?: number;              // reference images sent (count only)
   maskRect?: { x: number; y: number; w: number; h: number };  // selection bbox (native mask) or the crop sent (emulated), doc space

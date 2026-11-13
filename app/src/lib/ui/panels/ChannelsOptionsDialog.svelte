@@ -1,4 +1,5 @@
 <script lang="ts">
+  import ColorSwatchInput from "$lib/ui/controls/ColorSwatchInput.svelte";
   /** PS "Channel Options": Name, Color Indicates (masked / selected — informational), overlay Color + Opacity. */
   import Dialog from "../dialogs/Dialog.svelte";
   import type { Resolver } from "../dialogs/dialogs.svelte";
@@ -36,7 +37,7 @@
     <fieldset class="ps-group">
       <legend>Color</legend>
       <div class="inline">
-        <input type="color" class="swatch" value={rgbaToHex(color)} oninput={(e) => { const c = hexToRgba(e.currentTarget.value); if (c) color = c; }} aria-label="Overlay color" />
+        <ColorSwatchInput color={color} value={rgbaToHex(color)} oninput={(e) => { const c = hexToRgba(e.currentTarget.value); if (c) color = c; }} label="Overlay color" />
         <label class="c">Opacity: <input class="input num" type="number" min="0" max="100" bind:value={opacity} /> %</label>
       </div>
     </fieldset>
@@ -75,13 +76,6 @@
     display: flex;
     align-items: center;
     gap: 12px;
-  }
-  .swatch {
-    width: 40px;
-    height: 20px;
-    padding: 0;
-    border: 1px solid var(--ps-border-dark);
-    background: none;
   }
   .num {
     width: 50px;

@@ -63,6 +63,8 @@ export interface AiHistoryEntry {
   /** Variants requested. */
   n: number;
   quality?: string;
+  seed?: number;
+  steps?: number;
   transparent?: boolean;
   /** Reference images sent (count only; the pixels are not kept). */
   refs?: number;

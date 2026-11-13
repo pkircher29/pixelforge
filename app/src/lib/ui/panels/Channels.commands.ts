@@ -26,11 +26,12 @@ import { toast } from "$lib/stores/toast.svelte";
 import { registerCommands } from "../registry.svelte";
 import { openDialog } from "../dialogs/dialogs.svelte";
 import { layersUi } from "./Layers.store.svelte";
-import type { ChannelRow } from "./Channels.model";
+import { buildChannelRows, clickChannel, type ChannelRow } from "./Channels.model";
 import ChannelsOptionsDialog from "./ChannelsOptionsDialog.svelte";
 
-export function applyChannelView(next: { view: ViewChannel; hidden: string[] }): void {
+export function applyChannelView(next: { view: ViewChannel; hidden: string[]; overlays?: string[] }): void {
   ui.viewChannel = next.view;
+  ui.alphaOverlays = next.overlays ?? [];
   layersUi.hiddenChannels = next.hidden;
   docStore.touch();
 }
@@ -115,7 +116,12 @@ const viewCmd = (id: string, label: string, key: string, view: () => ViewChannel
   enabled: () => !!docStore.doc && view() !== null,
   run: () => {
     const v = view();
-    if (v) applyChannelView({ view: v, hidden: v === "rgb" ? [] : layersUi.hiddenChannels });
+    const d = docStore.doc;
+    if (v && d) {
+      const rows = buildChannelRows(d, docStore.activeLayer, ui.viewChannel, layersUi.hiddenChannels, ui.alphaOverlays);
+      const row = rows.find(r => r.view === v);
+      if (row) applyChannelView(clickChannel(row, rows));
+    }
   },
 });
 registerCommands([

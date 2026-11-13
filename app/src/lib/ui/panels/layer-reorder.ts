@@ -77,6 +77,24 @@ export interface ResolvedDrop {
   parentId: LayerId | null;
 }
 
+/** Selected groups own their children; preserve document order, not click order. */
+export function movingLayerIds(doc: Document, ids: readonly LayerId[]): LayerId[] {
+  const selected = new Set(ids);
+  return doc.layers.filter(l => selected.has(l.id) || (l.parentId !== null && selected.has(l.parentId))).map(l => l.id);
+}
+
+export function resolveMultiDrop(doc: Document, ids: readonly LayerId[], target: DropTarget): ResolvedDrop | null {
+  const moving = new Set(movingLayerIds(doc, ids));
+  if (moving.has(target.id)) return null;
+  const layers = doc.layers.filter(l => moving.has(l.id));
+  const representative = layers.find(l => l.kind === "group") ?? layers[0];
+  if (!representative) return null;
+  const keep = new Set(movingLayerIds(doc, [representative.id]));
+  // Resolve against the destination stack after removing every other moving block.
+  const remaining = doc.layers.filter(l => !moving.has(l.id) || keep.has(l.id));
+  return resolveDrop({ ...doc, layers: remaining }, representative.id, target);
+}
+
 /**
  * Translate a drop target into a `MoveLayerToCommand` destination. "Above row R" in
  * the panel means directly after R's block in engine order; "below R" means before it

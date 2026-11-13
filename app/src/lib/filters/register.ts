@@ -76,7 +76,7 @@ export function registerFilterCommands(): void {
     label: "Last Filter",
     menu: "Filter",
     order: 0,
-    shortcut: "CmdOrCtrl+F",
+    shortcut: "CmdOrCtrl+Alt+F",
     keywords: ["repeat", "again"],
     enabled: () => rasterLayerEnabled() && getLastFilter() !== null,
     run: guarded(() => {

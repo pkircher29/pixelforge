@@ -243,7 +243,9 @@ type JobEvent = { job: JobId; provider: ProviderId } & (
 type GenerateParams = {
   provider: ProviderId; prompt: string; negativePrompt?: string; size?: ImageSize;
   n?: number /* default 1 */; model?: string; quality?: string; transparent?: boolean;
-  seed?: number /* ignored by all three providers today */; timeoutSecs?: number /* 10..3600 */;
+  seed?: number /* integer 0..2147483647, supported custom providers only */;
+  steps?: number /* integer 1..150, supported custom providers only */;
+  timeoutSecs?: number /* 10..3600 */;
 };
 
 type EditParams = GenerateParams & {
@@ -271,7 +273,7 @@ APIs has a negative-prompt field). `size` maps to OpenAI `size` (presets or a cu
 | `ai_job_status` | `{ job: JobId }` | `JobStatus` (`ai_unknown_job` otherwise) |
 | `ai_cancel` | `{ job: JobId }` | `boolean` — `true` if it was still queued/running |
 | `ai_take_result` | `{ job: JobId }` | frame (below); `ai_no_result` if not finished / already taken |
-| `ai_test_key` | `{ provider: ProviderId }` | `null`; `ai_auth` on a bad key, `ai_not_configured` if none. For `custom:<id>` this runs the kind's probe. |
+| `ai_test_key` | `{ provider: ProviderId, model?: string }` | `null`; without `model`, checks credentials (custom providers run their kind's probe). With `model`, built-ins perform a read-only metadata GET for that model; other backends return `ai_unsupported`. Neither form generates an image or proves billing/quota. Errors retain the provider response; `ai_auth` on a rejected key, `ai_not_configured` if none. |
 
 `ai_list_providers` returns the three built-ins followed by every registered custom
 provider (registry order). `ai_submit_*` accept any `ProviderId`; a custom id resolves its
@@ -341,6 +343,7 @@ before they start. Cancelling a running job aborts the HTTP request.
 | `ai_not_configured` | no key stored for that provider | after adding a key |
 | `ai_auth` | provider rejected the key (401/403) | no |
 | `ai_rate_limited` | 429; message may carry `Retry-After` | yes, later |
+| `ai_quota` | Explicit API credit, billing, spend or usage-limit error; retains the provider explanation | no; review API credits/limits first |
 | `ai_moderation_blocked` | safety filter blocked prompt or image | change the prompt |
 | `ai_bad_request` | provider rejected the request (400/422) | fix the request |
 | `ai_rejected` | provider rejected the job during execution (e.g. ComfyUI node error or Replicate failure) | fix workflow / params |
@@ -362,7 +365,7 @@ their secrets go to the key store under the user name `custom:<id>` and never cr
 back. Research and wire shapes per kind: `docs/ai-research.md` §4.
 
 ```ts
-type CustomKind = 'openai_compat' | 'hugging_face' | 'ollama' | 'comfy_ui' | 'a1111' | 'replicate';
+type CustomKind = 'openai_compat' | 'hugging_face' | 'ollama' | 'comfy_ui' | 'a1111' | 'replicate' | 'fal';
 
 type CustomProvider = {
   id: string;                  // [a-z0-9][a-z0-9-]{0,63}, unique
@@ -421,7 +424,7 @@ user name `oauth:<provider>` (`oauth:open_ai`, `oauth:x_ai`) and never cross IPC
 refreshed (serialized) 120 s before expiry and once after a 401.
 
 ```ts
-type AuthMode = 'api_key' | 'subscription';
+type AuthMode = 'api_key' | 'subscription' | 'oauth'; // oauth = Gemini API, separately billed
 // ProviderInfo gains:
 //   authModes: AuthMode[]        // ['api_key'] or ['api_key','subscription'] (open_ai, x_ai)
 //   authActive: AuthMode         // what requests use; settings.json aiAuth.<provider>.mode
@@ -443,14 +446,15 @@ type OAuthEvent = { provider: ProviderId; state: 'waiting' | 'signed_in' | 'sign
 
 | command | args | returns |
 |---|---|---|
-| `ai_oauth_start` | `{ provider }` | `OAuthStart`. Opens the system browser (`tauri-plugin-opener`), emits `waiting`, finishes in the background and emits `signed_in` (switching `aiAuth.<provider>.mode` to `subscription`) or `error`. Listen to `ai://oauth` **before** calling. `ai_oauth_unavailable` for Gemini and for Grok without a client ID. |
+| `ai_oauth_start` | `{ provider }` | `OAuthStart`. Opens the browser and finishes via `signed_in` (mode `oauth` for Gemini, `subscription` otherwise) or `error`. Listen to `ai://oauth` **before** calling. Unavailable when Google desktop configuration or an xAI-issued client ID is missing. |
 | `ai_oauth_cancel` | `{ provider }` | `boolean` (a sign-in was pending) |
 | `ai_oauth_status` | `{ provider }` | `OAuthStatus` (no network) |
 | `ai_oauth_sign_out` | `{ provider }` | `OAuthStatus`; revokes the refresh token at the documented `revocation_endpoint` (best effort) and deletes the record; emits `signed_out` |
 | `ai_oauth_check_images` | `{ provider, live?: boolean }` | `ImageAccess`. Without `live`: the documented verdict, no request (OpenAI: not eligible, per "Preview limitations"; xAI: `unknown`). `live: true` sends one small image request with the plan token, which **uses one image of the plan if allowed**; the verdict is stored and gates subscription image requests (OpenAI). |
-| `ai_auth_configure` | `{ provider, mode?: AuthMode, fallbackToKey?: boolean, xaiClientId?: string }` | `OAuthStatus`. `fallbackToKey` (default off) re-sends with the stored API key **only** on `ai_plan_limit`. `xaiClientId: ""` clears it. |
+| `ai_auth_configure` | `{ provider, mode?: AuthMode, fallbackToKey?: boolean, xaiClientId?: string, google?: { clientId: string, clientSecret: string, project: string } }` | `OAuthStatus`. Google fields apply only to Gemini; sign out/cancel before changing them. The secret is credential-store-only, never returned over IPC. `fallbackToKey` (default off) applies only to subscription limits. `xaiClientId: ""` clears it. |
 
-Event `ai://oauth`: `OAuthEvent`. A user cancel arrives as `state: 'error', code: 'ai_oauth_cancelled'`.
+Event `ai://oauth`: `OAuthEvent`. Cancellation removes the pending attempt; the UI resets locally.
+Stale completion events from cancelled or superseded attempts are suppressed.
 
 In subscription mode `ai_submit_*` use the plan token: ChatGPT images go through the Responses API
 `image_generation` tool (`store: false`, `stream: true`; native mask via `input_image_mask`) **only** after
@@ -502,3 +506,22 @@ never come back over IPC; only booleans do.
 `<config>` is `app_config_dir()`: `%APPDATA%\com.pixelforge.app` on Windows,
 `~/Library/Application Support/com.pixelforge.app` on macOS,
 `~/.config/com.pixelforge.app` on Linux.
+# User preset assets
+
+`presets_list({ kind })` returns `{ assets, errors }`; `presets_save({ kind, asset })`
+persists one asset; `presets_remove({ kind, id })` removes one asset (missing is a no-op).
+`kind` is `patterns` or `brushes`. An asset contains `id`, `name`, `width`, `height`,
+RGBA byte-array `pixels`, and optional brush-preset `settings` metadata.
+For sampled brushes, `settings.linkedPresets` holds the presets sharing that tip
+raster; the outer settings object retains the primary preset for compatibility.
+Readers also accept older records with only a single preset. Brushes-panel saves,
+renames and deletions run in order. Removing one preset retains the shared asset
+until its last preset is removed; deleting the asset in Preset Manager removes all
+presets referencing it.
+
+Files live in the corresponding native app-data subdirectory as `<id>.pfpreset`.
+The binary record is `PFPRESET1\n`, a little-endian u32 JSON-header length, the UTF-8
+metadata header, then RGBA bytes. Headers are capped at 64 KiB, rasters at 16 megapixels;
+dimensions and byte counts must match. IDs allow ASCII letters/digits, hyphen and
+underscore only. Writes sync a unique temporary file before replacement. Listing
+returns valid records plus errors for malformed files. Browser previews use IndexedDB.

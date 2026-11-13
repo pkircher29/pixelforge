@@ -57,6 +57,118 @@ function twoLayerDoc(): { doc: Document; top: string; bottom: string } {
 }
 
 describe("History core", () => {
+  it("dropAfter removes redo states permanently and restores the retained state", () => {
+    const doc = createDocument({ width: 2, height: 2 });
+    const t = { n: 0 };
+    const h = new History(doc);
+    for (let i = 0; i < 4; i++) h.push(new Inc(t, 10));
+    h.dropAfter(2);
+    expect(t.n).toBe(2);
+    expect(h.index).toBe(2);
+    expect(h.entries).toHaveLength(2);
+    expect(h.bytes).toBe(20);
+    expect(h.redo()).toBe(false);
+    h.undo();
+    h.dropAfter(2); // retaining a future state does not jump forward
+    expect(t.n).toBe(1);
+    expect(h.redo()).toBe(true);
+    expect(t.n).toBe(2);
+  });
+
+  it("non-linear edits retain both futures, including already-applied paint", () => {
+    const { doc, top } = twoLayerDoc();
+    const h = new History(doc, { nonLinear: true });
+    h.push(new SetLayerPropsCommand(top, { opacity: 0.5 }));
+    h.push(new RemoveLayerCommand(top));
+    h.jumpTo(1);
+    const layer = getRasterLayer(doc, top);
+    const before = PaintCommand.capture(layer, Rect.make(0, 0, 1, 1));
+    layer.raster.setPixel(0, 0, rgba(0, 255, 0));
+    h.push(PaintCommand.finish(layer, before, "Branch paint"), { alreadyApplied: true });
+    expect(h.entries).toHaveLength(3);
+    for (let repeat = 0; repeat < 3; repeat++) {
+      h.jumpTo(2);
+      expect(doc.layers.some(l => l.id === top)).toBe(false);
+      h.jumpTo(3);
+      expect(getRasterLayer(doc, top).raster.getPixel(0, 0)).toEqual(rgba(0, 255, 0));
+      expect(getRasterLayer(doc, top).opacity).toBe(0.5);
+      h.jumpTo(0);
+      expect(getRasterLayer(doc, top).opacity).toBe(1);
+      expect(getRasterLayer(doc, top).raster.getPixel(0, 0)).toEqual(rgba(255, 0, 0, 128));
+    }
+    h.jumpTo(1);
+    h.push(new SetLayerPropsCommand(top, { visible: false }));
+    expect(h.entries).toHaveLength(4);
+    expect(getRasterLayer(doc, top).visible).toBe(false);
+    h.jumpTo(3);
+    expect(getRasterLayer(doc, top).visible).toBe(true);
+    expect(getRasterLayer(doc, top).raster.getPixel(0, 0)).toEqual(rgba(0, 255, 0));
+    h.jumpTo(4);
+    expect(getRasterLayer(doc, top).raster.getPixel(0, 0)).toEqual(rgba(255, 0, 0, 128));
+    h.nonLinear = false;
+    h.jumpTo(1);
+    h.push(new SetLayerPropsCommand(top, { name: "linear again" }));
+    expect(h.entries).toHaveLength(2);
+  });
+
+  it("non-linear deletion preserves later results and removes only the selected state", () => {
+    const { doc, top } = twoLayerDoc();
+    const h = new History(doc, { nonLinear: true });
+    h.push(new SetLayerPropsCommand(top, { opacity: 0.5 }));
+    h.push(new SetLayerPropsCommand(top, { visible: false }));
+    h.push(new RemoveLayerCommand(top));
+    h.jumpTo(1);
+    expect(h.deleteState(1)).toBe(true);
+    expect(h.index).toBe(0);
+    expect(getRasterLayer(doc, top).opacity).toBe(1);
+    expect(h.entries).toHaveLength(2);
+    h.redo();
+    expect(getRasterLayer(doc, top).opacity).toBe(0.5);
+    expect(getRasterLayer(doc, top).visible).toBe(false);
+    h.redo();
+    expect(doc.layers.some(l => l.id === top)).toBe(false);
+    h.deleteState(1); // deletion before current leaves the current result intact
+    expect(h.index).toBe(1);
+    expect(doc.layers.some(l => l.id === top)).toBe(false);
+    h.undo();
+    expect(getRasterLayer(doc, top).opacity).toBe(1);
+    expect(getRasterLayer(doc, top).visible).toBe(true);
+    expect(h.deleteState(0)).toBe(false);
+  });
+
+  it("a snapshot of a discarded row cannot replace a new history-brush source", () => {
+    const { doc, top } = twoLayerDoc();
+    const h = new History(doc);
+    h.push(new ReplaceLayerPixelsCommand("Green", top, Rect.make(0, 0, 4, 4), Raster.filled(4, 4, rgba(0, 255, 0))));
+    const snap = h.takeSnapshot("Green");
+    h.dropAfter(0);
+    h.push(new ReplaceLayerPixelsCommand("Blue", top, Rect.make(0, 0, 4, 4), Raster.filled(4, 4, rgba(0, 0, 255))));
+    expect(h.rasterAt(1, top)!.getPixel(0, 0)).toEqual(rgba(0, 0, 255));
+    expect(h.snapshotRaster(snap.id, top)!.getPixel(0, 0)).toEqual(rgba(0, 255, 0));
+  });
+
+  it("keeps branch transitions valid after memory eviction and deletion of a future row", () => {
+    const doc = createDocument({ width: 2, height: 2 });
+    const t = { n: 0 };
+    const h = new History(doc, { nonLinear: true });
+    for (const label of ["a", "b", "c"]) h.push(new Inc(t, 10, label));
+    h.jumpTo(1);
+    h.push(new Inc(t, 10, "d"));
+    expect(t.n).toBe(2);
+    h.budgetBytes = 50;
+    expect(h.bytes).toBeLessThanOrEqual(50);
+    expect(h.evictedCount).toBe(1);
+    h.jumpTo(0);
+    expect(t.n).toBe(1);
+    h.deleteState(2); // remove the old future "c"; "d" still returns to its own parent
+    expect(h.index).toBe(0);
+    expect(t.n).toBe(1);
+    h.jumpTo(h.entries.length);
+    expect(t.n).toBe(2);
+    h.jumpTo(0);
+    expect(t.n).toBe(1);
+  });
+
   it("push executes, undo/redo move the cursor, labels are exposed", () => {
     const doc = createDocument({ width: 2, height: 2 });
     const t = { n: 0 };

@@ -39,6 +39,8 @@ export interface PanelDef {
   collapsed?: boolean;
   /** Preferred height in px when in a vertical dock. */
   preferredSize?: number;
+  /** Minimum expanded group height, including its tab strip. */
+  minSize?: number;
 }
 
 export interface CommandDef {

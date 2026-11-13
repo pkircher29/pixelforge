@@ -24,6 +24,7 @@ import {
   type Point,
 } from "$lib/engine";
 import type { FilterMode, KindFilter } from "./Layers.store.svelte";
+import { movingLayerIds } from "./layer-reorder";
 
 // ---------------------------------------------------------------------------
 // Rows
@@ -304,7 +305,7 @@ export function canMergeDown(doc: Document, l: Layer): boolean {
 export function canClip(doc: Document, l: Layer): boolean {
   if (l.kind === "group") return false;
   const below = siblingBelow(doc, l);
-  return !!below && below.kind !== "group";
+  return !!below;
 }
 
 export function contextMenuState(doc: Document, l: Layer, selected: readonly LayerId[]): ContextMenuState {
@@ -394,6 +395,34 @@ export class SetLayersVisibleCommand implements Command {
  * Move a layer block to `toIndex` (index after removal, see `layer-reorder.ts`) and set
  * its parent (drag into / out of a group). Children of a moved group keep their parent.
  */
+export class MoveLayersToCommand implements Command {
+  readonly label = "Layer Order";
+  private before: { id: LayerId; parentId: LayerId | null; clip: boolean }[] = [];
+  constructor(private readonly ids: readonly LayerId[], private readonly toIndex: number, private readonly parentId: LayerId | null) {}
+
+  do(doc: Document): void {
+    const moving = new Set(movingLayerIds(doc, this.ids));
+    this.before = doc.layers.map(l => ({ id: l.id, parentId: l.parentId, clip: l.clipToBelow }));
+    const block = doc.layers.filter(l => moving.has(l.id));
+    const rest = doc.layers.filter(l => !moving.has(l.id));
+    for (const l of block) if (l.kind !== "group" && (!l.parentId || !moving.has(l.parentId))) l.parentId = this.parentId;
+    rest.splice(Math.max(0, Math.min(rest.length, this.toIndex)), 0, ...block);
+    doc.layers = rest;
+    for (const l of block) if (l.clipToBelow && !clipBaseOf(doc, l.id)) l.clipToBelow = false;
+    doc.dirty = true;
+  }
+
+  undo(doc: Document): void {
+    const byId = new Map(doc.layers.map(l => [l.id, l]));
+    doc.layers = this.before.map(s => {
+      const l = byId.get(s.id)!;
+      l.parentId = s.parentId; l.clipToBelow = s.clip;
+      return l;
+    });
+    doc.dirty = true;
+  }
+}
+
 export class MoveLayerToCommand implements Command {
   readonly label = "Layer Order";
   readonly layerId: LayerId;

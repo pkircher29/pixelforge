@@ -137,7 +137,7 @@ export class ReorderLayerCommand implements Command {
   }
 }
 
-const MERGEABLE_KEYS: ReadonlySet<keyof LayerProps> = new Set(["opacity", "offset", "fillOpacity"]);
+const MERGEABLE_KEYS: ReadonlySet<keyof LayerProps> = new Set(["opacity", "offset", "fillOpacity", "maskDensity", "maskFeather"]);
 
 /**
  * Change layer properties. Consecutive changes of the same continuous property
@@ -201,6 +201,10 @@ function labelFor(props: Partial<LayerProps>): string {
         return props.clipToBelow ? "Create Clipping Mask" : "Release Clipping Mask";
       case "maskEnabled":
         return props.maskEnabled ? "Enable Layer Mask" : "Disable Layer Mask";
+      case "maskDensity":
+        return "Mask Density";
+      case "maskFeather":
+        return "Mask Feather";
       case "maskLinked":
         return props.maskLinked ? "Link Layer Mask" : "Unlink Layer Mask";
       case "passThrough":

@@ -101,8 +101,8 @@ export async function takeResult(job: JobId): Promise<TakenResult[]> {
   return parseResultFrame(buf);
 }
 
-export function testKey(provider: ProviderId): Promise<null> {
-  return invoke<null>("ai_test_key", { provider });
+export function testKey(provider: ProviderId, model?: string): Promise<null> {
+  return invoke<null>("ai_test_key", { provider, ...(model === undefined ? {} : { model }) });
 }
 
 export function getKeyStatus(): Promise<KeyStatus> {
@@ -207,6 +207,7 @@ export interface AuthConfigure {
   fallbackToKey?: boolean;
   /** xAI only: the client ID xAI issued to Pixelforge ("" clears it). */
   xaiClientId?: string;
+  google?: { clientId: string; clientSecret: string; project: string };
 }
 
 export function authConfigure(provider: ProviderId, cfg: AuthConfigure): Promise<OAuthStatus> {

@@ -376,6 +376,25 @@ pub fn mask_file(id: &str) -> String {
     format!("masks/{id}.png")
 }
 
+/// Non-pixel masks can retain their original bounds after a non-destructive crop.
+fn retained_mask_size(entry: &LayerEntry, fallback: (u32, u32)) -> Result<(u32, u32)> {
+    if entry.kind.has_pixels() {
+        return Ok(fallback);
+    }
+    let Some(size) = entry.extra.get("mask_size") else {
+        return Ok(fallback);
+    };
+    let dimension = |name: &str| -> Result<u32> {
+        size.get(name)
+            .and_then(Value::as_u64)
+            .and_then(|v| u32::try_from(v).ok())
+            .ok_or_else(|| Error::Project(format!("invalid retained mask size for {:?}", entry.id)))
+    };
+    let result = (dimension("width")?, dimension("height")?);
+    check_dimensions(result.0, result.1)?;
+    Ok(result)
+}
+
 /// Write `doc` as a `.pfproj` into `out`. Returns the writer once the central directory
 /// has been written (callers holding a `File` typically `sync_all` it).
 ///
@@ -392,7 +411,7 @@ pub fn write_pfproj<W: Write + Seek>(doc: &ProjectDoc, out: W) -> Result<W> {
     for entry in &manifest.layers {
         check_id(&entry.id)?;
         // Expected mask size: the layer's pixels, or the canvas for pixel-less kinds.
-        let mut mask_size = (manifest.doc.width, manifest.doc.height);
+        let mut mask_size = retained_mask_size(entry, (manifest.doc.width, manifest.doc.height))?;
         if entry.kind.has_pixels() {
             let img = doc.layers.get(&entry.id).ok_or_else(|| {
                 Error::Project(format!(
@@ -623,7 +642,8 @@ pub fn read_pfproj<R: Read + Seek>(reader: R) -> Result<ProjectDoc> {
         ..Default::default()
     };
     for entry in &doc.manifest.layers {
-        let mut mask_size = (doc.manifest.doc.width, doc.manifest.doc.height);
+        let mut mask_size =
+            retained_mask_size(entry, (doc.manifest.doc.width, doc.manifest.doc.height))?;
         if entry.kind.has_pixels() {
             let file = entry.file.clone().unwrap_or_else(|| layer_file(&entry.id));
             let px = read_png_entry(&mut zip, &file, 4)?;
@@ -765,6 +785,39 @@ pub fn unix_to_rfc3339(secs: u64) -> String {
 mod tests {
     use super::*;
     use std::io::Cursor;
+
+    #[test]
+    fn retained_group_mask_survives_smaller_canvas_roundtrip() {
+        let mut doc = ProjectDoc {
+            manifest: Manifest::new("crop", "Crop", 4, 3),
+            ..Default::default()
+        };
+        let mut group = LayerEntry::group("g", "Group");
+        group.x = -2;
+        group.y = -1;
+        group.extra.insert(
+            "mask_size".into(),
+            serde_json::json!({"width":8,"height":6}),
+        );
+        doc.manifest.layers.push(group);
+        let bytes: Vec<u8> = (0..48).map(|v| v * 5).collect();
+        doc.masks
+            .insert("g".into(), Image::Raw(Pixels::gray(8, 6, bytes.clone())));
+        let saved = write_pfproj(&doc, Cursor::new(Vec::new())).unwrap();
+        let restored = read_pfproj(Cursor::new(saved.into_inner())).unwrap();
+        assert_eq!(restored.manifest.layers[0].x, -2);
+        assert_eq!(restored.masks["g"].dimensions().unwrap(), (8, 6));
+        if let Image::Raw(p) = &restored.masks["g"] {
+            assert_eq!(p.data, bytes);
+        } else {
+            panic!("expected decoded mask");
+        }
+        doc.manifest.layers[0].extra.insert(
+            "mask_size".into(),
+            serde_json::json!({"width":0,"height":6}),
+        );
+        assert!(write_pfproj(&doc, Cursor::new(Vec::new())).is_err());
+    }
 
     fn checker(w: u32, h: u32, seed: u8) -> Vec<u8> {
         let mut v = Vec::with_capacity((w * h * 4) as usize);

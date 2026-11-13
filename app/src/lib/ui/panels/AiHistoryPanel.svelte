@@ -103,6 +103,8 @@
       size: providerId === e.provider ? e.size : undefined,
       n: Math.min(e.n, provider.capabilities.maxVariants),
       quality: providerId === e.provider ? e.quality : undefined,
+      seed: providerId === e.provider ? e.seed : undefined,
+      steps: providerId === e.provider ? e.steps : undefined,
       transparent: e.transparent && provider.capabilities.transparentBg,
       refs: [],
       newDocument: false,
@@ -132,6 +134,8 @@
     aiUi.negativePrompt = e.negativePrompt ?? "";
     aiUi.providerId = e.provider;
     aiUi.model = e.model;
+    aiUi.setSampling("seed", e.seed);
+    aiUi.setSampling("steps", e.steps);
     aiUi.focusPrompt(e.mode === "generate" ? "generate" : undefined);
   }
 
@@ -218,6 +222,8 @@
               <dd>{when(e.ts)}{#if e.durationMs}, {(e.durationMs / 1000).toFixed(1)} s{/if}</dd>
               {#if e.size}<dt>Size</dt><dd>{e.size.width} × {e.size.height}</dd>{/if}
               {#if e.n > 1}<dt>Variants</dt><dd>{e.n}</dd>{/if}
+              {#if e.seed !== undefined}<dt>Seed</dt><dd>{e.seed}</dd>{/if}
+              {#if e.steps !== undefined}<dt>Steps</dt><dd>{e.steps}</dd>{/if}
               {#if e.costUsd !== undefined}<dt>Cost</dt><dd>{formatUsd(e.costUsd, true)}</dd>{/if}
               {#if e.negativePrompt}<dt>Avoid</dt><dd>{e.negativePrompt}</dd>{/if}
               {#if e.error}<dt>Error</dt><dd class="bad">{e.error.message}</dd>{/if}

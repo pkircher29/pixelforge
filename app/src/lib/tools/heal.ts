@@ -197,6 +197,61 @@ export interface HealOptions {
   varianceMatch?: number;
 }
 
+/** Keep automatic source search local while preserving its candidate and ring scoring. */
+export function findCoveredHealSource(
+  src: Raster, bounds: Rect, coverage: (x: number, y: number) => number,
+  opts: { radii?: number[]; directions?: number } = {},
+): Point {
+  const size = Math.max(bounds.w, bounds.h);
+  const radii = opts.radii ?? [size * 1.2, size * 1.8, size * 2.6, size * 3.6];
+  const ringWidth = Math.max(3, Math.round(size * 0.15));
+  const pad = Math.ceil((bounds.w + bounds.h) / 8);
+  const region = Rect.intersect(Rect.inflate(bounds, Math.ceil(Math.max(0, ...radii)) + Math.max(ringWidth, pad) + 2), src.bounds());
+  if (Rect.isEmpty(region)) return { x: 0, y: 0 };
+  const local = new Raster(region.w, region.h, src.readPixels(region));
+  const mask = new Float32Array(region.w * region.h);
+  for (let y = 0; y < region.h; y++) for (let x = 0; x < region.w; x++) mask[y * region.w + x] = coverage(region.x + x, region.y + y);
+  const localBounds = Rect.translate(bounds, -region.x, -region.y);
+  const ring = ringMask(mask, region.w, region.h, localBounds, ringWidth);
+  return findHealSource(local, mask, localBounds, ring, { ...opts, radii });
+}
+
+export function coveredBounds(bounds: Rect, coverage: (x: number, y: number) => number): Rect | null {
+  let x0 = Infinity, y0 = Infinity, x1 = -1, y1 = -1;
+  for (let y = bounds.y; y < bounds.y + bounds.h; y++) for (let x = bounds.x; x < bounds.x + bounds.w; x++) {
+    if (coverage(x, y) <= 0.01) continue;
+    x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y);
+  }
+  return x1 < 0 ? null : Rect.make(x0, y0, x1 - x0 + 1, y1 - y0 + 1);
+}
+
+/** Heal a bounded stroke without materializing either full layer or its coverage. */
+export function healCoveredRegion(
+  dst: Raster, src: Raster, bounds: Rect, coverage: (x: number, y: number) => number,
+  offset: Point, opts: HealOptions = {},
+): Rect | null {
+  const covered = coveredBounds(Rect.intersect(bounds, dst.bounds()), coverage);
+  if (!covered) return null;
+  bounds = covered;
+  const size = Math.max(bounds.w, bounds.h);
+  const ringWidth = opts.ringWidth ?? Math.max(3, Math.round(size * 0.15));
+  const feather = opts.feather ?? Math.max(1, Math.round(ringWidth / 2));
+  // The horizontal feather pass also needs a halo for the vertical pass.
+  const region = Rect.intersect(Rect.inflate(bounds, Math.max(ringWidth, feather * 2) + 1), dst.bounds());
+  if (Rect.isEmpty(region)) return null;
+  const mask = new Float32Array(region.w * region.h);
+  for (let y = 0; y < region.h; y++) for (let x = 0; x < region.w; x++) {
+    mask[y * region.w + x] = coverage(region.x + x, region.y + y);
+  }
+  const local = new Raster(region.w, region.h, dst.readPixels(region));
+  const source = new Raster(region.w, region.h, src.readPixels(Rect.translate(region, offset.x, offset.y)));
+  const touched = healRegion(local, source, mask, { x: 0, y: 0 }, { ...opts, ringWidth, feather });
+  if (!touched) return null;
+  const output = Rect.translate(touched, region.x, region.y);
+  dst.writePixels(output, local.readPixels(touched));
+  return output;
+}
+
 /**
  * Heal the hole described by `mask` (coverage 0..1, raster-sized) in `dst`, copying
  * from `src` at `offset` (source pixel = dest pixel + offset) and matching the clone's

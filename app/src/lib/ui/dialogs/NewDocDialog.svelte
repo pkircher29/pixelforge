@@ -1,4 +1,5 @@
 <script lang="ts">
+  import ColorSwatchInput from "$lib/ui/controls/ColorSwatchInput.svelte";
   import Dialog from "./Dialog.svelte";
   import type { Resolver } from "./dialogs.svelte";
   import { MAX_CANVAS_SIZE, type RGBA } from "$lib/engine";
@@ -98,7 +99,7 @@
         <label class="chip" class:on={bg === "transparent"}><input type="radio" bind:group={bg} value="transparent" /> Transparent</label>
         <label class="chip" class:on={bg === "color"}>
           <input type="radio" bind:group={bg} value="color" /> Color
-          <input type="color" class="swatch" bind:value={color} aria-label="Background color" />
+          <ColorSwatchInput value={color} oninput={(e) => (color = e.currentTarget.value)} label="Background color" />
         </label>
       </span>
     </div>
@@ -167,14 +168,6 @@
     background: var(--accent-soft);
     border-color: var(--accent);
     color: var(--fg-0);
-  }
-  .swatch {
-    width: 18px;
-    height: 18px;
-    padding: 0;
-    border: 1px solid var(--border-strong);
-    border-radius: 4px;
-    background: none;
   }
   .meta {
     margin: 12px 0 0;
