@@ -2,7 +2,6 @@
 use crate::{
     custom::{CustomProvider, ProbeResult},
     error::Error,
-    mask::{mask_bbox, Rect},
     provider::{validate_edit, ImageProvider},
     types::{
         Capabilities, EditMode, EditRequest, GenerateRequest, ImageBytes, ImageResult, ProviderId,
@@ -194,6 +193,56 @@ struct Prepared {
     mask_tensor: Vec<f32>,
 }
 
+#[derive(Debug, PartialEq)]
+struct Rect {
+    x: u32,
+    y: u32,
+    width: u32,
+    height: u32,
+}
+
+impl Rect {
+    fn padded(&self, padding: u32, width: u32, height: u32) -> Self {
+        let x = self.x.saturating_sub(padding);
+        let y = self.y.saturating_sub(padding);
+        let right = self
+            .x
+            .saturating_add(self.width)
+            .saturating_add(padding)
+            .min(width);
+        let bottom = self
+            .y
+            .saturating_add(self.height)
+            .saturating_add(padding)
+            .min(height);
+        Self {
+            x,
+            y,
+            width: right - x,
+            height: bottom - y,
+        }
+    }
+}
+
+fn mask_bbox(mask: &GrayImage) -> Option<Rect> {
+    let (mut left, mut top) = mask.dimensions();
+    let (mut right, mut bottom) = (0, 0);
+    for (x, y, pixel) in mask.enumerate_pixels() {
+        if pixel[0] != 0 {
+            left = left.min(x);
+            top = top.min(y);
+            right = right.max(x + 1);
+            bottom = bottom.max(y + 1);
+        }
+    }
+    (right > left && bottom > top).then_some(Rect {
+        x: left,
+        y: top,
+        width: right.saturating_sub(left),
+        height: bottom.saturating_sub(top),
+    })
+}
+
 fn prepare(image: &[u8], mask: &[u8]) -> Result<Prepared, Error> {
     let base = image::load_from_memory(image)?.to_rgba8();
     let mask = image::load_from_memory(mask)?.to_luma8();
@@ -347,6 +396,34 @@ fn infer(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn crop_includes_soft_edge_pixels_and_clips_padding_to_image() {
+        let mut mask = GrayImage::new(20, 10);
+        assert_eq!(mask_bbox(&mask), None);
+        mask.put_pixel(0, 0, image::Luma([1]));
+        mask.put_pixel(19, 9, image::Luma([255]));
+        let bounds = mask_bbox(&mask).unwrap();
+        assert_eq!(
+            bounds,
+            Rect {
+                x: 0,
+                y: 0,
+                width: 20,
+                height: 10
+            }
+        );
+        assert_eq!(bounds.padded(64, 20, 10), bounds);
+        mask.put_pixel(19, 9, image::Luma([0]));
+        assert_eq!(
+            mask_bbox(&mask).unwrap().padded(2, 20, 10),
+            Rect {
+                x: 0,
+                y: 0,
+                width: 3,
+                height: 3
+            }
+        );
+    }
     fn png(image: DynamicImage) -> Vec<u8> {
         let mut out = Cursor::new(Vec::new());
         image.write_to(&mut out, image::ImageFormat::Png).unwrap();
