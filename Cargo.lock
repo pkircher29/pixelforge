@@ -3295,6 +3295,7 @@ dependencies = [
  "image",
  "keyring",
  "ort",
+ "pf-io",
  "reqwest 0.12.28",
  "serde",
  "serde_json",

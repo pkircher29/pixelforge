@@ -3,12 +3,10 @@
  * "Last Filter"; the dialog does the same after its live preview).
  */
 
-import { ReplaceLayerPixelsCommand, Rect } from "$lib/engine";
+import { ReplaceLayerPixelsCommand, Rect, getRasterLayer, type OpDef, type ParamValues } from "$lib/engine";
 import { docStore } from "$lib/stores/doc.svelte";
 import { applyOp } from "./apply";
 import { recordLastFilter } from "./lastFilter";
-import { rawDoc, rawRasterLayer } from "./raw";
-import type { OpDef, ParamValues } from "./types";
 
 export function activeRasterLayerOk(): boolean {
   const l = docStore.activeLayer;
@@ -19,9 +17,9 @@ export function activeRasterLayerOk(): boolean {
 export function applyOpToActiveLayer(op: OpDef, params: ParamValues, label = op.label): boolean {
   const entry = docStore.active;
   const active = docStore.activeLayer;
-  const layer = entry && active ? rawRasterLayer(entry, active.id) : null;
+  const layer = entry && active ? getRasterLayer(entry.doc, active.id) : null;
   if (!entry || !layer) return false;
-  const { raster, dirtyRect } = applyOp(op, layer.raster, params, rawDoc(entry).selection, { offset: layer.offset });
+  const { raster, dirtyRect } = applyOp(op, layer.raster, params, entry.doc.selection, { offset: layer.offset });
   if (Rect.isEmpty(dirtyRect)) return false;
   docStore.exec(new ReplaceLayerPixelsCommand(label, layer.id, dirtyRect, raster));
   recordLastFilter(op, params);

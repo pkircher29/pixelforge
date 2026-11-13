@@ -21,6 +21,7 @@
 //! | `ai_custom_probe` | `{ provider, auth? }` | `ProbeResult` |
 //! | `ai_prompt_assist` | raw body: frame `{ provider, text }` + optional image blob | `string` |
 //! | `ai_hub_search` | `{ query, pipelineTag?, limit? }` | `HubModel[]` |
+//! | `ai_comfy_templates` | - | `&[(&str, &str)]` |
 //!
 //! Events: every `pf_ai::JobEvent` is emitted twice, on `ai://job/<id>` and on the
 //! catch-all `ai://jobs` (listen to the latter *before* invoking submit so the `queued`
@@ -30,8 +31,8 @@ use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::time::Duration;
 
-use pf_ai::ipc::{decode_edit_body, decode_frame, encode_results, GenerateParams};
 use pf_ai::custom::SamplingOptions;
+use pf_ai::ipc::{decode_edit_body, decode_frame, encode_results, GenerateParams};
 use pf_ai::providers::custom::hf::{hub_search_default, HubModel};
 use pf_ai::{
     build_custom_provider, build_provider_from_env, capabilities_for, probe_custom, prompt_assist,
@@ -192,7 +193,13 @@ pub fn custom_rows(
                 has_key: has_key(&id),
                 key_backend: backend.to_owned(),
                 default_model: c.model.trim().to_owned(),
-                edit_model: if c.kind == CustomKind::Fal { c.extra_str("editModel").unwrap_or(c.model.trim()).to_owned() } else { c.model.trim().to_owned() },
+                edit_model: if c.kind == CustomKind::Fal {
+                    c.extra_str("editModel")
+                        .unwrap_or(c.model.trim())
+                        .to_owned()
+                } else {
+                    c.model.trim().to_owned()
+                },
                 models,
                 capabilities,
                 kind: c.kind.as_str().to_owned(),
@@ -286,7 +293,9 @@ async fn resolve_provider(
     let store = key_store(app, state)?;
     match id {
         ProviderId::Custom(cid) => {
-            let cfg = custom_entry(custom_registry(app, state)?, cid).await?.with_sampling(sampling)?;
+            let cfg = custom_entry(custom_registry(app, state)?, cid)
+                .await?
+                .with_sampling(sampling)?;
             let auth = load_key_opt(store, id.clone()).await?;
             if auth.is_none() && cfg.kind.requires_auth() {
                 return Err(pf_ai::Error::NotConfigured(id.clone()).into());
@@ -295,7 +304,10 @@ async fn resolve_provider(
         }
         builtin => {
             if !sampling.is_empty() {
-                return Err(pf_ai::Error::InvalidRequest("This provider does not support seed or sampling steps".into()).into());
+                return Err(pf_ai::Error::InvalidRequest(
+                    "This provider does not support seed or sampling steps".into(),
+                )
+                .into());
             }
             // Subscription mode (ChatGPT / Grok sign-in) never falls back silently.
             if let Some(p) = subscription_provider(app, state, builtin).await? {
@@ -337,7 +349,10 @@ pub async fn ai_submit_generate(
 ) -> CommandResult<JobId> {
     let provider = params.provider.clone();
     let timeout = timeout_override(params.timeout_secs);
-    let sampling = SamplingOptions { seed: params.seed, steps: params.steps };
+    let sampling = SamplingOptions {
+        seed: params.seed,
+        steps: params.steps,
+    };
     submit(
         &app,
         &state,
@@ -368,7 +383,10 @@ pub async fn ai_submit_edit(
     let envelope = decode_edit_body(body)?;
     let provider = envelope.params.provider.clone();
     let timeout = timeout_override(envelope.params.timeout_secs);
-    let sampling = SamplingOptions { seed: envelope.params.seed, steps: envelope.params.steps };
+    let sampling = SamplingOptions {
+        seed: envelope.params.seed,
+        steps: envelope.params.steps,
+    };
     submit(
         &app,
         &state,
@@ -608,7 +626,10 @@ pub async fn ai_custom_probe(
 #[tauri::command]
 pub async fn ai_lama_install(app: AppHandle) -> CommandResult<String> {
     let directory = super::settings::config_dir(&app)?.join("models");
-    Ok(pf_ai::providers::custom::lama::install_model(directory).await?.to_string_lossy().into_owned())
+    Ok(pf_ai::providers::custom::lama::install_model(directory)
+        .await?
+        .to_string_lossy()
+        .into_owned())
 }
 
 /// Header of the `ai_prompt_assist` frame.

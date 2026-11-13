@@ -8,25 +8,35 @@
    * and pushes one `ReplaceLayerPixelsCommand` so undo works.
    */
   import { onDestroy, onMount } from "svelte";
-  import { Rect, ReplaceLayerPixelsCommand, type Raster, type RasterLayer } from "$lib/engine";
+  import {
+    Rect,
+    ReplaceLayerPixelsCommand,
+    computeHistogram,
+    defaultParams,
+    getRasterLayer,
+    type Histogram as Hist,
+    type OpDef,
+    type ParamValue,
+    type ParamValues,
+    type Raster,
+    type RasterLayer,
+  } from "$lib/engine";
   import { docStore, type OpenDoc } from "$lib/stores/doc.svelte";
-  import Modal from "$lib/filters/ui/Modal.svelte";
+  import Dialog from "./Dialog.svelte";
   import Slider from "$lib/filters/ui/Slider.svelte";
   import Histogram from "$lib/filters/ui/Histogram.svelte";
   import { affectedRect, applyOp, type ApplyResult } from "$lib/filters/apply";
-  import { computeHistogram } from "$lib/filters/histogram";
-  import { rawDoc, rawRasterLayer } from "$lib/filters/raw";
   import { recordLastFilter } from "$lib/filters/lastFilter";
-  import { defaultParams, type Histogram as Hist, type OpDef, type ParamValue, type ParamValues } from "$lib/filters/types";
 
   interface Props {
     op: OpDef;
-    onclose: () => void;
+    resolve: (r: null) => void;
     /** Starting values (e.g. from Last Filter). */
     initial?: ParamValues;
   }
 
-  let { op, onclose, initial }: Props = $props();
+  let { op, resolve, initial }: Props = $props();
+  const onclose = (): void => resolve(null);
 
   // `op` / `initial` are fixed for the dialog's lifetime (a new op opens a new dialog).
   // svelte-ignore state_referenced_locally
@@ -56,8 +66,7 @@
   onMount(() => {
     const e = docStore.active;
     const active = docStore.activeLayer;
-    // Work on the raw engine objects, never through the store's proxies (see raw.ts).
-    const l = e && active ? rawRasterLayer(e, active.id) : null;
+    const l = e && active ? getRasterLayer(e.doc, active.id) : null;
     if (!e || !l) {
       problem = "Select a pixel layer to use this adjustment. Groups can't be adjusted directly.";
       return;
@@ -68,7 +77,7 @@
     }
     entry = e;
     layer = l;
-    dirtyRect = affectedRect(l.raster, rawDoc(e).selection, l.offset);
+    dirtyRect = affectedRect(l.raster, e.doc.selection, l.offset);
     if (Rect.isEmpty(dirtyRect)) {
       problem = "The selection doesn't overlap this layer, so there is nothing to adjust.";
       return;
@@ -107,7 +116,7 @@
     }
     const snapshot = $state.snapshot(params);
     const t0 = performance.now();
-    const res = applyOp(op, layer.raster, snapshot, rawDoc(entry).selection, { offset: layer.offset });
+    const res = applyOp(op, layer.raster, snapshot, entry.doc.selection, { offset: layer.offset });
     lastMs = performance.now() - t0;
     lastResult = res;
     resultParamsKey = keyOf(snapshot);
@@ -163,7 +172,7 @@
     restoreOriginal();
     let res = lastResult;
     if (!res || resultParamsKey !== keyOf(snapshot)) {
-      res = applyOp(op, layer.raster, snapshot, rawDoc(entry).selection, { offset: layer.offset });
+      res = applyOp(op, layer.raster, snapshot, entry.doc.selection, { offset: layer.offset });
     }
     closed = true;
     if (!Rect.isEmpty(res.dirtyRect)) {
@@ -174,24 +183,9 @@
     recordLastFilter(op, snapshot);
     onclose();
   }
-
-  function onKey(e: KeyboardEvent): void {
-    if (e.key === "Escape") {
-      e.preventDefault();
-      e.stopPropagation();
-      cancel();
-    } else if (e.key === "Enter" && !(e.target instanceof HTMLTextAreaElement)) {
-      e.preventDefault();
-      e.stopPropagation();
-      if (problem) cancel();
-      else ok();
-    }
-  }
 </script>
 
-<svelte:window onkeydown={onKey} />
-
-<Modal title={op.label} onclose={cancel} width={op.histogram ? 380 : 360}>
+<Dialog title={op.label} oncancel={cancel} onsubmit={() => (problem ? cancel() : ok())} dim={false} width={op.histogram ? 380 : 360}>
   {#if problem}
     <p class="problem">{problem}</p>
   {:else}
@@ -275,7 +269,7 @@
       <button class="btn primary" type="button" onclick={ok}>OK</button>
     {/if}
   {/snippet}
-</Modal>
+</Dialog>
 
 <style>
   .params {

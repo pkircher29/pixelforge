@@ -115,6 +115,8 @@ class ToolStore {
   measure = $state<Measure | null>(null);
   /** History Brush source (History panel column). `null` = the first history state. */
   historySource = $state<HistorySource | null>(null);
+  /** Paths panel: the active path id (per document). */
+  activePathId = $state<string | null>(null);
   /** Paint tools target the active layer's mask instead of its pixels. */
   private _maskTarget = $state(false);
   /** Quick Mask flag used when no document is open (otherwise mirrors the document). */

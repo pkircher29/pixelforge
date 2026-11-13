@@ -1,10 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { Raster, rgba } from "../../lib/engine";
-import { defaultParams, type ParamValues } from "../../lib/filters/types";
 import {
+  Raster,
   addNoise,
+  blockAverage,
   brightnessContrast,
   colorBalance,
+  defaultParams,
   desaturate,
   exposure,
   gaussianBlur,
@@ -12,14 +13,15 @@ import {
   invert,
   levels,
   motionBlur,
+  mulberry32,
   pixelate,
   posterize,
+  rgba,
   sharpen,
   threshold,
   unsharpMask,
-} from "../../lib/filters/ops";
-import { blockAverage } from "../../lib/filters/ops/pixelate";
-import { mulberry32 } from "../../lib/filters/random";
+  type ParamValues,
+} from "../../lib/engine";
 
 function px(r: Raster, x: number, y: number): [number, number, number, number] {
   const p = r.getPixel(x, y);

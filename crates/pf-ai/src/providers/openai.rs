@@ -304,8 +304,12 @@ impl ImageProvider for OpenAiProvider {
 
     async fn test_model(&self, model: &str) -> Result<(), Error> {
         crate::provider::validate_model_id(model)?;
-        let resp = self.client.get(self.url(&format!("{MODELS_PATH}/{model}")))
-            .header(reqwest::header::AUTHORIZATION, http::bearer(&self.auth)).send().await?;
+        let resp = self
+            .client
+            .get(self.url(&format!("{MODELS_PATH}/{model}")))
+            .header(reqwest::header::AUTHORIZATION, http::bearer(&self.auth))
+            .send()
+            .await?;
         http::ensure_success(&self.id(), resp).await.map(|_| ())
     }
 }

@@ -5,8 +5,8 @@
 pub mod a1111;
 pub mod comfy;
 pub mod fal;
-pub mod lama;
 pub mod hf;
+pub mod lama;
 pub mod ollama;
 pub mod openai_compat;
 pub mod replicate;

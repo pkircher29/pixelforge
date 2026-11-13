@@ -23,7 +23,7 @@
 //! (`{ results: ImageResultMeta[], blobs }`), one PNG blob per result, in order.
 
 use serde::{Deserialize, Serialize};
-use serde_json::{Map, Value};
+use serde_json::Value;
 
 use crate::error::Error;
 use crate::types::{
@@ -31,8 +31,7 @@ use crate::types::{
     ProviderId,
 };
 
-/// Header key that lists blob lengths (same as `pf_io::frame::BLOBS_KEY`).
-pub const BLOBS_KEY: &str = "blobs";
+pub use pf_io::frame::{Frame, BLOBS_KEY};
 
 /// Hard cap on a single request body (defensive; providers cap far lower).
 pub const MAX_REQUEST_BYTES: usize = 512 * 1024 * 1024;
@@ -183,7 +182,7 @@ impl EditEnvelope {
 }
 
 // ---------------------------------------------------------------------------------
-// Generic frame codec (layout-compatible with pf_io::frame)
+// Generic frame codec (delegates to pf_io::frame)
 // ---------------------------------------------------------------------------------
 
 fn frame_err(msg: impl Into<String>) -> Error {
@@ -192,34 +191,7 @@ fn frame_err(msg: impl Into<String>) -> Error {
 
 /// Serialize `header` (a JSON object) plus `blobs` into one buffer, adding `blobs`.
 pub fn encode_frame<T: Serialize>(header: &T, blobs: &[&[u8]]) -> Result<Vec<u8>, Error> {
-    let mut obj = match serde_json::to_value(header)? {
-        Value::Object(m) => m,
-        _ => return Err(frame_err("header must be a JSON object")),
-    };
-    obj.insert(
-        BLOBS_KEY.to_owned(),
-        Value::Array(blobs.iter().map(|b| Value::from(b.len() as u64)).collect()),
-    );
-    let header_bytes = serde_json::to_vec(&Value::Object(obj))?;
-    let header_len =
-        u32::try_from(header_bytes.len()).map_err(|_| frame_err("header exceeds 4 GiB"))?;
-    let total = 4 + header_bytes.len() + blobs.iter().map(|b| b.len()).sum::<usize>();
-    let mut out = Vec::with_capacity(total);
-    out.extend_from_slice(&header_len.to_le_bytes());
-    out.extend_from_slice(&header_bytes);
-    for b in blobs {
-        out.extend_from_slice(b);
-    }
-    Ok(out)
-}
-
-/// A decoded frame: the header object (with `blobs` still present) and the blob slices.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Frame<'a> {
-    /// Header object.
-    pub header: Map<String, Value>,
-    /// Blob slices, in header order.
-    pub blobs: Vec<&'a [u8]>,
+    pf_io::frame::encode_frame(header, blobs).map_err(|e| frame_err(e.to_string()))
 }
 
 /// Parse a frame into its header object (with `blobs` still present) and blob slices.
@@ -230,53 +202,7 @@ pub fn decode_frame(bytes: &[u8]) -> Result<Frame<'_>, Error> {
             bytes.len()
         )));
     }
-    if bytes.len() < 4 {
-        return Err(frame_err("shorter than 4 bytes"));
-    }
-    let header_len = u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]) as usize;
-    let header_end = 4usize
-        .checked_add(header_len)
-        .filter(|&end| end <= bytes.len())
-        .ok_or_else(|| {
-            frame_err(format!(
-                "header length {header_len} exceeds frame of {} bytes",
-                bytes.len()
-            ))
-        })?;
-    let header: Value = serde_json::from_slice(&bytes[4..header_end])
-        .map_err(|e| frame_err(format!("header is not valid JSON: {e}")))?;
-    let Value::Object(header) = header else {
-        return Err(frame_err("header must be a JSON object"));
-    };
-    let lengths: Vec<usize> = match header.get(BLOBS_KEY) {
-        None => Vec::new(),
-        Some(Value::Array(items)) => items
-            .iter()
-            .map(|v| {
-                v.as_u64()
-                    .and_then(|n| usize::try_from(n).ok())
-                    .ok_or_else(|| frame_err(format!("blob length {v} is not a valid integer")))
-            })
-            .collect::<Result<_, _>>()?,
-        Some(_) => return Err(frame_err("`blobs` must be an array")),
-    };
-    let mut blobs = Vec::with_capacity(lengths.len());
-    let mut pos = header_end;
-    for (i, len) in lengths.iter().enumerate() {
-        let end = pos
-            .checked_add(*len)
-            .filter(|&end| end <= bytes.len())
-            .ok_or_else(|| frame_err(format!("blob {i} ({len} bytes) runs past the end")))?;
-        blobs.push(&bytes[pos..end]);
-        pos = end;
-    }
-    if pos != bytes.len() {
-        return Err(frame_err(format!(
-            "{} trailing bytes after the last blob",
-            bytes.len() - pos
-        )));
-    }
-    Ok(Frame { header, blobs })
+    pf_io::frame::decode_frame(bytes).map_err(|e| frame_err(e.to_string()))
 }
 
 // ---------------------------------------------------------------------------------

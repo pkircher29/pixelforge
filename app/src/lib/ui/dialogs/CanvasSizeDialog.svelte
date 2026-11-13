@@ -2,12 +2,13 @@
   /** Image > Canvas Size: grow or crop the canvas without scaling, anchored on a 3x3 grid. */
   import { MAX_CANVAS_SIZE, ResizeCanvasCommand, type CanvasAnchor } from "$lib/engine";
   import { docStore } from "$lib/stores/doc.svelte";
-  import Modal from "$lib/filters/ui/Modal.svelte";
+  import Dialog from "./Dialog.svelte";
 
   interface Props {
-    onclose: () => void;
+    resolve: (r: null) => void;
   }
-  let { onclose }: Props = $props();
+  let { resolve }: Props = $props();
+  const onclose = (): void => resolve(null);
 
   const doc = docStore.doc;
   const w0 = doc?.width ?? 1;
@@ -60,16 +61,6 @@
     onclose();
   }
 
-  function onKey(e: KeyboardEvent): void {
-    if (e.key === "Escape") {
-      e.stopPropagation();
-      onclose();
-    } else if (e.key === "Enter") {
-      e.stopPropagation();
-      ok();
-    }
-  }
-
   /** Arrow glyph in cell `cell` pointing away from the selected anchor (where new space appears). */
   function arrow(cell: CanvasAnchor, from: CanvasAnchor): string {
     const dx = cell.x - from.x;
@@ -89,9 +80,7 @@
   }
 </script>
 
-<svelte:window onkeydown={onKey} />
-
-<Modal title="Canvas Size" {onclose} width={340}>
+<Dialog title="Canvas Size" oncancel={onclose} onsubmit={ok} dim={false} width={340}>
   <p class="current mono">Current: {w0} × {h0} px</p>
   <div class="grid">
     <span class="name">Width</span>
@@ -137,7 +126,7 @@
     <button class="btn" type="button" onclick={onclose}>Cancel</button>
     <button class="btn primary" type="button" onclick={ok} disabled={!valid}>OK</button>
   {/snippet}
-</Modal>
+</Dialog>
 
 <style>
   .current {

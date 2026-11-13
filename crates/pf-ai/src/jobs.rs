@@ -271,6 +271,7 @@ impl JobManager {
 
     /// Enqueue a job. Must be called within a Tokio runtime.
     pub fn submit(&self, spec: JobSpec) -> JobId {
+        self.prune(Duration::from_secs(600));
         let id = JobId::fresh();
         let provider_id = spec.provider.id();
         let (cancel_tx, cancel_rx) = oneshot::channel();

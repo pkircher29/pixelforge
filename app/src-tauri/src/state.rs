@@ -17,7 +17,7 @@ use tokio::sync::Notify;
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct Settings {
-    /// UI theme id. Only `"dark"` exists in v1.
+    /// UI theme id (`"dark"` or `"light"`).
     pub theme: String,
     /// Provider pre-selected in the AI panel.
     pub default_provider: Option<ProviderId>,
@@ -64,6 +64,8 @@ pub struct AppState {
     pub oauth_pending: Mutex<HashMap<ProviderId, Arc<Notify>>>,
     /// Signed-in sessions, shared so refreshes are serialised across jobs.
     pub oauth_sessions: Mutex<HashMap<ProviderId, Arc<OAuthSession>>>,
+    /// Serialises reads and writes to `recent.json`.
+    pub recent_lock: Mutex<()>,
 }
 
 impl Default for AppState {
@@ -77,6 +79,7 @@ impl Default for AppState {
             ai_forwarder_started: AtomicBool::new(false),
             oauth_pending: Mutex::new(HashMap::new()),
             oauth_sessions: Mutex::new(HashMap::new()),
+            recent_lock: Mutex::new(()),
         }
     }
 }

@@ -88,7 +88,16 @@ export interface PreparedRun {
 }
 
 /** Selections kept in memory this session so a history entry can be re-run exactly. */
+const MAX_SELECTION_CACHE = 32;
 const selectionCache = new Map<string, Selection>();
+
+function cacheSelection(historyId: string, sel: Selection): void {
+  if (!selectionCache.has(historyId) && selectionCache.size >= MAX_SELECTION_CACHE) {
+    const oldest = selectionCache.keys().next().value;
+    if (oldest !== undefined) selectionCache.delete(oldest);
+  }
+  selectionCache.set(historyId, sel);
+}
 
 export function rememberedSelection(historyId: string): Selection | undefined {
   return selectionCache.get(historyId);
@@ -339,7 +348,7 @@ export async function startAi(req: AiRunRequest): Promise<StartedRun> {
     if (prepared.maskThumb) entry.maskThumb = prepared.maskThumb;
     addEntry(doc, entry);
     historyId = entry.id;
-    if (prepared.selection) selectionCache.set(entry.id, prepared.selection.clone());
+    if (prepared.selection) cacheSelection(entry.id, prepared.selection.clone());
     if (open) open.version++;
   }
 
@@ -365,7 +374,10 @@ export async function startAi(req: AiRunRequest): Promise<StartedRun> {
     { provider: req.provider.id, providerName: req.provider.name, model: req.model, mode, emulated, prompt: req.prompt, docId: prepared.docId, historyId, n: req.n },
     submitFn,
   );
-  const run: ActiveRun = { job, prepared, req };
+  // Release encoded PNG input blobs and decoded reference rasters now that IPC submission is complete.
+  prepared.blobs = null;
+  const retainedReq: AiRunRequest = req.refs.length > 0 ? { ...req, refs: [] } : req;
+  const run: ActiveRun = { job, prepared, req: retainedReq };
   runs.set(job.id, run);
 
   const done = jobStore.whenDone(job.id).then(async (finished) => {
@@ -377,7 +389,7 @@ export async function startAi(req: AiRunRequest): Promise<StartedRun> {
       });
       if (open) open.version++;
     }
-    if (req.generativeFill && finished.state === "completed") {
+    if (retainedReq.generativeFill && finished.state === "completed") {
       if (finished.results?.length !== 3) throw new Error("The provider did not return all three Generative Fill variants.");
       if (!open || !docStore.docs.includes(open) || open.doc.width !== prepared.docW || open.doc.height !== prepared.docH) {
         throw new Error("The document was closed or resized. Generative Fill results were not applied.");
@@ -387,14 +399,14 @@ export async function startAi(req: AiRunRequest): Promise<StartedRun> {
         throw new Error("The document was closed or resized while decoding Generative Fill results.");
       }
       const variants = rasters.map((r, i) => buildResultLayer(open.doc, prepared, r, `Variant ${i + 1}`));
-      const cmd = new AddGenerativeLayerCommand(open.doc, variants, { prompt: req.prompt, provider: req.provider.name, model: req.model });
+      const cmd = new AddGenerativeLayerCommand(open.doc, variants, { prompt: retainedReq.prompt, provider: retainedReq.provider.name, model: retainedReq.model });
       open.history.push(cmd);
       open.version++;
       if (docStore.activeId === open.id) docStore.setActiveLayer(cmd.group.id);
       finished.applied = [0, 1, 2];
       if (historyId) updateEntry(open.doc, historyId, { resultLayerIds: [cmd.group.id], resultThumbs: await Promise.all(rasters.map((r) => safeThumb(r, true).then((s) => s ?? ""))) });
-    } else if (req.autoApply !== false && finished.state === "completed" && finished.results && finished.results.length === 1) {
-      await applyResult(finished, prepared, 0, req);
+    } else if (retainedReq.autoApply !== false && finished.state === "completed" && finished.results && finished.results.length === 1) {
+      await applyResult(finished, prepared, 0, retainedReq);
     }
     return finished;
   });
@@ -437,6 +449,11 @@ export function applyOne(jobId: string, index: number): Promise<ApplyOutcome | n
 
 /** Decoded previews for the result strip (cached per job). */
 const previewCache = new Map<string, string[]>();
+
+jobStore.onPrune((id) => {
+  runs.delete(id);
+  previewCache.delete(id);
+});
 
 export async function resultPreviews(job: AiJob): Promise<string[]> {
   const cached = previewCache.get(job.id);

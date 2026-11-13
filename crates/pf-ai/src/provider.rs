@@ -38,15 +38,26 @@ pub trait ImageProvider: Send + Sync {
 
     /// Read model metadata only. Success does not prove image billing or quota.
     async fn test_model(&self, _model: &str) -> Result<(), Error> {
-        Err(Error::Unsupported { provider: self.id(), capability: "model metadata check" })
+        Err(Error::Unsupported {
+            provider: self.id(),
+            capability: "model metadata check",
+        })
     }
 }
 
 /// Built-in model IDs are single URL path segments, never paths or URLs.
 pub(crate) fn validate_model_id(model: &str) -> Result<(), Error> {
-    if model.is_empty() || model.len() > 200 || model == "." || model == ".."
-        || !model.bytes().all(|b| b.is_ascii_alphanumeric() || b"-_.".contains(&b)) {
-        return Err(Error::InvalidRequest("Invalid model ID for metadata check".into()));
+    if model.is_empty()
+        || model.len() > 200
+        || model == "."
+        || model == ".."
+        || !model
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b"-_.".contains(&b))
+    {
+        return Err(Error::InvalidRequest(
+            "Invalid model ID for metadata check".into(),
+        ));
     }
     Ok(())
 }

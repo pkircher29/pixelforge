@@ -1,7 +1,12 @@
 # IPC reference
 
 Every Tauri command returns `Result<T, { code, message }>` (`CommandError`,
-`app/src-tauri/src/error.rs`). Pixel data never crosses IPC as base64 JSON: commands
+`app/src-tauri/src/error.rs`). General shell/runtime error codes across all commands:
+`io` (filesystem), `json` (serialization), `unsupported_format`, `corrupt`,
+`invalid_argument`, `not_found`, `state_poisoned`, `config_dir`, and `tauri`.
+Command-specific `io_*` and `ai_*` error codes are listed in their respective sections.
+
+Pixel data never crosses IPC as base64 JSON: commands
 that move pixels use raw bytes (`tauri::ipc::Request` body / `tauri::ipc::Response`)
 with the framing below.
 
@@ -97,14 +102,16 @@ Header (`ProjectHeader`):
   "manifest": { /* manifest.json verbatim, snake_case — see docs/pfproj-format.md */ },
   "layers":    [ { "id": "l-1", "width": 1920, "height": 1080, "blob": 0, "encoding": "rgba" } ],
   "masks":     [ { "id": "l-1", "width": 1920, "height": 1080, "blob": 1, "encoding": "gray" } ],
-  "selection":   { "width": 1920, "height": 1080, "blob": 2, "encoding": "gray" },   // or absent
-  "thumbnail":   { "width": 256,  "height": 144,  "blob": 3, "encoding": "png" },    // or absent
+  "channels":  [ { "id": "ch-1", "width": 1920, "height": 1080, "blob": 2, "encoding": "gray" } ],
+  "selection":   { "width": 1920, "height": 1080, "blob": 3, "encoding": "gray" },   // or absent
+  "thumbnail":   { "width": 256,  "height": 144,  "blob": 4, "encoding": "png" },    // or absent
   "blobs": [ ... ]
 }
 ```
 
-`layers` follows `manifest.layers` order (groups have no entry here). Layer / mask /
-selection blobs are always decoded pixels; `thumbnail` is the stored PNG.
+`layers` follows `manifest.layers` order (one per pixel-bearing layer: `raster`, `shape`,
+`text`; `group`, `adjustment`, and `fill` layers have no entry here). Layer / mask /
+channel / selection blobs are always decoded pixels; `thumbnail` is the stored PNG.
 
 ### `io_save_pfproj(body: frame) -> { path, bytes, modified }`  (raw body, JSON result)
 
@@ -112,12 +119,13 @@ Header: the same `ProjectHeader` shape, with:
 
 - `path` **required**;
 - `manifest`: the UI's manifest. Rust overwrites `format`, `app_version`, `modified`,
-  sets `created` if empty, and fills the `file` / `mask` / `selection.file` /
-  `thumbnail` paths. `ai_history` is passed through untouched.
-- `layers[]` one per **raster** layer (`encoding` `"rgba"` default, or `"png"` to store
-  a PNG you already encoded — its IHDR size must match the manifest entry);
-- `masks[]` optional (`"gray"` or `"png"`); `selection` optional (`"gray"`/`"png"`,
-  canvas-sized);
+  sets `created` if empty, and fills the `file` / `mask` / `channels[].file` /
+  `selection.file` / `thumbnail` paths. `ai_history` is passed through untouched.
+- `layers[]` one per pixel-bearing layer (`raster`, `shape`, `text`; `group`,
+  `adjustment`, and `fill` layers have no entry here; `encoding` `"rgba"` default, or
+  `"png"` to store a PNG you already encoded — its IHDR size must match the manifest entry);
+- `masks[]` optional (`"gray"` or `"png"`); `channels[]` optional (`"gray"` or `"png"`,
+  canvas-sized); `selection` optional (`"gray"`/`"png"`, canvas-sized);
 - `thumbnail` optional: an RGBA composite at **any** size — Rust box-filters it down to
   256 px — or a ready `"png"`.
 
@@ -136,7 +144,7 @@ Header (`EncodeHeader`):
     "quality": 90,                  // jpeg / lossy webp, 1-100
     "lossless": false,              // webp only
     "pngCompression": "fast" | "best",
-    "background": [255, 255, 255]   // jpeg: alpha is flattened onto this colour
+    "background": [255, 255, 255]   // jpeg: alpha is flattened onto this color
   },
   "width": 1920, "height": 1080,
   "blob": 0                         // RGBA8
@@ -177,7 +185,7 @@ hand the chosen path to the commands above. The commands use `std::fs` directly,
 ## AI commands (`commands/ai.rs` + `crates/pf-ai`, owner: ai-rust)
 
 The AI commands use the **same binary frame** as above (`pf_ai::ipc::{encode_frame,
-decode_frame}` is a layout-identical re-implementation so the crates stay independent).
+decode_frame}` delegates directly to `pf_io::frame`).
 Blobs here are always **encoded images** (PNG from `canvas.toBlob`, or JPEG/WebP where
 the provider allows), never raw RGBA — use `io_encode` or the canvas to produce them.
 Frame errors surface as `ai_invalid_request`.
@@ -277,11 +285,13 @@ the first reference and `refs` carries the rest (OpenAI and xAI route references
 their `/edits` endpoints anyway; Gemini treats every image part the same).
 
 Mask edits (`mode: 'mask'`) are only accepted by providers whose `capabilities.maskEdit`
-is `true` (OpenAI). For xAI / Gemini the webview must emulate: crop the composite to the
-mask bbox (+ padding), send an *instruct* edit of the crop, composite the result back
-inside the soft mask. `pf_ai::mask::{crop_to_mask_bbox, composite_back}` are the Rust
-reference implementations. Pixelforge masks are 8-bit PNGs, **white = editable**; the
-OpenAI provider converts them to OpenAI's RGBA alpha=0 convention itself.
+is `true` (OpenAI, ComfyUI, A1111, or OpenAI-compatible servers with `maskEdit` enabled).
+For providers without native mask support (xAI, Gemini, Hugging Face, Replicate) the
+webview emulates mask edits in `app/src/lib/ai/modes.ts`: crop the composite to the
+mask bbox (+ padding), send an *instruct* edit of the crop, and composite the result back
+inside the soft mask. Pixelforge masks are 8-bit PNGs, **white = editable**;
+`pf_ai::mask::{to_openai_mask, to_a1111_mask}` converts them to OpenAI's RGBA alpha=0
+convention or A1111's grayscale mask convention inside Rust.
 
 ### `ai_submit_edit(body: frame) -> JobId`  (raw body, JSON result)
 
@@ -336,6 +346,7 @@ before they start. Cancelling a running job aborts the HTTP request.
 | `ai_quota` | Explicit API credit, billing, spend or usage-limit error; retains the provider explanation | no; review API credits/limits first |
 | `ai_moderation_blocked` | safety filter blocked prompt or image | change the prompt |
 | `ai_bad_request` | provider rejected the request (400/422) | fix the request |
+| `ai_rejected` | provider rejected the job during execution (e.g. ComfyUI node error or Replicate failure) | fix workflow / params |
 | `ai_invalid_request` | rejected locally before sending (size, limits, framing) | fix the request |
 | `ai_unsupported` | capability not available for that provider | pick another provider |
 | `ai_timeout` | per-job deadline hit | yes |
@@ -344,6 +355,7 @@ before they start. Cancelling a running job aborts the HTTP request.
 | `ai_http` | other non-2xx | 5xx: yes |
 | `ai_invalid_response` | 2xx but unparsable / no image | maybe |
 | `ai_image` | local image decode/encode failure | fix the input |
+| `ai_key_store` | OS keychain or fallback key-file read/write failure | check permissions |
 | `ai_unknown_job`, `ai_no_result` | bad job id / nothing to take | – |
 
 ## Custom providers (`commands/ai.rs` + `pf_ai::custom`, owner: ai-custom)
@@ -409,7 +421,7 @@ available **only** when a client ID issued to Pixelforge by xAI is configured (`
 or the Settings field); **Gemini** has none. Token records (`{ accessToken, refreshToken, idToken,
 expiresAt, clientId, scopes, email, plan, planUsage, images, models }`) live in the key store under the
 user name `oauth:<provider>` (`oauth:open_ai`, `oauth:x_ai`) and never cross IPC. Access tokens are
-refreshed (serialised) 120 s before expiry and once after a 401.
+refreshed (serialized) 120 s before expiry and once after a 401.
 
 ```ts
 type AuthMode = 'api_key' | 'subscription' | 'oauth'; // oauth = Gemini API, separately billed

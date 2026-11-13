@@ -1,8 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { Raster, rgba } from "../../lib/engine";
-import { autoLevelsForChannel, computeHistogram, histogramPeak } from "../../lib/filters/histogram";
-import { levels } from "../../lib/filters/ops";
-import { defaultParams } from "../../lib/filters/types";
+import { Raster, autoLevelsForChannel, computeHistogram, defaultParams, histogramPeak, levels, rgba } from "../../lib/engine";
 
 describe("histogram + auto levels", () => {
   it("counts opaque pixels per channel and luma", () => {

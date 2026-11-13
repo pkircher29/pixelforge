@@ -8,7 +8,7 @@
    */
   import { onMount } from "svelte";
   import { Rect, Selection } from "$lib/engine";
-  import { buildDemoDocument } from "$lib/engine/demo/demo";
+  import { buildSampleDocument as buildDemoDocument } from "$lib/ui/commands/sample";
   import { docStore } from "$lib/stores/doc.svelte";
   import AiPanel from "$lib/ui/panels/AiPanel.svelte";
   import AiHistoryPanel from "$lib/ui/panels/AiHistoryPanel.svelte";

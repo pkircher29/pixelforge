@@ -3,8 +3,10 @@
 
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::atomic::Ordering;
-use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, MutexGuard};
+
+static SETTINGS_TMP_SEQ: AtomicU64 = AtomicU64::new(0);
 
 use pf_ai::{AutoKeyStore, CustomRegistry, KeyStore, ProviderId, SecretString};
 use tauri::{AppHandle, Manager, State};
@@ -29,10 +31,17 @@ fn settings_path(app: &AppHandle) -> CommandResult<PathBuf> {
     Ok(config_dir(app)?.join(SETTINGS_FILE))
 }
 
-/// Read `settings.json` into memory once per process.
-fn ensure_loaded(app: &AppHandle, state: &AppState) -> CommandResult<()> {
+/// Read `settings.json` into memory once per process under the settings lock.
+fn lock_loaded<'a>(
+    app: &AppHandle,
+    state: &'a AppState,
+) -> CommandResult<MutexGuard<'a, Settings>> {
+    let mut guard = state
+        .settings
+        .lock()
+        .map_err(|_| CommandError::poisoned("settings"))?;
     if state.settings_loaded.load(Ordering::Acquire) {
-        return Ok(());
+        return Ok(guard);
     }
     let path = settings_path(app)?;
     let loaded = match std::fs::read(&path) {
@@ -46,24 +55,21 @@ fn ensure_loaded(app: &AppHandle, state: &AppState) -> CommandResult<()> {
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => None,
         Err(e) => return Err(e.into()),
     };
-    let mut guard = state
-        .settings
-        .lock()
-        .map_err(|_| CommandError::poisoned("settings"))?;
     if let Some(s) = loaded {
         *guard = s;
     }
     state.settings_loaded.store(true, Ordering::Release);
-    Ok(())
+    Ok(guard)
 }
 
-/// Write atomically (temp file + rename) so a crash never leaves a half-written file.
+/// Write atomically (unique temp file + rename) so concurrent writes never collide.
 fn persist(app: &AppHandle, settings: &Settings) -> CommandResult<()> {
     let path = settings_path(app)?;
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)?;
     }
-    let tmp = path.with_extension("json.tmp");
+    let seq = SETTINGS_TMP_SEQ.fetch_add(1, Ordering::Relaxed);
+    let tmp = path.with_extension(format!("json.{}.{seq}.tmp", std::process::id()));
     std::fs::write(&tmp, serde_json::to_vec_pretty(settings)?)?;
     std::fs::rename(&tmp, &path)?;
     Ok(())
@@ -72,11 +78,7 @@ fn persist(app: &AppHandle, settings: &Settings) -> CommandResult<()> {
 /// Return the current settings (loaded from disk on first call).
 #[tauri::command]
 pub fn settings_get(app: AppHandle, state: State<'_, AppState>) -> CommandResult<Settings> {
-    ensure_loaded(&app, &state)?;
-    let guard = state
-        .settings
-        .lock()
-        .map_err(|_| CommandError::poisoned("settings"))?;
+    let guard = lock_loaded(&app, &state)?;
     Ok(guard.clone())
 }
 
@@ -87,23 +89,15 @@ pub fn settings_set(
     state: State<'_, AppState>,
     settings: Settings,
 ) -> CommandResult<Settings> {
-    ensure_loaded(&app, &state)?;
+    let mut guard = lock_loaded(&app, &state)?;
     persist(&app, &settings)?;
-    let mut guard = state
-        .settings
-        .lock()
-        .map_err(|_| CommandError::poisoned("settings"))?;
     *guard = settings;
     Ok(guard.clone())
 }
 
 /// Current settings (loaded on first use), for other command modules.
 pub(crate) fn settings_snapshot(app: &AppHandle, state: &AppState) -> CommandResult<Settings> {
-    ensure_loaded(app, state)?;
-    let guard = state
-        .settings
-        .lock()
-        .map_err(|_| CommandError::poisoned("settings"))?;
+    let guard = lock_loaded(app, state)?;
     Ok(guard.clone())
 }
 
@@ -113,11 +107,7 @@ pub(crate) fn update_settings(
     state: &AppState,
     f: impl FnOnce(&mut Settings),
 ) -> CommandResult<Settings> {
-    ensure_loaded(app, state)?;
-    let mut guard = state
-        .settings
-        .lock()
-        .map_err(|_| CommandError::poisoned("settings"))?;
+    let mut guard = lock_loaded(app, state)?;
     let mut next = guard.clone();
     f(&mut next);
     persist(app, &next)?;

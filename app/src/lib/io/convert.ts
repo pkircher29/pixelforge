@@ -82,18 +82,24 @@ export function groupsBeforeChildren<T>(items: readonly T[], isGroup: (t: T) => 
   items.forEach((t, i) => {
     if (isGroup(t)) groupIdx.add(i);
   });
-  for (let i = 0; i < items.length; i++) {
+  const visited = new Set<number>();
+  const emit = (i: number): void => {
+    if (visited.has(i)) return;
+    visited.add(i);
     const t = items[i]!;
+    out.push(t);
     if (isGroup(t)) {
-      out.push(t);
       for (let j = 0; j < items.length; j++) {
-        const g = groupOf(items[j]!, j);
-        if (g === i && !isGroup(items[j]!)) out.push(items[j]!);
+        if (j !== i && groupOf(items[j]!, j) === i) emit(j);
       }
-      continue;
     }
-    const g = groupOf(t, i);
-    if (g === null || !groupIdx.has(g)) out.push(t);
+  };
+  for (let i = 0; i < items.length; i++) {
+    const g = groupOf(items[i]!, i);
+    if (g === null || !groupIdx.has(g)) emit(i);
+  }
+  for (let i = 0; i < items.length; i++) {
+    if (!visited.has(i)) emit(i);
   }
   return out;
 }
@@ -101,21 +107,23 @@ export function groupsBeforeChildren<T>(items: readonly T[], isGroup: (t: T) => 
 /** Engine order (group first) → file order (children first, group above them). */
 export function childrenBeforeGroups(layers: readonly Layer[]): Layer[] {
   const out: Layer[] = [];
-  let i = 0;
-  while (i < layers.length) {
-    const l = layers[i]!;
+  const groupIds = new Set(layers.filter((l) => l.kind === "group").map((l) => l.id));
+  const visited = new Set<string>();
+  const emit = (l: Layer): void => {
+    if (visited.has(l.id)) return;
+    visited.add(l.id);
     if (l.kind === "group") {
-      let j = i + 1;
-      while (j < layers.length && layers[j]!.parentId === l.id) {
-        out.push(layers[j]!);
-        j++;
+      for (const child of layers) {
+        if (child.parentId === l.id) emit(child);
       }
-      out.push(l);
-      i = j;
-    } else {
-      out.push(l);
-      i++;
     }
+    out.push(l);
+  };
+  for (const l of layers) {
+    if (!l.parentId || !groupIds.has(l.parentId)) emit(l);
+  }
+  for (const l of layers) {
+    if (!visited.has(l.id)) emit(l);
   }
   return out;
 }

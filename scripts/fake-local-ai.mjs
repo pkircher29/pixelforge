@@ -4,7 +4,7 @@
  * anything (shapes from docs/ai-research.md section 4). One process answers every kind on
  * one port; add each kind in Edit > AI Providers with the base URL below.
  *
- *   node scripts/fake-local-ai.mjs [--port 8790] [--size 512] [--delay 1500]
+ *   node scripts/fake-local-ai.mjs [--port 8790] [--size 512] [--delay 1200]
  *
  * | kind in the dialog              | base URL                            | model / checkpoint              |
  * |---------------------------------|-------------------------------------|---------------------------------|

@@ -5,7 +5,7 @@
  * Edges overlay.
  */
 import { mount } from "svelte";
-import { getCommand, registerCommand, registerPanel, type CommandDef } from "../registry.svelte";
+import { proxyCommand as proxy, registerCommand, registerPanel, type CommandDef } from "../registry.svelte";
 import { toolStore } from "$lib/stores/tool.svelte";
 import { openColorPicker } from "../dialogs/color-picker";
 import { registerViewMenu } from "../commands/view";
@@ -22,23 +22,6 @@ import { navigatorUi, VIEW_BOX_COLORS } from "./Navigator.store.svelte";
 import { infoUi } from "./Info.store.svelte";
 import { INFO_COLOR_MODES } from "./info-model";
 import "./History.commands";
-
-function proxy(id: string, label?: string): CommandDef {
-  return {
-    id: `panel.${id}`,
-    get label() {
-      return label ?? getCommand(id)?.label ?? id;
-    },
-    get shortcut() {
-      return getCommand(id)?.shortcut;
-    },
-    enabled: () => {
-      const c = getCommand(id);
-      return !!c && (!c.enabled || c.enabled());
-    },
-    run: () => void getCommand(id)?.run(),
-  } as CommandDef;
-}
 
 registerCommand({
   id: "color.pick",

@@ -332,12 +332,11 @@ impl ComfyProvider {
 
         let outputs = loop {
             tokio::time::sleep(self.poll_interval).await;
-            let resp = self
+            let req = self
                 .ctx
                 .client()
-                .get(self.ctx.url(&format!("/history/{prompt_id}")))
-                .send()
-                .await?;
+                .get(self.ctx.url(&format!("/history/{prompt_id}")));
+            let resp = self.ctx.bearer(req).send().await?;
             let resp = http::ensure_success(&self.ctx.id(), resp).await?;
             let hist: Value = resp.json().await?;
             let Some(entry) = hist.get(&prompt_id) else {
@@ -382,17 +381,12 @@ impl ComfyProvider {
                     let filename = img["filename"].as_str().unwrap_or_default();
                     let subfolder = img["subfolder"].as_str().unwrap_or_default();
                     let ty = img["type"].as_str().unwrap_or("output");
-                    let resp = self
-                        .ctx
-                        .client()
-                        .get(self.ctx.url("/view"))
-                        .query(&[
-                            ("filename", filename),
-                            ("subfolder", subfolder),
-                            ("type", ty),
-                        ])
-                        .send()
-                        .await?;
+                    let req = self.ctx.client().get(self.ctx.url("/view")).query(&[
+                        ("filename", filename),
+                        ("subfolder", subfolder),
+                        ("type", ty),
+                    ]);
+                    let resp = self.ctx.bearer(req).send().await?;
                     let resp = http::ensure_success(&self.ctx.id(), resp).await?;
                     let bytes = resp.bytes().await?.to_vec();
                     results.push(self.ctx.result(bytes, model)?);

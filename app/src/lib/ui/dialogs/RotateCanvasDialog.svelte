@@ -1,14 +1,15 @@
 <script lang="ts">
   /** Image > Rotate > Arbitrary: rotate the whole canvas by any angle. */
   import { docStore } from "$lib/stores/doc.svelte";
-  import { RotateCanvasCommand, rotateCanvasBounds } from "../transform/commands";
-  import Modal from "./Modal.svelte";
+  import { RotateCanvasCommand, rotateCanvasBounds } from "$lib/filters/transform/commands";
+  import Dialog from "./Dialog.svelte";
 
   interface Props {
-    onclose: () => void;
+    resolve: (r: null) => void;
   }
-  let { onclose }: Props = $props();
+  let { resolve }: Props = $props();
 
+  const onclose = (): void => resolve(null);
   const doc = docStore.doc;
   const w0 = doc?.width ?? 1;
   const h0 = doc?.height ?? 1;
@@ -25,21 +26,9 @@
     docStore.exec(new RotateCanvasCommand(signed));
     onclose();
   }
-
-  function onKey(e: KeyboardEvent): void {
-    if (e.key === "Escape") {
-      e.stopPropagation();
-      onclose();
-    } else if (e.key === "Enter") {
-      e.stopPropagation();
-      ok();
-    }
-  }
 </script>
 
-<svelte:window onkeydown={onKey} />
-
-<Modal title="Rotate Canvas" {onclose} width={320}>
+<Dialog title="Rotate Canvas" oncancel={onclose} onsubmit={ok} dim={false} width={320}>
   <div class="grid">
     <span class="name">Angle</span>
     <div class="angle">
@@ -58,63 +47,63 @@
     <button class="btn" type="button" onclick={onclose}>Cancel</button>
     <button class="btn primary" type="button" onclick={ok} disabled={!valid}>OK</button>
   {/snippet}
-</Modal>
+</Dialog>
 
 <style>
   .grid {
     display: grid;
-    grid-template-columns: 72px 1fr;
+    grid-template-columns: 80px 1fr;
     align-items: center;
     gap: 8px 10px;
   }
   .name {
-    color: var(--fg-1);
+    color: var(--ps-text-dim);
   }
   .angle {
     display: flex;
     align-items: center;
     gap: 6px;
   }
-  .unit {
-    color: var(--fg-2);
-  }
   .field {
     font: inherit;
     font-variant-numeric: tabular-nums;
-    color: var(--fg-0);
-    background: var(--bg-1);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
+    color: var(--ps-text);
+    background: var(--ps-input);
+    border: 1px solid var(--ps-border-dark);
+    border-radius: 2px;
     padding: 4px 8px;
     width: 100px;
   }
   .field:focus {
     outline: none;
-    border-color: var(--accent);
+    border-color: var(--ps-focus);
+  }
+  .unit {
+    color: var(--ps-text-dim);
   }
   .segmented {
     display: inline-flex;
     padding: 2px;
     gap: 2px;
-    background: var(--bg-1);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-md);
+    background: var(--ps-input);
+    border: 1px solid var(--ps-border-dark);
+    border-radius: 2px;
     justify-self: start;
   }
   .segmented button {
     padding: 3px 10px;
-    border-radius: 6px;
-    color: var(--fg-1);
+    border-radius: 2px;
+    color: var(--ps-text-dim);
   }
   .segmented button.on {
-    background: var(--bg-3);
-    color: var(--fg-0);
+    background: var(--ps-active);
+    color: var(--ps-text-bright);
   }
   .result {
-    margin: 0;
-    color: var(--fg-2);
-  }
-  .mono {
+    margin: 8px 0 0;
+    padding-top: 8px;
+    border-top: 1px solid var(--ps-divider);
+    color: var(--ps-text-dim);
     font-variant-numeric: tabular-nums;
     font-size: var(--fs-xs);
   }
@@ -122,20 +111,19 @@
     flex: 1;
   }
   .btn {
-    padding: 5px 12px;
-    border-radius: var(--radius-sm);
-    background: var(--bg-2);
-    border: 1px solid var(--border-strong);
-    color: var(--fg-0);
+    padding: 4px 12px;
+    border-radius: 2px;
+    background: var(--ps-raised);
+    border: 1px solid var(--ps-border-dark);
+    color: var(--ps-text);
   }
   .btn:hover {
-    background: var(--bg-3);
+    background: var(--ps-hover);
   }
   .btn.primary {
-    background: var(--accent);
-    border-color: transparent;
+    background: var(--ps-accent);
+    border-color: var(--ps-accent);
     color: #fff;
-    font-weight: 600;
   }
   .btn:disabled {
     opacity: 0.5;

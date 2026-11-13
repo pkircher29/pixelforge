@@ -103,6 +103,25 @@ export function getCommand(id: string): CommandDef | undefined {
   return commands.find((c) => c.id === id);
 }
 
+/** Panel ≡ menu item that proxies to a registered command (resolved lazily). */
+export function proxyCommand(id: string, label?: string): CommandDef {
+  return {
+    id: `panel.${id}`,
+    get label() {
+      return label ?? getCommand(id)?.label ?? id;
+    },
+    get shortcut() {
+      return getCommand(id)?.shortcut;
+    },
+    enabled: () => {
+      const c = getCommand(id);
+      return !!c && (!c.enabled || c.enabled());
+    },
+    checked: () => !!getCommand(id)?.checked?.(),
+    run: () => void getCommand(id)?.run(),
+  } as CommandDef;
+}
+
 /** Run a command by id if it exists and is enabled. Returns false if not run. */
 export async function runCommand(id: string): Promise<boolean> {
   const c = getCommand(id);

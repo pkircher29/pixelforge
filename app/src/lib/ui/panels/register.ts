@@ -1,5 +1,5 @@
 /** Register the shell's own panels. Other agents register theirs from their `register.ts`. */
-import { registerPanel, getCommand, type CommandDef } from "../registry.svelte";
+import { registerPanel, proxyCommand as proxy, type CommandDef } from "../registry.svelte";
 import LayersPanel from "./LayersPanel.svelte";
 import ChannelsPanel from "./ChannelsPanel.svelte";
 import PathsPanel from "./PathsPanel.svelte";
@@ -15,23 +15,6 @@ import BrushesPanel from "./BrushesPanel.svelte";
 import CharacterPanel from "./CharacterPanel.svelte";
 import ParagraphPanel from "./ParagraphPanel.svelte";
 import "$lib/tools/register";
-
-/** Panel ≡ items that proxy to registered commands (resolved lazily so order of registration doesn't matter). */
-function proxy(id: string, label?: string): CommandDef {
-  return {
-    id: `panel.${id}`,
-    label: label ?? getCommand(id)?.label ?? id,
-    get shortcut() {
-      return getCommand(id)?.shortcut;
-    },
-    enabled: () => {
-      const c = getCommand(id);
-      return !!c && (!c.enabled || c.enabled());
-    },
-    checked: () => !!getCommand(id)?.checked?.(),
-    run: () => void getCommand(id)?.run(),
-  } as CommandDef;
-}
 
 const layersMenu: CommandDef[] = [
   ...LAYERS_PANEL_MENU_IDS.map((id) => proxy(id)),
